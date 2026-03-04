@@ -4,23 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSV Chart Viewer</title>
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <!-- Boxicons for UI icons -->
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar for Controls -->
+
+        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2><i class='bx bx-line-chart'></i> CSV Viewer</h2>
             </div>
-            
             <div class="sidebar-content">
-                <!-- File Upload Section -->
+
+                <!-- File Upload -->
                 <div class="control-group">
                     <h3><i class='bx bx-upload'></i> Files</h3>
                     <div id="drop-zone" class="drop-zone">
@@ -30,33 +28,32 @@
                         <button class="btn-primary" onclick="document.getElementById('file-input').click()">Browse Files</button>
                         <input type="file" id="file-input" multiple accept=".csv" class="hidden">
                     </div>
-                    <ul id="file-list" class="file-list">
-                        <!-- Loaded files will appear here -->
-                    </ul>
+                    <ul id="file-list" class="file-list"></ul>
                 </div>
 
-                <!-- Parse Settings Section -->
+                <!-- Parse Settings -->
                 <div class="control-group">
                     <h3><i class='bx bx-cog'></i> Settings</h3>
                     <div class="settings-grid">
-                        <label>Name Row Index:</label>
+                        <label>Name Row:</label>
                         <input type="number" id="name-row-idx" value="1" min="1">
-                        <label>Unit Row Index:</label>
+                        <label>Unit Row:</label>
                         <input type="number" id="unit-row-idx" value="2" min="1">
                     </div>
                 </div>
 
-                <!-- Column Selection Section -->
+                <!-- Channel Selection (main file only) -->
                 <div class="control-group active-columns-group">
-                    <h3><i class='bx bx-list-ul'></i> Available Columns</h3>
+                    <h3><i class='bx bx-list-ul'></i> Channels <span id="channel-source-label" class="channel-source-label"></span></h3>
                     <div class="search-box">
                         <i class='bx bx-search'></i>
-                        <input type="text" id="column-search" placeholder="Search columns...">
+                        <input type="text" id="column-search" placeholder="Search channels...">
                     </div>
                     <div id="column-list" class="column-list">
-                        <div class="placeholder-text">Upload a file to see columns</div>
+                        <div class="placeholder-text">Upload a CSV to see channels</div>
                     </div>
                 </div>
+
             </div>
         </aside>
 
@@ -67,25 +64,44 @@
                     <button id="clear-all-btn" class="btn-secondary" disabled>
                         <i class='bx bx-trash'></i> Clear All
                     </button>
+                    <div class="toolbar-sep"></div>
+                    <button id="zoom-mode-btn" class="btn-secondary" title="Click then drag on chart to box-zoom">
+                        <i class='bx bx-selection'></i> Box Zoom
+                    </button>
+                    <button id="reset-zoom-btn" class="btn-secondary" disabled title="Reset to full view">
+                        <i class='bx bx-reset'></i> Reset View
+                    </button>
+                    <div class="toolbar-sep"></div>
+                    <button id="shift-mode-btn" class="btn-secondary" disabled title="Drag chart to shift sub file timeline">
+                        <i class='bx bx-transfer-alt'></i> Time Shift
+                    </button>
+                    <div class="toolbar-sep"></div>
+                    <label class="sampling-label" title="Data sampling mode">
+                        <i class='bx bx-pulse'></i>
+                        <select id="sampling-mode">
+                            <option value="lttb" selected>LTTB (fast)</option>
+                            <option value="">None (exact)</option>
+                        </select>
+                    </label>
                 </div>
-                <!-- Future expandability toolbar -->
+                <div class="toolbar-right">
+                    <span id="toolbar-hint" class="toolbar-hint"></span>
+                </div>
             </div>
+
             <div class="chart-container">
                 <div id="chart" class="echarts-dom"></div>
                 <div id="chart-overlay" class="chart-overlay">
-                    <i class='bx bx-chart icon-large'></i>
-                    <p>Select columns from the sidebar to visualize</p>
+                    <i class='bx bx-line-chart icon-large'></i>
+                    <p>Select channels from the sidebar to visualize</p>
                 </div>
             </div>
         </main>
+
     </div>
 
-    <!-- Scripts -->
-    <!-- PapaParse for fast CSV parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <!-- Apache ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-    <!-- App Logic -->
     <script src="app.js"></script>
 </body>
 </html>
