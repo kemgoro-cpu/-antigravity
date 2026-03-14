@@ -15,6 +15,101 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ─────────────────────────────────────────────────────────────
+// Expression parser for custom RAMs (recursive descent)
+// Supports: +, -, *, /, parentheses, number literals, RAM names
+// ─────────────────────────────────────────────────────────────
+
+function tokenizeExpr(expr) {
+    const tokens = [];
+    let i = 0;
+    while (i < expr.length) {
+        const ch = expr[i];
+        if (/\s/.test(ch)) { i++; continue; }
+        if ('+-*/()'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
+        // Number literal (including decimals and leading dot)
+        if (/[\d.]/.test(ch)) {
+            let num = '';
+            while (i < expr.length && /[\d.eE]/.test(expr[i])) num += expr[i++];
+            tokens.push({ type: 'num', value: parseFloat(num) });
+            continue;
+        }
+        // RAM name: anything else that forms an identifier-like token
+        // Allow letters, digits, underscore, dot, and non-ASCII (for Japanese etc.)
+        let name = '';
+        while (i < expr.length && !/[\s+\-*/()]/.test(expr[i])) name += expr[i++];
+        if (name) tokens.push({ type: 'name', value: name });
+    }
+    return tokens;
+}
+
+function evaluateExpr(expr, getVal) {
+    const tokens = tokenizeExpr(expr);
+    let pos = 0;
+
+    function peek() { return pos < tokens.length ? tokens[pos] : null; }
+    function next() { return tokens[pos++]; }
+
+    // expr = term (('+' | '-') term)*
+    function parseExpr() {
+        let left = parseTerm();
+        while (peek() && (peek().value === '+' || peek().value === '-')) {
+            const op = next().value;
+            const right = parseTerm();
+            left = op === '+' ? left + right : left - right;
+        }
+        return left;
+    }
+
+    // term = factor (('*' | '/') factor)*
+    function parseTerm() {
+        let left = parseFactor();
+        while (peek() && (peek().value === '*' || peek().value === '/')) {
+            const op = next().value;
+            const right = parseFactor();
+            left = op === '*' ? left * right : left / right;
+        }
+        return left;
+    }
+
+    // factor = '(' expr ')' | number | unary-minus factor | ramName
+    function parseFactor() {
+        const t = peek();
+        if (!t) return NaN;
+
+        // Unary minus
+        if (t.type === 'op' && t.value === '-') {
+            next();
+            return -parseFactor();
+        }
+        // Unary plus
+        if (t.type === 'op' && t.value === '+') {
+            next();
+            return parseFactor();
+        }
+        // Parenthesized expression
+        if (t.type === 'op' && t.value === '(') {
+            next(); // consume '('
+            const val = parseExpr();
+            if (peek() && peek().value === ')') next(); // consume ')'
+            return val;
+        }
+        // Number literal
+        if (t.type === 'num') {
+            next();
+            return t.value;
+        }
+        // RAM name
+        if (t.type === 'name') {
+            next();
+            return getVal(t.value);
+        }
+        return NaN;
+    }
+
+    return parseExpr();
+}
+
 // Actual hex values — ECharts does NOT understand CSS variables
 const T = {
     text:   '#f0f0f0',
@@ -50,6 +145,7 @@ const state = {
     shiftFileId:    null,   // which sub file is the drag target
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
+    customRAMs:     [],     // [{ name, expr, id }]
 };
 
 // FileRecord: { name, shortName, columns, timeData, colData, role, offset }
@@ -79,6 +175,10 @@ const dom = {
     nameRow:    $('name-row-idx'),
     unitRow:    $('unit-row-idx'),
     sampling:   $('sampling-mode'),
+    customName: $('custom-ram-name'),
+    customExpr: $('custom-ram-expr'),
+    customAdd:  $('custom-ram-add'),
+    customList: $('custom-ram-list'),
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -300,6 +400,7 @@ function setMainFile(newMainId) {
     if (oldMainId) state.files[oldMainId].role = 'sub';
     state.files[newMainId].role = 'main';
     state.selectedNames = new Set();  // clear selection on main change
+    recomputeCustomRAMs();
     updateUI();
 }
 
@@ -421,6 +522,124 @@ function renderFileList() {
     });
 }
 
+// ─────────────────────────────────────────────────────────────
+// Custom RAM (computed channels)
+// ─────────────────────────────────────────────────────────────
+
+function addCustomRAM(name, expr) {
+    const mainFile = getMainFile();
+    if (!mainFile || !name.trim() || !expr.trim()) return;
+
+    name = name.trim();
+    // Prefix with @ if not already starting with a special character
+    if (!/^[@#$%]/.test(name)) name = '@' + name;
+    // Prevent duplicate names
+    if (mainFile.columns.some(c => c.name === name)) {
+        alert(`Channel "${name}" already exists.`);
+        return;
+    }
+
+    const id = `custom_${Date.now()}`;
+    const td = mainFile.timeData;
+    const vals = new Float32Array(td.length);
+
+    for (let i = 0; i < td.length; i++) {
+        vals[i] = evaluateExpr(expr, ramName => {
+            const col = mainFile.columns.find(c => c.name === ramName);
+            if (!col) return NaN;
+            return mainFile.colData[col.id][i];
+        });
+    }
+
+    // Check if all NaN (likely bad expression)
+    if (vals.every(v => isNaN(v))) {
+        alert(`Expression error: could not evaluate "${expr}". Check RAM names.`);
+        return;
+    }
+
+    const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+    const colDef = { id, name, unit: '', idx: -1, color, isCustom: true };
+
+    mainFile.columns.unshift(colDef);
+    mainFile.colData[id] = vals;
+
+    state.customRAMs.push({ name, expr, id });
+    state.selectedNames.add(name);
+
+    renderCustomRAMList();
+    renderColumnList();
+    renderChart();
+}
+
+function removeCustomRAM(id) {
+    const mainFile = getMainFile();
+    const idx = state.customRAMs.findIndex(c => c.id === id);
+    if (idx < 0) return;
+
+    const name = state.customRAMs[idx].name;
+    state.customRAMs.splice(idx, 1);
+
+    if (mainFile) {
+        mainFile.columns = mainFile.columns.filter(c => c.id !== id);
+        delete mainFile.colData[id];
+    }
+    state.selectedNames.delete(name);
+
+    renderCustomRAMList();
+    renderColumnList();
+    renderChart();
+}
+
+function recomputeCustomRAMs() {
+    const mainFile = getMainFile();
+    if (!mainFile) return;
+
+    // Remove old custom columns from mainFile
+    mainFile.columns = mainFile.columns.filter(c => !c.isCustom);
+    for (const cr of state.customRAMs) delete mainFile.colData[cr.id];
+
+    // Recompute each custom RAM in order (so earlier custom RAMs can be referenced by later ones)
+    for (const cr of state.customRAMs) {
+        const td = mainFile.timeData;
+        const vals = new Float32Array(td.length);
+
+        for (let i = 0; i < td.length; i++) {
+            vals[i] = evaluateExpr(cr.expr, ramName => {
+                const col = mainFile.columns.find(c => c.name === ramName);
+                if (!col) return NaN;
+                return mainFile.colData[col.id][i];
+            });
+        }
+
+        const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+        const colDef = { id: cr.id, name: cr.name, unit: '', idx: -1, color, isCustom: true };
+
+        mainFile.columns.unshift(colDef);
+        mainFile.colData[cr.id] = vals;
+    }
+}
+
+function renderCustomRAMList() {
+    dom.customList.innerHTML = '';
+    for (const cr of state.customRAMs) {
+        const li = document.createElement('li');
+        li.className = 'custom-ram-item';
+        li.innerHTML = `<span class="cr-name">${esc(cr.name)}</span>`
+            + `<span class="cr-expr" title="${esc(cr.expr)}">${esc(cr.expr)}</span>`
+            + `<i class='bx bx-x cr-del' data-crid="${esc(cr.id)}" title="Remove"></i>`;
+        dom.customList.appendChild(li);
+    }
+    dom.customList.querySelectorAll('.cr-del').forEach(el => {
+        el.addEventListener('click', () => removeCustomRAM(el.dataset.crid));
+    });
+}
+
+dom.customAdd.addEventListener('click', () => {
+    addCustomRAM(dom.customName.value, dom.customExpr.value);
+    dom.customName.value = '';
+    dom.customExpr.value = '';
+});
+
 dom.colSearch.addEventListener('input', renderColumnList);
 
 function renderColumnList() {
@@ -436,7 +655,9 @@ function renderColumnList() {
     }
 
     const q       = dom.colSearch.value.toLowerCase();
-    const matches = mainFile.columns.filter(c => !q || c.name.toLowerCase().includes(q));
+    const matches = mainFile.columns
+        .filter(c => !q || c.name.toLowerCase().includes(q))
+        .sort((a, b) => (b.isCustom ? 1 : 0) - (a.isCustom ? 1 : 0));
 
     if (!matches.length) {
         dom.colList.innerHTML = '<div class="placeholder-text">No channels match search</div>';

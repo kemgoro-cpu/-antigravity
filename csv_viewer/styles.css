@@ -410,6 +410,35 @@ input[type="text"]:focus {
 }
 
 .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-sm { padding: 4px 10px; font-size: 0.72rem; }
+
+/* ── Custom RAM ──────────────────────────── */
+.custom-ram-form {
+    display: flex; flex-direction: column; gap: 5px;
+}
+.custom-ram-input {
+    background: var(--bg-main); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 8px; font-size: 0.78rem; font-family: inherit;
+    outline: none; width: 100%;
+}
+.custom-ram-input:focus { border-color: var(--accent); }
+.custom-ram-input::placeholder { color: var(--text-secondary); opacity: 0.6; }
+.custom-ram-list {
+    list-style: none; margin-top: 6px;
+    display: flex; flex-direction: column; gap: 3px;
+}
+.custom-ram-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 7px; border-radius: var(--radius-sm);
+    background: var(--bg-hover); font-size: 0.72rem;
+}
+.custom-ram-item .cr-name { color: var(--text-primary); font-weight: 500; }
+.custom-ram-item .cr-expr { color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.custom-ram-item .cr-del {
+    cursor: pointer; color: var(--text-secondary); font-size: 16px; flex-shrink: 0;
+}
+.custom-ram-item .cr-del:hover { color: var(--danger); }
 
 .btn-secondary {
     background: transparent;

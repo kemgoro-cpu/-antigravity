@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSV Chart Viewer</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link href="lib/fonts/google-fonts.css" rel="stylesheet">
+    <link href="lib/boxicons/boxicons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -40,6 +40,17 @@
                         <label>Unit Row:</label>
                         <input type="number" id="unit-row-idx" value="2" min="1">
                     </div>
+                </div>
+
+                <!-- Custom RAM -->
+                <div class="control-group">
+                    <h3><i class='bx bx-calculator'></i> Custom RAM</h3>
+                    <div class="custom-ram-form">
+                        <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input">
+                        <input type="text" id="custom-ram-expr" placeholder="e.g. (RPM - Torque) / 2" class="custom-ram-input">
+                        <button id="custom-ram-add" class="btn-primary btn-sm">Add</button>
+                    </div>
+                    <ul id="custom-ram-list" class="custom-ram-list"></ul>
                 </div>
 
                 <!-- Channel Selection (main file only) -->
@@ -100,8 +111,8 @@
 
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="lib/papaparse.min.js"></script>
+    <script src="lib/echarts.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
