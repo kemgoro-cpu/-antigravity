@@ -324,7 +324,6 @@ input[type="text"]:focus {
     overflow: hidden;
     transition: var(--transition);
     border: 1px solid transparent;
-    flex-shrink: 0;
 }
 
 .col-item:hover > .col-item-top { background: var(--bg-surface); }
