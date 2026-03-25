@@ -1,6 +1,46 @@
 'use strict';
 
 // ─────────────────────────────────────────────────────────────
+// Error notification system
+// ─────────────────────────────────────────────────────────────
+
+const _errorLog = []; // { time, message, detail }
+
+function showError(message, detail) {
+    const entry = { time: new Date().toLocaleTimeString(), message, detail: detail || '' };
+    _errorLog.push(entry);
+    console.error(`[CSV Viewer] ${message}`, detail || '');
+
+    // Create toast notification
+    let container = document.getElementById('error-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'error-toast-container';
+        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = 'background:#2d1216;border:1px solid #f43f5e;border-radius:8px;padding:12px 16px;color:#fda4af;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
+    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;color:#fb7185;">⚠ ${esc(message)}</div>`
+        + (detail ? `<div style="font-size:11px;color:#f9a8b8;opacity:0.85;word-break:break-all;max-height:80px;overflow:auto;">${esc(String(detail))}</div>` : '')
+        + `<div style="font-size:10px;color:#888;margin-top:4px;">${entry.time} — click to dismiss</div>`;
+    toast.addEventListener('click', () => toast.remove());
+    container.appendChild(toast);
+
+    // Auto-dismiss after 15 seconds
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 15000);
+}
+
+// Catch all unhandled errors
+window.addEventListener('error', e => {
+    showError('Unhandled error', `${e.message}\n at ${e.filename}:${e.lineno}:${e.colno}`);
+});
+window.addEventListener('unhandledrejection', e => {
+    showError('Unhandled promise rejection', String(e.reason));
+});
+
+// ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
 
@@ -276,15 +316,28 @@ function handleFiles(files) {
 
 function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    // Phase 1: Preview parse — only read first 50 rows to detect headers
-    Papa.parse(file, {
-        header: false,
-        dynamicTyping: false,
-        skipEmptyLines: true,
-        preview: 50,
-        complete: res => onHeaderParsed(fileId, file.name, file, res.data),
-        error:   err => { console.error(err); alert(`Error parsing ${file.name}`); },
-    });
+    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`);
+    try {
+        // Phase 1: Preview parse — only read first 50 rows to detect headers
+        Papa.parse(file, {
+            header: false,
+            dynamicTyping: false,
+            skipEmptyLines: true,
+            preview: 50,
+            complete: res => {
+                try {
+                    onHeaderParsed(fileId, file.name, file, res.data);
+                } catch (e) {
+                    showError(`Header parse failed: ${file.name}`, e.stack || e.message);
+                }
+            },
+            error: err => {
+                showError(`CSV parse error: ${file.name}`, err.message || String(err));
+            },
+        });
+    } catch (e) {
+        showError(`Failed to start parsing: ${file.name}`, e.stack || e.message);
+    }
 }
 
 function detectHeaderRows(raw) {
@@ -367,37 +420,50 @@ function onHeaderParsed(fileId, fileName, file, raw) {
     const timeChunks = [];
     let rowIdx = 0;
 
-    Papa.parse(file, {
-        header: false,
-        dynamicTyping: false,
-        skipEmptyLines: true,
-        step: function(result) {
-            rowIdx++;
-            if (rowIdx <= dataStart) return; // skip header rows
-            const row = result.data;
-            if (!row) return;
-            const t = toNumber(row[timeIdx]);
-            if (!isNaN(t)) {
-                timeChunks.push(timeUnit === 'ms' ? t / 1000 : t);
-            }
-        },
-        complete: function() {
-            const timeData = new Float64Array(timeChunks.length);
-            for (let i = 0; i < timeChunks.length; i++) timeData[i] = timeChunks[i];
+    console.log(`[CSV Viewer] Phase 2: streaming time data for ${fileName} (dataStart=${dataStart}, timeIdx=${timeIdx})`);
 
-            state.files[fileId] = {
-                name: fileName, shortName, columns, timeData,
-                colData: {},  // empty — columns loaded on demand
-                role, offset: 0,
-                file,         // File reference for lazy column loading
-                headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit },
-            };
+    try {
+        Papa.parse(file, {
+            header: false,
+            dynamicTyping: false,
+            skipEmptyLines: true,
+            step: function(result) {
+                rowIdx++;
+                if (rowIdx <= dataStart) return; // skip header rows
+                const row = result.data;
+                if (!row) return;
+                const t = toNumber(row[timeIdx]);
+                if (!isNaN(t)) {
+                    timeChunks.push(timeUnit === 'ms' ? t / 1000 : t);
+                }
+            },
+            complete: function() {
+                try {
+                    console.log(`[CSV Viewer] Time data loaded: ${timeChunks.length} points for ${fileName}`);
+                    const timeData = new Float64Array(timeChunks.length);
+                    for (let i = 0; i < timeChunks.length; i++) timeData[i] = timeChunks[i];
 
-            if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
-            updateUI();
-        },
-        error: err => { console.error(err); alert(`Error parsing ${fileName}`); },
-    });
+                    state.files[fileId] = {
+                        name: fileName, shortName, columns, timeData,
+                        colData: {},  // empty — columns loaded on demand
+                        role, offset: 0,
+                        file,         // File reference for lazy column loading
+                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit },
+                    };
+
+                    if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
+                    updateUI();
+                } catch (e) {
+                    showError(`Failed to process time data: ${fileName}`, e.stack || e.message);
+                }
+            },
+            error: err => {
+                showError(`Time data parse error: ${fileName}`, err.message || String(err));
+            },
+        });
+    } catch (e) {
+        showError(`Failed to start time streaming: ${fileName}`, e.stack || e.message);
+    }
 }
 
 /**
@@ -424,42 +490,69 @@ function loadColumnsForFile(fileId, colNames) {
 
     // If there's already a parse in progress for this file, chain after it
     const prev = _parseQueue.get(fileId) || Promise.resolve();
-    const job = prev.then(() => {
+    const job = prev.then(async () => {
         // Re-check which columns still need loading (previous parse may have loaded some)
         const stillNeeded = colsToLoad.filter(col => !f.colData[col.id]);
         if (stillNeeded.length === 0) return;
 
+        // Verify File object is still readable before parsing
+        try {
+            await f.file.slice(0, 1).text();
+        } catch (e) {
+            showError(
+                `File re-read failed: ${f.name}`,
+                `File object is no longer accessible. This may be caused by browser security policy or the file was moved/deleted.\n${e.message}`
+            );
+            return;
+        }
+
+        const colNamesStr = stillNeeded.map(c => c.name).join(', ');
+        console.log(`[CSV Viewer] Loading columns [${colNamesStr}] from ${f.name}`);
+
         const { dataStart, timeIdx } = f.headerInfo;
 
         return new Promise(resolve => {
-            const tempArrs = {};
-            for (const col of stillNeeded) tempArrs[col.id] = [];
+            try {
+                const tempArrs = {};
+                for (const col of stillNeeded) tempArrs[col.id] = [];
 
-            let rowIdx = 0;
+                let rowIdx = 0;
 
-            Papa.parse(f.file, {
-                header: false,
-                dynamicTyping: false,
-                skipEmptyLines: true,
-                step: function(result) {
-                    rowIdx++;
-                    if (rowIdx <= dataStart) return;
-                    const row = result.data;
-                    if (!row) return;
-                    const t = toNumber(row[timeIdx]);
-                    if (isNaN(t)) return;
-                    for (const col of stillNeeded) {
-                        tempArrs[col.id].push(toNumber(row[col.idx]));
-                    }
-                },
-                complete: function() {
-                    for (const col of stillNeeded) {
-                        f.colData[col.id] = new Float32Array(tempArrs[col.id]);
-                    }
-                    resolve();
-                },
-                error: function() { resolve(); },
-            });
+                Papa.parse(f.file, {
+                    header: false,
+                    dynamicTyping: false,
+                    skipEmptyLines: true,
+                    step: function(result) {
+                        rowIdx++;
+                        if (rowIdx <= dataStart) return;
+                        const row = result.data;
+                        if (!row) return;
+                        const t = toNumber(row[timeIdx]);
+                        if (isNaN(t)) return;
+                        for (const col of stillNeeded) {
+                            tempArrs[col.id].push(toNumber(row[col.idx]));
+                        }
+                    },
+                    complete: function() {
+                        try {
+                            for (const col of stillNeeded) {
+                                f.colData[col.id] = new Float32Array(tempArrs[col.id]);
+                            }
+                            console.log(`[CSV Viewer] Columns loaded: [${colNamesStr}] (${tempArrs[stillNeeded[0].id].length} rows)`);
+                        } catch (e) {
+                            showError(`Failed to store column data: ${f.name}`, e.stack || e.message);
+                        }
+                        resolve();
+                    },
+                    error: function(err) {
+                        showError(`Column parse error: ${f.name}`, err.message || String(err));
+                        resolve();
+                    },
+                });
+            } catch (e) {
+                showError(`Failed to start column loading: ${f.name}`, e.stack || e.message);
+                resolve();
+            }
         });
     });
 
@@ -480,16 +573,21 @@ async function ensureColumnsAndRender() {
     const names = [...state.selectedNames];
     if (names.length === 0) { renderChart(); return; }
 
-    const promises = [];
-    for (const [fid, f] of Object.entries(state.files)) {
-        // Load selected columns that exist in this file
-        const relevantNames = names.filter(n => f.columns.some(c => c.name === n));
-        if (relevantNames.length > 0) {
-            promises.push(loadColumnsForFile(fid, relevantNames));
+    try {
+        const promises = [];
+        for (const [fid, f] of Object.entries(state.files)) {
+            // Load selected columns that exist in this file
+            const relevantNames = names.filter(n => f.columns.some(c => c.name === n));
+            if (relevantNames.length > 0) {
+                promises.push(loadColumnsForFile(fid, relevantNames));
+            }
         }
+        await Promise.all(promises);
+        renderChart();
+    } catch (e) {
+        showError('Failed to load column data', e.stack || e.message);
+        renderChart(); // render what we have
     }
-    await Promise.all(promises);
-    renderChart();
 }
 
 // ─────────────────────────────────────────────────────────────
