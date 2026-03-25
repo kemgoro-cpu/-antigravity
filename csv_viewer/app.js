@@ -148,9 +148,11 @@ const state = {
     customRAMs:     [],     // [{ name, expr, id }]
 };
 
-// FileRecord: { name, shortName, columns, timeData, colData, role, offset }
+// FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, headerInfo }
 //   role: 'main' | 'sub'
 //   offset: number (seconds, for sub files)
+//   file: File object reference (for lazy column loading)
+//   headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit } (cached parse metadata)
 
 // ─────────────────────────────────────────────────────────────
 // DOM references
@@ -274,12 +276,14 @@ function handleFiles(files) {
 
 function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    // Phase 1: Preview parse — only read first 50 rows to detect headers
     Papa.parse(file, {
         header: false,
         dynamicTyping: false,
         skipEmptyLines: true,
-        complete: res  => onParsed(fileId, file.name, res.data),
-        error:   err  => { console.error(err); alert(`Error parsing ${file.name}`); },
+        preview: 50,
+        complete: res => onHeaderParsed(fileId, file.name, file, res.data),
+        error:   err => { console.error(err); alert(`Error parsing ${file.name}`); },
     });
 }
 
@@ -318,7 +322,12 @@ function toNumber(v) {
     return isNaN(n) ? NaN : n;
 }
 
-function onParsed(fileId, fileName, raw) {
+/**
+ * Phase 1: Header-only parse complete.
+ * Extracts column metadata and stores File reference for lazy loading.
+ * Does NOT load any column data yet — only time data is loaded via streaming.
+ */
+function onHeaderParsed(fileId, fileName, file, raw) {
     const { nameRow, unitRow } = detectHeaderRows(raw);
     const dataStart = Math.max(nameRow, unitRow >= 0 ? unitRow : nameRow) + 1;
 
@@ -336,6 +345,8 @@ function onParsed(fileId, fileName, raw) {
     let timeIdx = headers.findIndex(h => typeof h === 'string' && h.trim().toLowerCase() === 'time');
     if (timeIdx < 0) timeIdx = 0;
 
+    const timeUnit = unitRow >= 0 ? (raw[unitRow][timeIdx] || '').trim().toLowerCase() : '';
+
     const columns = [];
     for (let i = 0; i < headers.length; i++) {
         if (i === timeIdx) continue;
@@ -348,42 +359,137 @@ function onParsed(fileId, fileName, raw) {
         });
     }
 
-    const rowCount = raw.length - dataStart;
-    const timeArr  = new Float64Array(rowCount);
-    const valArrs  = {};
-    for (const col of columns) valArrs[col.id] = new Float32Array(rowCount);
-
-    let validCount = 0;
-    for (let r = 0; r < rowCount; r++) {
-        const row = raw[r + dataStart];
-        if (!row) continue;
-        const t = toNumber(row[timeIdx]);
-        if (isNaN(t)) continue;
-        timeArr[validCount] = t;
-        for (const col of columns) valArrs[col.id][validCount] = toNumber(row[col.idx]);
-        validCount++;
-    }
-
-    // Convert ms to seconds if time unit is 'ms'
-    const timeUnit = unitRow >= 0 ? (raw[unitRow][timeIdx] || '').trim().toLowerCase() : '';
-    if (timeUnit === 'ms') {
-        for (let i = 0; i < validCount; i++) timeArr[i] /= 1000;
-    }
-
-    const timeData = timeArr.slice(0, validCount);
-    const colData  = {};
-    for (const col of columns) colData[col.id] = valArrs[col.id].slice(0, validCount);
-
     const hasMain   = Object.values(state.files).some(f => f.role === 'main');
     const role      = hasMain ? 'sub' : 'main';
     const shortName = fileName.length > 22 ? fileName.slice(0, 20) + '…' : fileName;
 
-    state.files[fileId] = { name: fileName, shortName, columns, timeData, colData, role, offset: 0 };
+    // Phase 2: Stream-parse to extract ONLY time data (no column values yet)
+    const timeChunks = [];
+    let rowIdx = 0;
 
-    // Default shift target = first sub file
-    if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
+    Papa.parse(file, {
+        header: false,
+        dynamicTyping: false,
+        skipEmptyLines: true,
+        step: function(result) {
+            rowIdx++;
+            if (rowIdx <= dataStart) return; // skip header rows
+            const row = result.data;
+            if (!row) return;
+            const t = toNumber(row[timeIdx]);
+            if (!isNaN(t)) {
+                timeChunks.push(timeUnit === 'ms' ? t / 1000 : t);
+            }
+        },
+        complete: function() {
+            const timeData = new Float64Array(timeChunks.length);
+            for (let i = 0; i < timeChunks.length; i++) timeData[i] = timeChunks[i];
 
-    updateUI();
+            state.files[fileId] = {
+                name: fileName, shortName, columns, timeData,
+                colData: {},  // empty — columns loaded on demand
+                role, offset: 0,
+                file,         // File reference for lazy column loading
+                headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit },
+            };
+
+            if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
+            updateUI();
+        },
+        error: err => { console.error(err); alert(`Error parsing ${fileName}`); },
+    });
+}
+
+/**
+ * Lazy-load specific columns for a file. Only parses columns not already in colData.
+ * Returns a Promise that resolves when loading is complete.
+ * Uses a per-file parse queue to prevent duplicate concurrent parses.
+ */
+const _parseQueue = new Map(); // fileId → Promise (in-flight parse)
+
+function loadColumnsForFile(fileId, colNames) {
+    const f = state.files[fileId];
+    if (!f || !f.file) return Promise.resolve();
+
+    // Determine which columns need loading (not yet in colData and not being loaded)
+    const colsToLoad = [];
+    for (const name of colNames) {
+        const col = f.columns.find(c => c.name === name);
+        if (col && !f.colData[col.id]) colsToLoad.push(col);
+    }
+    if (colsToLoad.length === 0) {
+        // If there's an in-flight parse for this file, wait for it (may be loading our columns)
+        return _parseQueue.get(fileId) || Promise.resolve();
+    }
+
+    // If there's already a parse in progress for this file, chain after it
+    const prev = _parseQueue.get(fileId) || Promise.resolve();
+    const job = prev.then(() => {
+        // Re-check which columns still need loading (previous parse may have loaded some)
+        const stillNeeded = colsToLoad.filter(col => !f.colData[col.id]);
+        if (stillNeeded.length === 0) return;
+
+        const { dataStart, timeIdx } = f.headerInfo;
+
+        return new Promise(resolve => {
+            const tempArrs = {};
+            for (const col of stillNeeded) tempArrs[col.id] = [];
+
+            let rowIdx = 0;
+
+            Papa.parse(f.file, {
+                header: false,
+                dynamicTyping: false,
+                skipEmptyLines: true,
+                step: function(result) {
+                    rowIdx++;
+                    if (rowIdx <= dataStart) return;
+                    const row = result.data;
+                    if (!row) return;
+                    const t = toNumber(row[timeIdx]);
+                    if (isNaN(t)) return;
+                    for (const col of stillNeeded) {
+                        tempArrs[col.id].push(toNumber(row[col.idx]));
+                    }
+                },
+                complete: function() {
+                    for (const col of stillNeeded) {
+                        f.colData[col.id] = new Float32Array(tempArrs[col.id]);
+                    }
+                    resolve();
+                },
+                error: function() { resolve(); },
+            });
+        });
+    });
+
+    // Clean up queue entry when done
+    const cleanup = job.then(() => {
+        if (_parseQueue.get(fileId) === cleanup) _parseQueue.delete(fileId);
+    });
+    _parseQueue.set(fileId, cleanup);
+
+    return cleanup;
+}
+
+/**
+ * Ensure all selected columns are loaded for all relevant files,
+ * then re-render the chart.
+ */
+async function ensureColumnsAndRender() {
+    const names = [...state.selectedNames];
+    if (names.length === 0) { renderChart(); return; }
+
+    const promises = [];
+    for (const [fid, f] of Object.entries(state.files)) {
+        // Load selected columns that exist in this file
+        const relevantNames = names.filter(n => f.columns.some(c => c.name === n));
+        if (relevantNames.length > 0) {
+            promises.push(loadColumnsForFile(fid, relevantNames));
+        }
+    }
+    await Promise.all(promises);
+    renderChart();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -394,13 +500,13 @@ function getMainFile()   { return Object.values(state.files).find(f => f.role ==
 function getMainFileId() { return Object.keys(state.files).find(id => state.files[id].role === 'main'); }
 function getSubFileIds() { return Object.keys(state.files).filter(id => state.files[id].role === 'sub'); }
 
-function setMainFile(newMainId) {
+async function setMainFile(newMainId) {
     const oldMainId = getMainFileId();
     if (oldMainId === newMainId) return;
     if (oldMainId) state.files[oldMainId].role = 'sub';
     state.files[newMainId].role = 'main';
     state.selectedNames = new Set();  // clear selection on main change
-    recomputeCustomRAMs();
+    await recomputeCustomRAMs();
     updateUI();
 }
 
@@ -439,7 +545,13 @@ dom.clearBtn.addEventListener('click', () => {
 function updateUI() {
     renderFileList();
     renderColumnList();
-    renderChart();
+
+    // If columns are selected, ensure their data is loaded before rendering chart
+    if (state.selectedNames.size > 0) {
+        ensureColumnsAndRender();
+    } else {
+        renderChart();
+    }
 
     const hasFiles = Object.keys(state.files).length > 0;
     dom.clearBtn.disabled = !hasFiles;
@@ -526,7 +638,12 @@ function renderFileList() {
 // Custom RAM (computed channels)
 // ─────────────────────────────────────────────────────────────
 
-function addCustomRAM(name, expr) {
+/** Extract RAM names referenced in an expression */
+function extractExprNames(expr) {
+    return tokenizeExpr(expr).filter(t => t.type === 'name').map(t => t.value);
+}
+
+async function addCustomRAM(name, expr) {
     const mainFile = getMainFile();
     if (!mainFile || !name.trim() || !expr.trim()) return;
 
@@ -539,6 +656,11 @@ function addCustomRAM(name, expr) {
         return;
     }
 
+    // Ensure referenced columns are loaded before computing
+    const refNames = extractExprNames(expr);
+    const mainFileId = getMainFileId();
+    if (mainFileId) await loadColumnsForFile(mainFileId, refNames);
+
     const id = `custom_${Date.now()}`;
     const td = mainFile.timeData;
     const vals = new Float32Array(td.length);
@@ -547,7 +669,7 @@ function addCustomRAM(name, expr) {
         vals[i] = evaluateExpr(expr, ramName => {
             const col = mainFile.columns.find(c => c.name === ramName);
             if (!col) return NaN;
-            return mainFile.colData[col.id][i];
+            return mainFile.colData[col.id]?.[i] ?? NaN;
         });
     }
 
@@ -590,13 +712,21 @@ function removeCustomRAM(id) {
     renderChart();
 }
 
-function recomputeCustomRAMs() {
+async function recomputeCustomRAMs() {
     const mainFile = getMainFile();
     if (!mainFile) return;
 
     // Remove old custom columns from mainFile
     mainFile.columns = mainFile.columns.filter(c => !c.isCustom);
     for (const cr of state.customRAMs) delete mainFile.colData[cr.id];
+
+    // Ensure referenced columns are loaded
+    const mainFileId = getMainFileId();
+    if (mainFileId) {
+        const allRefNames = [];
+        for (const cr of state.customRAMs) allRefNames.push(...extractExprNames(cr.expr));
+        if (allRefNames.length > 0) await loadColumnsForFile(mainFileId, allRefNames);
+    }
 
     // Recompute each custom RAM in order (so earlier custom RAMs can be referenced by later ones)
     for (const cr of state.customRAMs) {
@@ -607,7 +737,7 @@ function recomputeCustomRAMs() {
             vals[i] = evaluateExpr(cr.expr, ramName => {
                 const col = mainFile.columns.find(c => c.name === ramName);
                 if (!col) return NaN;
-                return mainFile.colData[col.id][i];
+                return mainFile.colData[col.id]?.[i] ?? NaN;
             });
         }
 
@@ -726,12 +856,14 @@ function renderColumnList() {
         topRow.addEventListener('click', () => {
             if (on) {
                 state.selectedNames.delete(col.name);
+                renderColumnList();
+                renderChart();
             } else {
                 state.selectedNames.add(col.name);
                 if (!state.yRanges[col.name]) state.yRanges[col.name] = { min: '', max: '' };
+                renderColumnList();
+                ensureColumnsAndRender();
             }
-            renderColumnList();
-            renderChart();
         });
 
         dom.colList.appendChild(item);
@@ -761,7 +893,7 @@ function interpolate(timeArr, valArr, t) {
 // Auto-align: minimize RMSE between main and sub file
 // ─────────────────────────────────────────────────────────────
 
-function autoAlign(subFileId) {
+async function autoAlign(subFileId) {
     const mainFile = getMainFile();
     const subFile  = state.files[subFileId];
     if (!mainFile || !subFile) return;
@@ -775,6 +907,13 @@ function autoAlign(subFileId) {
         alert('Select at least one channel that exists in both files for auto-alignment.');
         return;
     }
+
+    // Ensure required columns are loaded in both files
+    const mainFileId = getMainFileId();
+    await Promise.all([
+        loadColumnsForFile(mainFileId, commonNames),
+        loadColumnsForFile(subFileId, commonNames),
+    ]);
 
     const mainCols = commonNames.map(name => mainFile.columns.find(c => c.name === name)).filter(Boolean);
     const subCols  = commonNames.map(name => subFile.columns.find(c => c.name === name)).filter(Boolean);
@@ -823,6 +962,7 @@ function computeRmse(sampleTimes, mainFile, mainCols, subFile, subCols, offset) 
 
         const mVals = mainFile.colData[mc.id];
         const sVals = subFile.colData[sc.id];
+        if (!mVals || !sVals) continue;
         const sTd   = subFile.timeData;
 
         // Normalise by main signal range to balance channels of different magnitudes
@@ -878,6 +1018,7 @@ function getActiveGroups() {
         // ── Main series (solid line) ───────────────────────
         const mtd  = mainFile.timeData;
         const mvd  = mainFile.colData[mc.id];
+        if (!mvd) continue; // column data not yet loaded
         const mPts = new Array(mtd.length);
         for (let i = 0; i < mtd.length; i++) mPts[i] = [mtd[i], isNaN(mvd[i]) ? null : mvd[i]];
 
@@ -897,6 +1038,7 @@ function getActiveGroups() {
 
             const std    = sf.timeData;
             const svd    = sf.colData[sc.id];
+            if (!svd) continue; // column data not yet loaded
             const offset = sf.offset;
             const sPts   = new Array(std.length);
             for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, isNaN(svd[i]) ? null : svd[i]];
@@ -1223,7 +1365,7 @@ function updatePerGridLabels() {
 
         // Main file
         const mc = mainFile.columns.find(c => c.name === ramName);
-        if (mc) {
+        if (mc && mainFile.colData[mc.id]) {
             const val = interpolate(mainFile.timeData, mainFile.colData[mc.id], xVal);
             if (!isNaN(val)) {
                 entries.push({ color: mc.color, valStr: fmtVal(val), fileName: mainFile.shortName, val });
@@ -1234,7 +1376,7 @@ function updatePerGridLabels() {
         for (const subId of getSubFileIds()) {
             const sf = state.files[subId];
             const sc = sf.columns.find(c => c.name === ramName);
-            if (!sc) continue;
+            if (!sc || !sf.colData[sc.id]) continue;
             // Sub file time is shifted by offset, so unshift xVal to look up in sub's timeData
             const subT = xVal - (sf.offset || 0);
             const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
