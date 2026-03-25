@@ -345,7 +345,11 @@ function detectHeaderRows(raw) {
     for (let r = 0; r < scanLimit; r++) {
         const row = raw[r];
         if (row.length < 2) continue;
-        const hasTime = row.some(c => typeof c === 'string' && c.trim().toLowerCase() === 'time');
+        // Partial match: any cell containing "time" or "時間"
+        const hasTime = row.some(c =>
+            typeof c === 'string' &&
+            (c.toLowerCase().includes('time') || c.includes('時間'))
+        );
         if (!hasTime) continue;
         const nameRow = r;
         let unitRow = -1;
@@ -355,7 +359,12 @@ function detectHeaderRows(raw) {
             const hasTimeUnit = next.some(c =>
                 typeof c === 'string' && timeUnits.includes(c.trim().toLowerCase())
             );
-            if (hasTimeUnit) unitRow = r + 1;
+            if (hasTimeUnit) {
+                unitRow = r + 1;
+            } else {
+                // Unit row not detected — default to the row right after channel names
+                unitRow = r + 1;
+            }
         }
         return { nameRow, unitRow };
     }
@@ -395,7 +404,9 @@ function onHeaderParsed(fileId, fileName, file, raw) {
     const headers = raw[nameRow];
     const units   = unitRow >= 0 ? raw[unitRow] : Array(headers.length).fill('');
 
-    let timeIdx = headers.findIndex(h => typeof h === 'string' && h.trim().toLowerCase() === 'time');
+    let timeIdx = headers.findIndex(h =>
+        typeof h === 'string' && (h.toLowerCase().includes('time') || h.includes('時間'))
+    );
     if (timeIdx < 0) timeIdx = 0;
 
     const timeUnit = unitRow >= 0 ? (raw[unitRow][timeIdx] || '').trim().toLowerCase() : '';
@@ -898,11 +909,9 @@ function renderColumnList() {
 
         const item = document.createElement('div');
         item.className = `col-item${on ? ' selected' : ''}`;
-        item.style.cssText = 'display:block;min-height:22px;overflow:visible;border:1px solid rgba(255,255,255,0.05);border-radius:6px;margin-bottom:2px;';
 
         const topRow = document.createElement('div');
         topRow.className = 'col-item-top';
-        topRow.style.cssText = 'display:flex;align-items:center;gap:7px;padding:5px 7px;cursor:pointer;user-select:none;';
 
         const badge = document.createElement('div');
         badge.style.cssText = `width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${on ? col.color : 'transparent'};border:1.5px solid ${col.color};`;

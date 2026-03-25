@@ -321,9 +321,10 @@ input[type="text"]:focus {
 
 .col-item {
     border-radius: var(--radius-sm);
-    overflow: hidden;
+    overflow: visible;
     transition: var(--transition);
     border: 1px solid transparent;
+    margin-bottom: 2px;
 }
 
 .col-item:hover > .col-item-top { background: var(--bg-surface); }
