@@ -321,10 +321,10 @@ input[type="text"]:focus {
 
 .col-item {
     border-radius: var(--radius-sm);
-    overflow: visible;
+    overflow: hidden;
     transition: var(--transition);
     border: 1px solid transparent;
-    margin-bottom: 2px;
+    flex-shrink: 0;
 }
 
 .col-item:hover > .col-item-top { background: var(--bg-surface); }
