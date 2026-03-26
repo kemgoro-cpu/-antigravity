@@ -41,7 +41,8 @@ body {
 /* ── Sidebar ──────────────────────────────── */
 .sidebar {
     width: 300px;
-    min-width: 300px;
+    min-width: 200px;
+    max-width: 60vw;
     background: var(--bg-surface);
     border-right: 1px solid var(--border);
     display: flex;
@@ -49,6 +50,20 @@ body {
     height: 100%;
     z-index: 10;
     box-shadow: 4px 0 20px rgba(0,0,0,0.3);
+}
+
+/* サイドバー幅リサイズ用ドラッグハンドル */
+.sidebar-resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    z-index: 11;
+}
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.dragging {
+    background: var(--accent);
 }
 
 .sidebar-header {
@@ -92,6 +107,31 @@ body {
     display: flex;
     align-items: center;
     gap: 5px;
+}
+
+/* 折りたたみ可能なセクション */
+.control-group.collapsible > h3 {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+.control-group.collapsible > h3:hover {
+    color: var(--text-primary);
+}
+
+/* h3の右端に折りたたみ矢印を表示 */
+.control-group.collapsible > h3 .collapse-arrow {
+    margin-left: auto;
+    font-size: 1rem;
+    transition: transform 0.2s;
+}
+
+/* 折りたたまれた状態: h3以外の子要素を非表示 */
+.control-group.collapsible.collapsed > *:not(h3) {
+    display: none;
+}
+.control-group.collapsible.collapsed > h3 .collapse-arrow {
+    transform: rotate(-90deg);
 }
 
 .active-columns-group {
@@ -324,6 +364,7 @@ input[type="text"]:focus {
     overflow: hidden;
     transition: var(--transition);
     border: 1px solid transparent;
+    flex-shrink: 0;
 }
 
 .col-item:hover > .col-item-top { background: var(--bg-surface); }

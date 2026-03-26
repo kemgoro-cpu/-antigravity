@@ -186,6 +186,9 @@ const state = {
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
     customRAMs:     [],     // [{ name, expr, id }]
+    zoomHistory:    [],     // X軸ズーム状態の履歴 [{ start, end }, ...]
+    zoomHistoryIdx: -1,     // 現在の履歴位置（-1 = 履歴なし）
+    zoomUndoRedoing: false, // Undo/Redo操作中フラグ（履歴の二重記録を防止）
 };
 
 // FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, headerInfo }
@@ -234,6 +237,10 @@ function initChart() {
     });
     window.addEventListener('resize', () => state.chart.resize());
     state.chart.on('brushEnd', onBrushEnd);
+
+    // X軸ズーム変更を監視して履歴に記録する
+    state.chart.on('dataZoom', onDataZoomForHistory);
+
     dom.chartEl.addEventListener('mouseleave', () => {
         _lastTooltipParams = null;
         for (const el of _labelEls) el.style.display = 'none';
@@ -643,6 +650,8 @@ dom.clearBtn.addEventListener('click', () => {
     state.yRanges       = {};
     state.colorCtr      = 0;
     state.shiftFileId   = null;
+    state.zoomHistory   = [];
+    state.zoomHistoryIdx = -1;
     if (state.shiftMode) exitShiftMode();
     updateUI();
 });
@@ -1417,6 +1426,12 @@ function renderChart() {
         dataZoom: dataZooms,
         series,
     }, { notMerge: true });
+
+    // 初回描画時にズーム初期状態を履歴の起点として記録する
+    if (state.zoomHistory.length === 0) {
+        state.zoomHistory.push({ start: xStart, end: xEnd });
+        state.zoomHistoryIdx = 0;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1601,6 +1616,104 @@ function resetZoom() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Zoom Undo / Redo（Ctrl+Z / Ctrl+Y）
+// ─────────────────────────────────────────────────────────────
+
+const ZOOM_HISTORY_MAX = 50; // 履歴の最大保持数
+
+/**
+ * dataZoomイベントのハンドラ。
+ * ユーザー操作（Box Zoom, スクロール, スライダー）でズームが変わったとき
+ * 現在の状態を履歴に追加する。
+ * Undo/Redo操作中は記録しない（二重記録防止）。
+ */
+function onDataZoomForHistory(params) {
+    // Undo/Redo操作中なら履歴に記録しない
+    if (state.zoomUndoRedoing) return;
+
+    // X軸のdataZoom（index 0）の状態を取得
+    const opts = state.chart.getOption();
+    if (!opts?.dataZoom?.length) return;
+    const dz = opts.dataZoom[0];
+    const snap = { start: dz.start, end: dz.end };
+
+    // 直前の履歴と同じなら記録しない（重複防止）
+    if (state.zoomHistoryIdx >= 0) {
+        const prev = state.zoomHistory[state.zoomHistoryIdx];
+        if (prev && Math.abs(prev.start - snap.start) < 0.001
+                  && Math.abs(prev.end - snap.end) < 0.001) {
+            return;
+        }
+    }
+
+    // 現在位置より後ろの履歴を切り捨てる（新しい操作をしたらRedoは消える）
+    state.zoomHistory.length = state.zoomHistoryIdx + 1;
+
+    // 新しい状態を追加
+    state.zoomHistory.push(snap);
+
+    // 最大数を超えたら古い履歴を削除
+    if (state.zoomHistory.length > ZOOM_HISTORY_MAX) {
+        state.zoomHistory.shift();
+    }
+
+    // 現在位置を最新に更新
+    state.zoomHistoryIdx = state.zoomHistory.length - 1;
+}
+
+/**
+ * ズーム状態を履歴の指定位置に復元する。
+ * dispatchActionでズームを変更し、その際の履歴記録をスキップする。
+ */
+function applyZoomFromHistory(idx) {
+    if (idx < 0 || idx >= state.zoomHistory.length) return;
+    if (!state.chart || state.numGrids === 0) return;
+
+    const snap = state.zoomHistory[idx];
+    state.zoomHistoryIdx = idx;
+
+    // Undo/Redoフラグを立てて、dataZoomイベントで履歴に記録されないようにする
+    state.zoomUndoRedoing = true;
+    state.chart.dispatchAction({
+        type: 'dataZoom',
+        start: snap.start,
+        end: snap.end,
+        xAxisIndex: Array.from({ length: state.numGrids }, (_, i) => i),
+    });
+    // フラグ解除（非同期でイベントが来る場合に備えて少し遅延）
+    requestAnimationFrame(() => { state.zoomUndoRedoing = false; });
+}
+
+/** Undo: 1つ前のズーム状態に戻す */
+function zoomUndo() {
+    if (state.zoomHistoryIdx > 0) {
+        applyZoomFromHistory(state.zoomHistoryIdx - 1);
+    }
+}
+
+/** Redo: 1つ後のズーム状態に進む */
+function zoomRedo() {
+    if (state.zoomHistoryIdx < state.zoomHistory.length - 1) {
+        applyZoomFromHistory(state.zoomHistoryIdx + 1);
+    }
+}
+
+// キーボードショートカット: Ctrl+Z = Undo, Ctrl+Y = Redo
+document.addEventListener('keydown', e => {
+    // 入力欄にフォーカスがあるときは無効にする（テキスト編集のUndo/Redoと競合しないように）
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        zoomUndo();
+    } else if (e.ctrlKey && e.key === 'y') {
+        e.preventDefault();
+        zoomRedo();
+    }
+});
+
+// ─────────────────────────────────────────────────────────────
 // Time shift controls
 // ─────────────────────────────────────────────────────────────
 
@@ -1640,6 +1753,75 @@ function exitShiftMode() {
     renderFileList();
     renderChart();
 }
+
+// ─────────────────────────────────────────────────────────────
+// サイドバー幅リサイズ（ドラッグで幅変更）
+// ─────────────────────────────────────────────────────────────
+
+(function setupSidebarResize() {
+    const handle  = $('sidebar-resize-handle');
+    const sidebar = document.querySelector('.sidebar');
+    if (!handle || !sidebar) return;
+
+    let dragging = false;
+    let startX   = 0;
+    let startW   = 0;
+
+    handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        dragging = true;
+        startX   = e.clientX;
+        startW   = sidebar.offsetWidth;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        // ドラッグ中にiframeやcanvasがイベントを奪わないようにする
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        // マウス移動量からサイドバー幅を計算
+        const newW = Math.max(200, Math.min(window.innerWidth * 0.6, startW + (e.clientX - startX)));
+        sidebar.style.width    = newW + 'px';
+        sidebar.style.minWidth = newW + 'px';
+        // チャートがあればリサイズイベントを発火（グラフの再描画）
+        if (state.chart) state.chart.resize();
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+})();
+
+// ─────────────────────────────────────────────────────────────
+// セクション折りたたみ（Files, Settings, Custom RAM）
+// ─────────────────────────────────────────────────────────────
+
+(function setupCollapsibleSections() {
+    // Channelsセクション以外のcontrol-groupを折りたたみ可能にする
+    const sections = document.querySelectorAll('.sidebar-content > .control-group:not(.active-columns-group)');
+
+    sections.forEach(section => {
+        section.classList.add('collapsible');
+
+        const heading = section.querySelector('h3');
+        if (!heading) return;
+
+        // 折りたたみ矢印アイコンをh3の末尾に追加
+        const arrow = document.createElement('i');
+        arrow.className = 'bx bx-chevron-down collapse-arrow';
+        heading.appendChild(arrow);
+
+        // h3をクリックで折りたたみ/展開を切り替え
+        heading.addEventListener('click', () => {
+            section.classList.toggle('collapsed');
+        });
+    });
+})();
 
 // ─────────────────────────────────────────────────────────────
 // Initialise
