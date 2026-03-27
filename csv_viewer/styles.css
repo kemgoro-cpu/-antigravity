@@ -424,6 +424,30 @@ input[type="text"]:focus {
     text-overflow: ellipsis;
 }
 
+/* Bitバッジ */
+.bit-badge {
+    font-size: 0.6rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: auto;
+    font-weight: 600;
+    transition: var(--transition);
+    background: rgba(255,255,255,0.06);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.bit-badge.active {
+    background: rgba(16,185,129,0.15);
+    color: #34d399;
+    border-color: rgba(16,185,129,0.3);
+}
+.bit-badge:hover {
+    background: rgba(16,185,129,0.25);
+    color: #6ee7b7;
+}
+
 /* Y-range row (visible only when selected) */
 .col-yrange {
     display: flex;

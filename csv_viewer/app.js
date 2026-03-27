@@ -192,6 +192,7 @@ const state = {
     mergedGroups:   [],     // [[nameA, nameB], ...] チャンネルマージのペア
     gridRegions:    [],     // [{ name, top, height, unit }] ドラッグ判定用
     mergeDrag:      null,   // { sourceName, ghostEl } マージドラッグ中の状態
+    bitChannels:    new Set(), // Bitモード（0/1表示、グリッド高さ縮小）のチャンネル名
 };
 
 // FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, headerInfo }
@@ -230,6 +231,45 @@ function addMerge(nameA, nameB) {
 function removeMerge(name) {
     state.mergedGroups = state.mergedGroups.filter(([a, b]) => a !== name && b !== name);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Bitチャンネル判定
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Float32Arrayの値が0と1（およびNaN）のみかどうかを判定する。
+ * Bitチャンネル（デジタル信号）の自動検出に使用。
+ */
+function isBitData(arr) {
+    if (!arr || arr.length === 0) return false;
+    for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        if (isNaN(v)) continue;
+        if (v !== 0 && v !== 1) return false;
+    }
+    return true;
+}
+
+/**
+ * ファイルの読み込み済みカラムについてBit判定を行い、
+ * 自動検出されたものを state.bitChannels に追加する。
+ * （ユーザーが手動でOFFにしたものは再追加しない）
+ */
+function detectBitChannels(fileRecord) {
+    for (const col of fileRecord.columns) {
+        const data = fileRecord.colData[col.id];
+        if (!data) continue;
+        // まだbitChannelsに入っておらず、手動でOFFにされたわけでもない場合のみ追加
+        // （_bitManualOff に入っていたらスキップ）
+        if (!_bitManualOff.has(col.name) && isBitData(data)) {
+            state.bitChannels.add(col.name);
+        }
+    }
+}
+
+// ユーザーが手動でBitモードをOFFにしたチャンネル名を記憶
+// （再読み込み時に自動検出で勝手にONに戻さないため）
+const _bitManualOff = new Set();
 
 // ─────────────────────────────────────────────────────────────
 // DOM references
@@ -831,6 +871,8 @@ function loadColumnsForFile(fileId, colNames) {
                                 f.colData[col.id] = new Float32Array(tempArrs[col.id]);
                             }
                             console.log(`[CSV Viewer] Columns loaded: [${colNamesStr}] (${tempArrs[stillNeeded[0].id].length} rows)`);
+                            // Bitチャンネル自動検出
+                            detectBitChannels(f);
                         } catch (e) {
                             showError(`Failed to store column data: ${f.name}`, e.stack || e.message);
                         }
@@ -875,10 +917,11 @@ async function ensureColumnsAndRender() {
             }
         }
         await Promise.all(promises);
+        renderColumnList(); // Bitバッジの反映
         renderChart();
     } catch (e) {
         showError('Failed to load column data', e.stack || e.message);
-        renderChart(); // render what we have
+        renderChart();
     }
 }
 
@@ -924,6 +967,8 @@ dom.clearBtn.addEventListener('click', () => {
     state.files         = {};
     state.selectedNames = new Set();
     state.mergedGroups  = [];
+    state.bitChannels   = new Set();
+    _bitManualOff.clear();
     state.yRanges       = {};
     state.colorCtr      = 0;
     state.shiftFileId   = null;
@@ -1329,6 +1374,31 @@ function renderColumnList() {
         topRow.appendChild(badge);
         topRow.appendChild(nameSpan);
         topRow.appendChild(unitSpan);
+
+        // Bitバッジ: Bitチャンネルなら表示、クリックでON/OFF切り替え
+        const isBit = state.bitChannels.has(col.name);
+        if (isBit || _bitManualOff.has(col.name)) {
+            const bitBadge = document.createElement('span');
+            bitBadge.className = 'bit-badge' + (isBit ? ' active' : '');
+            bitBadge.textContent = 'Bit';
+            bitBadge.title = isBit ? 'Bitモード ON — クリックで解除' : 'Bitモード OFF — クリックで有効化';
+            bitBadge.addEventListener('click', e => {
+                e.stopPropagation();
+                if (isBit) {
+                    // Bitモード OFF
+                    state.bitChannels.delete(col.name);
+                    _bitManualOff.add(col.name);
+                } else {
+                    // Bitモード ON
+                    state.bitChannels.add(col.name);
+                    _bitManualOff.delete(col.name);
+                }
+                renderColumnList();
+                renderChart();
+            });
+            topRow.appendChild(bitBadge);
+        }
+
         item.appendChild(topRow);
 
         if (on) {
@@ -1624,8 +1694,21 @@ function renderChart() {
     const topPx  = L.topPx;
     const botPx  = L.bottomPx;
     const gapPx  = L.gapPx;
+
+    // Bitチャンネルのグリッドは通常の1/3の高さにする
+    // まず各グリッドの「重み」を計算（Bit = 0.33, 通常 = 1.0）
+    const BIT_WEIGHT = 0.33;
+    const gridWeights = order.map(name => {
+        const grp = groups.get(name);
+        // マージグリッドの全チャンネルがBitなら狭くする
+        const allBit = grp.mergedNames.every(n => state.bitChannels.has(n));
+        return allBit ? BIT_WEIGHT : 1.0;
+    });
+    const totalWeight = gridWeights.reduce((s, w) => s + w, 0);
     const availH = H - topPx - botPx - (n - 1) * gapPx;
-    const gridH  = Math.max(Math.floor(availH / n), 30);
+    // 重みに応じてグリッド高さを配分
+    const gridHeights = gridWeights.map(w => Math.max(Math.floor(availH * w / totalWeight), 24));
+
     const pct    = px => `${(px / H * 100).toFixed(3)}%`;
 
     const grids    = [], xAxes  = [], yAxes  = [];
@@ -1675,14 +1758,20 @@ function renderChart() {
         moveOnMouseWheel:  false,
     });
 
+    let _cumulativeTop = topPx; // グリッドの累積top位置
     order.forEach((ramName, i) => {
         const grp    = groups.get(ramName);
-        const topPxI = topPx + i * (gridH + gapPx);
+        const gridH  = gridHeights[i];
+        const topPxI = _cumulativeTop;
+        _cumulativeTop += gridH + gapPx;
+
+        // Bitチャンネル判定（グリッド内の全チャンネルがBitか）
+        const isBitGrid = grp.mergedNames.every(nm => state.bitChannels.has(nm));
 
         // Parse Y-range settings for this channel
         const rangeSpec  = state.yRanges[ramName] ?? {};
-        const yMinParsed = parseFloat(rangeSpec.min);
-        const yMaxParsed = parseFloat(rangeSpec.max);
+        const yMinParsed = isBitGrid ? -0.2 : parseFloat(rangeSpec.min);
+        const yMaxParsed = isBitGrid ? 1.2  : parseFloat(rangeSpec.max);
         const hasYMin    = !isNaN(yMinParsed);
         const hasYMax    = !isNaN(yMaxParsed);
 
@@ -1858,13 +1947,20 @@ function renderChart() {
     }
 
     // ドラッグマージ判定用にグリッド領域情報を保存
-    state.gridRegions = order.map((name, i) => ({
-        name,
-        top:    topPx + i * (gridH + gapPx),
-        height: gridH,
-        unit:   groups.get(name).unit,
-        merged: (groups.get(name).mergedNames?.length ?? 1) > 1,
-    }));
+    // ドラッグマージ判定用にグリッド領域情報を保存（累積topで計算）
+    let _regionTop = topPx;
+    state.gridRegions = order.map((name, i) => {
+        const h = gridHeights[i];
+        const region = {
+            name,
+            top:    _regionTop,
+            height: h,
+            unit:   groups.get(name).unit,
+            merged: (groups.get(name).mergedNames?.length ?? 1) > 1,
+        };
+        _regionTop += h + gapPx;
+        return region;
+    });
 }
 
 // ─────────────────────────────────────────────────────────────
