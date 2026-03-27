@@ -899,14 +899,22 @@ function showDebugModal(fileId) {
     if (f.columns.length > 30) html += `<tr><td colspan="4" style="color:#a0a5b1;padding:4px 6px;">... 他 ${f.columns.length - 30} 列</td></tr>`;
     html += `</table></div>`;
 
-    // --- セクション4: TRNファイルの場合、変換後テキストの先頭を表示 ---
+    // --- セクション4: 変換後テキスト（TRN）またはファイル先頭プレビュー ---
     if (typeof f.file === 'string') {
-        html += `<h3 style="margin:0 0 8px;color:#818cf8;">変換後テキスト（先頭5行）</h3>`;
-        const lines = f.file.split('\n').slice(0, 5);
+        // dataStart前後を含めて表示（ヘッダー + 実データ最初の数行）
+        const showUntil = hi.dataStart + 5;  // dataStartの5行先まで
+        html += `<h3 style="margin:0 0 8px;color:#818cf8;">変換後テキスト（〜行${showUntil}）</h3>`;
+        const lines = f.file.split('\n').slice(0, showUntil + 1);
         html += `<pre style="font-size:10px;color:#fda4af;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre;max-width:100%;">`;
         for (let i = 0; i < lines.length; i++) {
+            // 各行の役割をラベル表示
+            let label = '';
+            if (i === hi.nameRow)  label = ' ← nameRow';
+            if (i === hi.unitRow)  label = ' ← unitRow';
+            if (i === hi.dataStart) label = ' ← dataStart';
             // タブを見やすく可視化
-            html += `<span style="color:#a0a5b1;">[${i}]</span> ${esc(lines[i]).replace(/\t/g, '<span style="color:#6366f1;">⇥</span>')}\n`;
+            const vis = esc(lines[i]).replace(/\t/g, '<span style="color:#6366f1;">⇥</span>');
+            html += `<span style="color:#a0a5b1;">[${i}]</span> ${vis}<span style="color:#f59e0b;font-weight:600;">${label}</span>\n`;
         }
         html += `</pre>`;
     }
