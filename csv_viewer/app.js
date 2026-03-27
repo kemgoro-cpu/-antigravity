@@ -240,9 +240,6 @@ function initChart() {
     window.addEventListener('resize', () => state.chart.resize());
     state.chart.on('brushEnd', onBrushEnd);
 
-    // X軸ズーム変更を監視して履歴に記録する
-    state.chart.on('dataZoom', onDataZoomForHistory);
-
     dom.chartEl.addEventListener('mouseleave', () => {
         _lastTooltipParams = null;
         for (const el of _labelEls) el.style.display = 'none';
@@ -1790,6 +1787,9 @@ function onBrushEnd(params) {
     });
     state.chart.dispatchAction({ type: 'brush', areas: [] });
     exitBoxZoom();
+
+    // Box Zoom完了後、現在のズーム状態を履歴に記録する
+    recordZoomHistory();
 }
 
 function resetZoom() {
@@ -1814,15 +1814,10 @@ function resetZoom() {
 const ZOOM_HISTORY_MAX = 50; // 履歴の最大保持数
 
 /**
- * dataZoomイベントのハンドラ。
- * ユーザー操作（Box Zoom, スクロール, スライダー）でズームが変わったとき
- * 現在の状態を履歴に追加する。
- * Undo/Redo操作中は記録しない（二重記録防止）。
+ * Box Zoom実行後に呼ばれ、現在のズーム状態を履歴に記録する。
+ * スクロールやスライダーによるズーム変更は記録しない。
  */
-function onDataZoomForHistory(params) {
-    // Undo/Redo操作中なら履歴に記録しない
-    if (state.zoomUndoRedoing) return;
-
+function recordZoomHistory() {
     // X軸のdataZoom（index 0）の状態を取得
     const opts = state.chart.getOption();
     if (!opts?.dataZoom?.length) return;
