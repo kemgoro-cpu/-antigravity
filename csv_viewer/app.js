@@ -1554,12 +1554,11 @@ async function addCustomRAM(name, expr) {
         return;
     }
 
-    const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-
     // 全ファイルにCustom RAMカラムを追加（メイン＋サブ）
+    // ファイルごとに異なる色を割り当てる
     for (const [fid, f] of Object.entries(state.files)) {
-        // ファイルごとに固有のカラムIDを生成（サブファイル用）
         const colId = (f === mainFile) ? id : `${id}_${fid}`;
+        const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
         const colDef = { id: colId, name, unit: '', idx: -1, color, isCustom: true };
         f.columns.unshift(colDef);
 
@@ -1625,12 +1624,11 @@ async function recomputeCustomRAMs() {
         await Promise.all(loadPromises);
     }
 
-    // 全ファイルでCustom RAMを再計算
+    // 全ファイルでCustom RAMを再計算（ファイルごとに異なる色を割り当て）
     for (const cr of state.customRAMs) {
-        const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-
         for (const [fid, f] of Object.entries(state.files)) {
             const colId = (f.role === 'main') ? cr.id : `${cr.id}_${fid}`;
+            const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
             const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
             f.columns.unshift(colDef);
             f.colData[colId] = computeCustomExpr(cr.expr, f);
@@ -1659,10 +1657,7 @@ async function addCustomRAMsToFile(fileId) {
         if (f.columns.some(c => c.name === cr.name)) continue;
 
         const colId  = (f.role === 'main') ? cr.id : `${cr.id}_${fileId}`;
-        // メインファイルのカラムから色を取得（統一するため）
-        const mainFile = getMainFile();
-        const mainCol  = mainFile?.columns.find(c => c.name === cr.name);
-        const color    = mainCol?.color || SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+        const color  = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
 
         const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
         f.columns.unshift(colDef);
