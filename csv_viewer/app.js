@@ -1066,9 +1066,16 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
                     // 保留中の設定があればファイル読込後に適用する
                     applyPendingSettings();
 
-                    updateUI();
-                    // 設定をlocalStorageに保存
-                    saveSettings();
+                    // 既存のCustom RAMがあれば新ファイルにも計算・追加する
+                    if (state.customRAMs.length > 0) {
+                        addCustomRAMsToFile(fileId).then(() => {
+                            updateUI();
+                            saveSettings();
+                        });
+                    } else {
+                        updateUI();
+                        saveSettings();
+                    }
                 } catch (e) {
                     showError(`Failed to process time data: ${fileName}`, e.stack || e.message);
                 }
@@ -1094,10 +1101,11 @@ function loadColumnsForFile(fileId, colNames) {
     if (!f || !f.file) return Promise.resolve();
 
     // Determine which columns need loading (not yet in colData and not being loaded)
+    // Custom RAMカラム（isCustom）はファイルパースではなく式で計算するためスキップ
     const colsToLoad = [];
     for (const name of colNames) {
         const col = f.columns.find(c => c.name === name);
-        if (col && !f.colData[col.id]) colsToLoad.push(col);
+        if (col && !col.isCustom && !f.colData[col.id]) colsToLoad.push(col);
     }
     if (colsToLoad.length === 0) {
         // If there's an in-flight parse for this file, wait for it (may be loading our columns)
@@ -1496,17 +1504,19 @@ function extractExprNames(expr) {
 /**
  * Custom RAMの式をAST一括評価で計算する。
  * 時系列関数（integral, diff, mavg, delay）にも対応。
+ * @param {string} expr - 計算式
+ * @param {object} fileRecord - 対象ファイル（メインでもサブでも可）
  */
-function computeCustomExpr(expr, mainFile) {
-    const td = mainFile.timeData;
+function computeCustomExpr(expr, fileRecord) {
+    const td = fileRecord.timeData;
     const len = td.length;
     const ast = parseExprToAST(expr);
 
     // RAM名 → Float32Array を返す関数
     const getArray = (ramName) => {
-        const col = mainFile.columns.find(c => c.name === ramName);
+        const col = fileRecord.columns.find(c => c.name === ramName);
         if (!col) return null;
-        return mainFile.colData[col.id] || null;
+        return fileRecord.colData[col.id] || null;
     };
 
     return evaluateAST(ast, getArray, td, len);
@@ -1525,25 +1535,38 @@ async function addCustomRAM(name, expr) {
         return;
     }
 
-    // Ensure referenced columns are loaded before computing
+    // 式で参照されるカラム名を取得
     const refNames = extractExprNames(expr);
-    const mainFileId = getMainFileId();
-    if (mainFileId) await loadColumnsForFile(mainFileId, refNames);
+
+    // 全ファイルで参照カラムをロード
+    const loadPromises = [];
+    for (const [fid, f] of Object.entries(state.files)) {
+        loadPromises.push(loadColumnsForFile(fid, refNames));
+    }
+    await Promise.all(loadPromises);
 
     const id = `custom_${Date.now()}`;
-    const vals = computeCustomExpr(expr, mainFile);
 
-    // Check if all NaN (likely bad expression)
-    if (vals.every(v => isNaN(v))) {
+    // まずメインファイルで計算してエラーチェック
+    const mainVals = computeCustomExpr(expr, mainFile);
+    if (mainVals.every(v => isNaN(v))) {
         alert(`式のエラー: "${expr}" を評価できません。\nRAM名や関数名を確認してください。`);
         return;
     }
 
     const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-    const colDef = { id, name, unit: '', idx: -1, color, isCustom: true };
 
-    mainFile.columns.unshift(colDef);
-    mainFile.colData[id] = vals;
+    // 全ファイルにCustom RAMカラムを追加（メイン＋サブ）
+    for (const [fid, f] of Object.entries(state.files)) {
+        // ファイルごとに固有のカラムIDを生成（サブファイル用）
+        const colId = (f === mainFile) ? id : `${id}_${fid}`;
+        const colDef = { id: colId, name, unit: '', idx: -1, color, isCustom: true };
+        f.columns.unshift(colDef);
+
+        // そのファイルのデータで式を計算
+        const vals = (f === mainFile) ? mainVals : computeCustomExpr(expr, f);
+        f.colData[colId] = vals;
+    }
 
     state.customRAMs.push({ name, expr, id });
     state.selectedNames.add(name);
@@ -1554,16 +1577,22 @@ async function addCustomRAM(name, expr) {
 }
 
 function removeCustomRAM(id) {
-    const mainFile = getMainFile();
     const idx = state.customRAMs.findIndex(c => c.id === id);
     if (idx < 0) return;
 
     const name = state.customRAMs[idx].name;
     state.customRAMs.splice(idx, 1);
 
-    if (mainFile) {
-        mainFile.columns = mainFile.columns.filter(c => c.id !== id);
-        delete mainFile.colData[id];
+    // 全ファイルからCustom RAMカラムを削除
+    for (const [fid, f] of Object.entries(state.files)) {
+        // メインファイルはidそのまま、サブファイルは id_fid 形式
+        f.columns = f.columns.filter(c => !(c.isCustom && c.name === name));
+        // colDataも名前で照合して削除（IDがファイルごとに異なるため）
+        for (const key of Object.keys(f.colData)) {
+            if (key === id || key.startsWith(id + '_')) {
+                delete f.colData[key];
+            }
+        }
     }
     state.selectedNames.delete(name);
     removeMerge(name);
@@ -1574,30 +1603,70 @@ function removeCustomRAM(id) {
 }
 
 async function recomputeCustomRAMs() {
-    const mainFile = getMainFile();
-    if (!mainFile) return;
+    if (state.customRAMs.length === 0) return;
 
-    // Remove old custom columns from mainFile
-    mainFile.columns = mainFile.columns.filter(c => !c.isCustom);
-    for (const cr of state.customRAMs) delete mainFile.colData[cr.id];
-
-    // Ensure referenced columns are loaded
-    const mainFileId = getMainFileId();
-    if (mainFileId) {
-        const allRefNames = [];
-        for (const cr of state.customRAMs) allRefNames.push(...extractExprNames(cr.expr));
-        if (allRefNames.length > 0) await loadColumnsForFile(mainFileId, allRefNames);
+    // 全ファイルから既存のCustom RAMカラムを削除
+    for (const [fid, f] of Object.entries(state.files)) {
+        f.columns = f.columns.filter(c => !c.isCustom);
+        // Custom RAM用のcolDataを削除
+        for (const key of Object.keys(f.colData)) {
+            if (key.startsWith('custom_')) delete f.colData[key];
+        }
     }
 
-    // Recompute each custom RAM in order (so earlier custom RAMs can be referenced by later ones)
+    // 全ファイルで参照カラムをロード
+    const allRefNames = [];
+    for (const cr of state.customRAMs) allRefNames.push(...extractExprNames(cr.expr));
+    if (allRefNames.length > 0) {
+        const loadPromises = [];
+        for (const [fid, f] of Object.entries(state.files)) {
+            loadPromises.push(loadColumnsForFile(fid, allRefNames));
+        }
+        await Promise.all(loadPromises);
+    }
+
+    // 全ファイルでCustom RAMを再計算
     for (const cr of state.customRAMs) {
-        const vals = computeCustomExpr(cr.expr, mainFile);
-
         const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-        const colDef = { id: cr.id, name: cr.name, unit: '', idx: -1, color, isCustom: true };
 
-        mainFile.columns.unshift(colDef);
-        mainFile.colData[cr.id] = vals;
+        for (const [fid, f] of Object.entries(state.files)) {
+            const colId = (f.role === 'main') ? cr.id : `${cr.id}_${fid}`;
+            const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
+            f.columns.unshift(colDef);
+            f.colData[colId] = computeCustomExpr(cr.expr, f);
+        }
+    }
+}
+
+/**
+ * 新しく追加されたファイルに既存のCustom RAMを計算・追加する。
+ * ファイル読込完了後に呼ばれる。
+ */
+async function addCustomRAMsToFile(fileId) {
+    const f = state.files[fileId];
+    if (!f || state.customRAMs.length === 0) return;
+
+    // 参照カラムをロード
+    const allRefNames = [];
+    for (const cr of state.customRAMs) allRefNames.push(...extractExprNames(cr.expr));
+    if (allRefNames.length > 0) {
+        await loadColumnsForFile(fileId, allRefNames);
+    }
+
+    // 各Custom RAMを計算してカラムに追加
+    for (const cr of state.customRAMs) {
+        // すでに同名カラムがあればスキップ
+        if (f.columns.some(c => c.name === cr.name)) continue;
+
+        const colId  = (f.role === 'main') ? cr.id : `${cr.id}_${fileId}`;
+        // メインファイルのカラムから色を取得（統一するため）
+        const mainFile = getMainFile();
+        const mainCol  = mainFile?.columns.find(c => c.name === cr.name);
+        const color    = mainCol?.color || SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+
+        const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
+        f.columns.unshift(colDef);
+        f.colData[colId] = computeCustomExpr(cr.expr, f);
     }
 }
 
