@@ -344,12 +344,14 @@ function isTrnFile(fileName) {
 }
 
 /**
- * TRNファイル用: 連続する空白をタブ1つに置換し、行頭末の空白も除去する。
+ * TRNファイル用: パイプ記号(|)を除去し、連続する空白をタブ1つに置換する。
  * PapaParseは空白区切りを直接サポートしていないため、タブ区切りに変換する。
+ * パイプはTRNヘッダーの装飾記号で、データ行には存在しないため、
+ * 残すと列数がズレてしまう。
  */
 function convertWhitespaceToTabs(text) {
     return text.split('\n')
-        .map(line => line.trim().replace(/\s+/g, '\t'))
+        .map(line => line.replace(/\|/g, ' ').trim().replace(/\s+/g, '\t'))
         .join('\n');
 }
 
