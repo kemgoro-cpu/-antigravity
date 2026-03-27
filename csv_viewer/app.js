@@ -472,6 +472,9 @@ const state = {
     bitChannels:    new Set(), // Bitモード（0/1表示、グリッド高さ縮小）のチャンネル名
 };
 
+// 復元待ちの設定（ファイル読込後に適用される）
+let _pendingSettings = null;
+
 // FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, headerInfo }
 //   role: 'main' | 'sub'
 //   offset: number (seconds, for sub files)
@@ -577,6 +580,8 @@ const dom = {
     customList: $('custom-ram-list'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
+    exportSettings: $('export-settings-btn'),
+    importSettings: $('import-settings-btn'),
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1057,7 +1062,13 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
                     };
 
                     if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
+
+                    // 保留中の設定があればファイル読込後に適用する
+                    applyPendingSettings();
+
                     updateUI();
+                    // 設定をlocalStorageに保存
+                    saveSettings();
                 } catch (e) {
                     showError(`Failed to process time data: ${fileName}`, e.stack || e.message);
                 }
@@ -1251,8 +1262,11 @@ dom.clearBtn.addEventListener('click', () => {
     state.shiftFileId   = null;
     state.zoomHistory   = [];
     state.zoomHistoryIdx = -1;
+    _pendingSettings    = null; // 保留設定もクリア
     if (state.shiftMode) exitShiftMode();
     updateUI();
+    // localStorageの保存データもクリア
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -1276,6 +1290,9 @@ function updateUI() {
     const hasSub = getSubFileIds().length > 0;
     if (dom.shiftBtn) dom.shiftBtn.disabled = !hasSub;
     if (!hasSub && state.shiftMode) exitShiftMode();
+
+    // 状態が変わるたびにlocalStorageに保存
+    saveSettings();
 }
 
 function renderFileList() {
@@ -1342,6 +1359,7 @@ function renderFileList() {
             if (!isNaN(v) && state.files[fid]) {
                 state.files[fid].offset = v;
                 renderChart();
+                saveSettings();
             }
         });
     });
@@ -1782,6 +1800,7 @@ function renderColumnList() {
                     if (!state.yRanges[nm]) state.yRanges[nm] = { min: '', max: '' };
                     state.yRanges[nm][tp] = inp.value;
                     renderChart();
+                    saveSettings();
                 });
             });
         }
@@ -1798,6 +1817,7 @@ function renderColumnList() {
                 renderColumnList();
                 ensureColumnsAndRender();
             }
+            saveSettings();
         });
 
         dom.colList.appendChild(item);
@@ -2719,7 +2739,7 @@ document.addEventListener('keydown', e => {
 // Time shift controls
 // ─────────────────────────────────────────────────────────────
 
-dom.sampling.addEventListener('change', () => renderChart());
+dom.sampling.addEventListener('change', () => { renderChart(); saveSettings(); });
 
 if (dom.shiftBtn) dom.shiftBtn.addEventListener('click', toggleShiftMode);
 
@@ -2796,6 +2816,7 @@ function exitShiftMode() {
         handle.classList.remove('dragging');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        saveSettings(); // サイドバー幅をlocalStorageに保存
     });
 })();
 
@@ -2945,7 +2966,265 @@ dom.exportPng.addEventListener('click', exportChartAsPNG);
 dom.copyChart.addEventListener('click', copyChartToClipboard);
 
 // ─────────────────────────────────────────────────────────────
+// 設定の保存・復元（localStorage）
+// ─────────────────────────────────────────────────────────────
+
+const STORAGE_KEY = 'csvViewer_settings';
+
+/**
+ * 現在の設定をlocalStorageに保存する。
+ * ファイルデータ本体は保存しない（名前・role・offsetだけ）。
+ */
+function saveSettings() {
+    try {
+        const sidebar = document.querySelector('.sidebar');
+        const settings = {
+            // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
+            fileInfos: Object.values(state.files).map(f => ({
+                name: f.name,
+                role: f.role,
+                offset: f.offset,
+            })),
+            // 選択中のチャンネル名
+            selectedNames: [...state.selectedNames],
+            // Custom RAM式
+            customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
+            // チャンネルマージ設定
+            mergedGroups: state.mergedGroups,
+            // Bit手動Offリスト
+            bitManualOff: [..._bitManualOff],
+            // パース設定
+            nameRowIdx: dom.nameRow.value,
+            unitRowIdx: dom.unitRow.value,
+            // サンプリングモード
+            samplingMode: dom.sampling.value,
+            // サイドバー幅
+            sidebarWidth: sidebar ? sidebar.offsetWidth : null,
+            // Y軸範囲のユーザー設定
+            yRanges: state.yRanges,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+        console.warn('[CSV Viewer] Failed to save settings:', e);
+    }
+}
+
+/**
+ * localStorageから保存済み設定を読み出す。
+ * @returns {object|null} 設定オブジェクト、または保存データがなければnull
+ */
+function loadSettings() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        console.warn('[CSV Viewer] Failed to load settings:', e);
+        return null;
+    }
+}
+
+/**
+ * 設定をJSON形式のオブジェクトにまとめる（エクスポート用）。
+ * localStorageとほぼ同じだが、共有用に整形する。
+ */
+function buildSettingsForExport() {
+    const sidebar = document.querySelector('.sidebar');
+    return {
+        _format: 'CSV Viewer Settings',
+        _version: 1,
+        fileInfos: Object.values(state.files).map(f => ({
+            name: f.name,
+            role: f.role,
+            offset: f.offset,
+        })),
+        selectedNames: [...state.selectedNames],
+        customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
+        mergedGroups: state.mergedGroups,
+        bitManualOff: [..._bitManualOff],
+        nameRowIdx: dom.nameRow.value,
+        unitRowIdx: dom.unitRow.value,
+        samplingMode: dom.sampling.value,
+        sidebarWidth: sidebar ? sidebar.offsetWidth : null,
+        yRanges: state.yRanges,
+    };
+}
+
+/**
+ * 設定をJSONファイルとしてダウンロードする。
+ */
+function exportSettings() {
+    const settings = buildSettingsForExport();
+    const json = JSON.stringify(settings, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'csv_viewer_settings.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showExportToast('設定をエクスポートしました', 'csv_viewer_settings.json');
+}
+
+/**
+ * JSONファイルから設定をインポートする。
+ * ファイル選択ダイアログを開き、選んだJSONを読み込む。
+ */
+function importSettings() {
+    const input = document.createElement('input');
+    input.type   = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', () => {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const settings = JSON.parse(reader.result);
+                applySettings(settings);
+                showExportToast('設定をインポートしました', file.name);
+            } catch (e) {
+                alert('設定ファイルの読み込みに失敗しました。\n' + e.message);
+            }
+        };
+        reader.readAsText(file);
+    });
+    input.click();
+}
+
+/**
+ * 設定オブジェクトを現在のアプリ状態に適用する。
+ * ファイルがまだ読み込まれていない場合は、pendingSettingsとして保持する。
+ * @param {object} s - 設定オブジェクト
+ */
+function applySettings(s) {
+    if (!s) return;
+
+    // パース設定を復元
+    if (s.nameRowIdx) dom.nameRow.value = s.nameRowIdx;
+    if (s.unitRowIdx) dom.unitRow.value = s.unitRowIdx;
+
+    // サンプリングモードを復元
+    if (s.samplingMode !== undefined) dom.sampling.value = s.samplingMode;
+
+    // サイドバー幅を復元
+    if (s.sidebarWidth) {
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            sidebar.style.width    = s.sidebarWidth + 'px';
+            sidebar.style.minWidth = s.sidebarWidth + 'px';
+        }
+    }
+
+    // Y軸範囲を復元
+    if (s.yRanges) state.yRanges = s.yRanges;
+
+    // ファイルがまだ読み込まれていない場合は、残りの設定を保留する
+    _pendingSettings = s;
+
+    // ファイル読込前の状態を表示
+    showPendingFiles(s.fileInfos || []);
+}
+
+/**
+ * ファイルが新たに読み込まれたとき、保留中の設定を適用する。
+ * parseCSV完了後（updateUI前）に呼ばれる。
+ */
+function applyPendingSettings() {
+    const s = _pendingSettings;
+    if (!s) return;
+
+    const mainFile = getMainFile();
+    if (!mainFile) return;
+
+    // オフセットを復元（ファイル名で照合）
+    if (s.fileInfos) {
+        for (const [fid, f] of Object.entries(state.files)) {
+            const saved = s.fileInfos.find(fi => fi.name === f.name);
+            if (saved && saved.offset) {
+                f.offset = saved.offset;
+            }
+        }
+    }
+
+    // チャンネルマージを復元
+    if (s.mergedGroups && s.mergedGroups.length) {
+        // 既存のマージをクリアして復元
+        state.mergedGroups = [];
+        for (const [a, b] of s.mergedGroups) {
+            // 両方のチャンネルがmainFileに存在するか確認
+            const hasA = mainFile.columns.some(c => c.name === a);
+            const hasB = mainFile.columns.some(c => c.name === b);
+            if (hasA && hasB) addMerge(a, b);
+        }
+    }
+
+    // Bit手動Off設定を復元
+    if (s.bitManualOff) {
+        _bitManualOff.clear();
+        for (const name of s.bitManualOff) _bitManualOff.add(name);
+    }
+
+    // Custom RAMを復元（まだ追加されていないもののみ）
+    if (s.customRAMs && s.customRAMs.length) {
+        const existingNames = new Set(state.customRAMs.map(c => c.name));
+        for (const { name, expr } of s.customRAMs) {
+            if (!existingNames.has(name)) {
+                // addCustomRAMはawaitが必要だが、ここでは順番に追加していく
+                addCustomRAM(name, expr);
+            }
+        }
+    }
+
+    // 選択チャンネルを復元
+    if (s.selectedNames && s.selectedNames.length) {
+        const available = new Set(mainFile.columns.map(c => c.name));
+        for (const name of s.selectedNames) {
+            if (available.has(name)) state.selectedNames.add(name);
+        }
+    }
+
+    // 設定適用済みなのでクリア
+    _pendingSettings = null;
+}
+
+/**
+ * 前回のファイル情報を「再読み込み待ち」として表示する。
+ */
+function showPendingFiles(fileInfos) {
+    if (!fileInfos || !fileInfos.length) return;
+
+    // ファイルリストに警告表示
+    dom.fileList.innerHTML = '';
+    for (const fi of fileInfos) {
+        const li = document.createElement('li');
+        li.className = 'file-item pending-file';
+        li.innerHTML = `
+            <div class="file-item-top">
+                <div class="role-badge ${fi.role === 'main' ? 'role-main' : 'role-sub'}">${fi.role === 'main' ? 'Main' : 'Sub'}</div>
+                <span class="file-name" style="opacity:0.5;" title="${esc(fi.name)}">
+                    <i class='bx bx-error-circle' style="color:#f59e0b;margin-right:4px;"></i>${esc(fi.name)}
+                </span>
+            </div>
+            <div style="font-size:11px;color:#f59e0b;padding:2px 8px 4px;">再読み込みしてください（ドラッグ＆ドロップ）</div>
+        `;
+        dom.fileList.appendChild(li);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialise
 // ─────────────────────────────────────────────────────────────
 
 initChart();
+
+// 設定エクスポート/インポートボタンのイベント登録
+dom.exportSettings.addEventListener('click', exportSettings);
+dom.importSettings.addEventListener('click', importSettings);
+
+// 起動時にlocalStorageから設定を復元
+const _savedSettings = loadSettings();
+if (_savedSettings) {
+    applySettings(_savedSettings);
+}
