@@ -778,6 +778,7 @@ function renderFileList() {
                     title="${isMain ? 'Main file' : 'Sub file — click to make this the Main'}"
                 >${isMain ? 'M' : 'S'}</div>
                 <span class="file-name-text" title="${esc(f.name)}">${esc(f.name)}</span>
+                <i class='bx bx-bug debug-file' data-fid="${fid}" title="Debug: パース結果を確認"></i>
                 <i class='bx bx-x remove-file' data-fid="${fid}" title="Remove"></i>
             </div>
             ${offsetRow}
@@ -823,6 +824,110 @@ function renderFileList() {
     dom.fileList.querySelectorAll('[data-auto-id]').forEach(btn => {
         btn.addEventListener('click', () => autoAlign(btn.dataset.autoId));
     });
+
+    // Debug: パース結果を確認
+    dom.fileList.querySelectorAll('.debug-file').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            showDebugModal(el.dataset.fid);
+        });
+    });
+}
+
+// ─────────────────────────────────────────────────────────────
+// デバッグモーダル: パース結果の確認
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * ファイルのパース結果をモーダルで表示する。
+ * headerInfo, timeData, columns の状態を確認できる。
+ * TRNファイルの場合は変換後のテキスト先頭も表示する。
+ */
+function showDebugModal(fileId) {
+    const f = state.files[fileId];
+    if (!f) return;
+
+    const hi = f.headerInfo;
+    const td = f.timeData;
+
+    // --- セクション1: headerInfo（パース設定）---
+    let html = `<h3 style="margin:0 0 12px;color:#818cf8;">Parse Info</h3>`;
+    html += `<table style="border-collapse:collapse;width:100%;font-size:12px;margin-bottom:16px;">`;
+    const infoRows = [
+        ['ファイル名', f.name],
+        ['role', f.role],
+        ['nameRow (0始まり)', hi.nameRow],
+        ['unitRow (0始まり)', hi.unitRow],
+        ['dataStart (0始まり)', hi.dataStart],
+        ['timeIdx (列番号)', hi.timeIdx],
+        ['timeUnit', hi.timeUnit || '(なし)'],
+        ['delimiter', hi.delimiter === '\t' ? 'TAB (\\t)' : hi.delimiter === undefined ? 'auto' : JSON.stringify(hi.delimiter)],
+        ['columns数', f.columns.length],
+        ['timeData長', td.length],
+    ];
+    for (const [k, v] of infoRows) {
+        html += `<tr><td style="padding:3px 8px;color:#a0a5b1;white-space:nowrap;">${esc(k)}</td>`
+            + `<td style="padding:3px 8px;color:#f0f0f0;font-family:'Roboto Mono',monospace;">${esc(String(v))}</td></tr>`;
+    }
+    html += `</table>`;
+
+    // --- セクション2: timeDataの先頭・末尾 ---
+    html += `<h3 style="margin:0 0 8px;color:#818cf8;">Time Data（先頭10 / 末尾5）</h3>`;
+    html += `<div style="font-family:'Roboto Mono',monospace;font-size:11px;color:#86efac;margin-bottom:16px;">`;
+    if (td.length === 0) {
+        html += `(空)`;
+    } else {
+        const head = Array.from(td.slice(0, 10)).map((v, i) => `[${i}] ${v}`);
+        const tail = td.length > 10 ? Array.from(td.slice(-5)).map((v, i) => `[${td.length - 5 + i}] ${v}`) : [];
+        html += head.join('<br>');
+        if (tail.length) html += `<br><span style="color:#a0a5b1;">... (${td.length} points total)</span><br>` + tail.join('<br>');
+    }
+    html += `</div>`;
+
+    // --- セクション3: columns一覧 ---
+    html += `<h3 style="margin:0 0 8px;color:#818cf8;">Columns</h3>`;
+    html += `<div style="font-size:11px;max-height:120px;overflow-y:auto;margin-bottom:16px;">`;
+    html += `<table style="border-collapse:collapse;width:100%;">`;
+    html += `<tr style="color:#a0a5b1;"><td style="padding:2px 6px;">idx</td><td style="padding:2px 6px;">name</td><td style="padding:2px 6px;">unit</td><td style="padding:2px 6px;">loaded</td></tr>`;
+    for (const c of f.columns.slice(0, 30)) {
+        const loaded = f.colData[c.id] ? `${f.colData[c.id].length} pts` : '-';
+        html += `<tr><td style="padding:2px 6px;color:#a0a5b1;font-family:monospace;">${c.idx}</td>`
+            + `<td style="padding:2px 6px;color:#f0f0f0;">${esc(c.name)}</td>`
+            + `<td style="padding:2px 6px;color:#a0a5b1;">${esc(c.unit)}</td>`
+            + `<td style="padding:2px 6px;color:#86efac;font-family:monospace;">${loaded}</td></tr>`;
+    }
+    if (f.columns.length > 30) html += `<tr><td colspan="4" style="color:#a0a5b1;padding:4px 6px;">... 他 ${f.columns.length - 30} 列</td></tr>`;
+    html += `</table></div>`;
+
+    // --- セクション4: TRNファイルの場合、変換後テキストの先頭を表示 ---
+    if (typeof f.file === 'string') {
+        html += `<h3 style="margin:0 0 8px;color:#818cf8;">変換後テキスト（先頭5行）</h3>`;
+        const lines = f.file.split('\n').slice(0, 5);
+        html += `<pre style="font-size:10px;color:#fda4af;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre;max-width:100%;">`;
+        for (let i = 0; i < lines.length; i++) {
+            // タブを見やすく可視化
+            html += `<span style="color:#a0a5b1;">[${i}]</span> ${esc(lines[i]).replace(/\t/g, '<span style="color:#6366f1;">⇥</span>')}\n`;
+        }
+        html += `</pre>`;
+    }
+
+    // --- モーダル表示 ---
+    let overlay = document.getElementById('debug-modal-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'debug-modal-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:640px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
+    modal.innerHTML = html
+        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#debug-modal-overlay').remove()" `
+        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
 }
 
 // ─────────────────────────────────────────────────────────────

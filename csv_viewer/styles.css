@@ -242,6 +242,16 @@ body {
     min-width: 0;
 }
 
+.debug-file {
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+    transition: var(--transition);
+    opacity: 0.5;
+}
+.debug-file:hover { color: #818cf8; opacity: 1; }
+
 .remove-file {
     color: var(--text-secondary);
     cursor: pointer;
