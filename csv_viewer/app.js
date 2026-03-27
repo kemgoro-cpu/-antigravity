@@ -189,6 +189,9 @@ const state = {
     zoomHistory:    [],     // X軸ズーム状態の履歴 [{ start, end }, ...]
     zoomHistoryIdx: -1,     // 現在の履歴位置（-1 = 履歴なし）
     zoomUndoRedoing: false, // Undo/Redo操作中フラグ（履歴の二重記録を防止）
+    mergedGroups:   [],     // [[nameA, nameB], ...] チャンネルマージのペア
+    gridRegions:    [],     // [{ name, top, height, unit }] ドラッグ判定用
+    mergeDrag:      null,   // { sourceName, ghostEl } マージドラッグ中の状態
 };
 
 // FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, headerInfo }
@@ -196,6 +199,37 @@ const state = {
 //   offset: number (seconds, for sub files)
 //   file: File object reference (for lazy column loading)
 //   headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit } (cached parse metadata)
+
+// ─────────────────────────────────────────────────────────────
+// チャンネルマージ管理ヘルパー
+// ─────────────────────────────────────────────────────────────
+
+/** nameが既にマージペアに含まれているか */
+function isMerged(name) {
+    return state.mergedGroups.some(([a, b]) => a === name || b === name);
+}
+
+/** nameのマージ相手を返す（なければnull） */
+function getMergedPartner(name) {
+    for (const [a, b] of state.mergedGroups) {
+        if (a === name) return b;
+        if (b === name) return a;
+    }
+    return null;
+}
+
+/** 2つのチャンネルをマージする */
+function addMerge(nameA, nameB) {
+    if (isMerged(nameA) || isMerged(nameB)) return false;
+    if (nameA === nameB) return false;
+    state.mergedGroups.push([nameA, nameB]);
+    return true;
+}
+
+/** nameを含むマージペアを解除する */
+function removeMerge(name) {
+    state.mergedGroups = state.mergedGroups.filter(([a, b]) => a !== name && b !== name);
+}
 
 // ─────────────────────────────────────────────────────────────
 // DOM references
@@ -244,7 +278,21 @@ function initChart() {
         _lastTooltipParams = null;
         for (const el of _labelEls) el.style.display = 'none';
     });
+
+    // Y軸ラベル領域のホバーカーソル（grab/pointer）
+    dom.chartEl.addEventListener('mousemove', e => {
+        // ドラッグ中やシフトモード中はスキップ
+        if (state.mergeDrag || state.shiftMode || state.brushMode) return;
+        if (isInYAxisArea(e.clientX) && hitTestGrid(e.clientY)) {
+            const hit = hitTestGrid(e.clientY);
+            dom.chartEl.style.cursor = (hit && hit.region.merged) ? 'pointer' : 'grab';
+        } else if (!state.shiftDrag) {
+            dom.chartEl.style.cursor = '';
+        }
+    });
+
     setupShiftDrag();
+    setupMergeDrag();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -289,6 +337,160 @@ function setupShiftDrag() {
         if (state.shiftDrag) {
             state.shiftDrag = null;
             dom.chartEl.style.cursor = state.shiftMode ? 'grab' : '';
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Drag-to-merge: Y軸ラベルをドラッグして別のグリッドにマージ
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * チャート上のY座標からどのグリッドか判定する。
+ * グリッド領域情報（state.gridRegions）を使用。
+ * 返値: { index, region } または null
+ */
+function hitTestGrid(clientY) {
+    const rect = dom.chartEl.getBoundingClientRect();
+    const y = clientY - rect.top;
+    for (let i = 0; i < state.gridRegions.length; i++) {
+        const r = state.gridRegions[i];
+        if (y >= r.top && y <= r.top + r.height) return { index: i, region: r };
+    }
+    return null;
+}
+
+/**
+ * X座標がY軸ラベル領域（グリッドの左端）にあるか判定する。
+ */
+function isInYAxisArea(clientX) {
+    const rect = dom.chartEl.getBoundingClientRect();
+    const x = clientX - rect.left;
+    return x >= 0 && x <= L.gridLeft;
+}
+
+function setupMergeDrag() {
+    let ghostEl = null;    // ドラッグ中に表示するゴースト要素
+    let sourceGrid = null; // ドラッグ元のグリッド情報
+    let targetGrid = null; // ドラッグ先のグリッド情報
+
+    // ゴースト要素を作成する
+    function createGhost(name) {
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;padding:4px 10px;background:rgba(99,102,241,0.9);color:#fff;font-size:11px;font-family:Inter,sans-serif;border-radius:4px;pointer-events:none;z-index:100001;white-space:nowrap;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+        el.textContent = name;
+        document.body.appendChild(el);
+        return el;
+    }
+
+    // ターゲットグリッドのハイライト要素
+    let highlightEl = null;
+    function showHighlight(region, valid) {
+        if (!highlightEl) {
+            highlightEl = document.createElement('div');
+            highlightEl.style.cssText = 'position:absolute;pointer-events:none;z-index:100000;border-radius:4px;transition:opacity 0.15s;';
+            dom.chartEl.style.position = 'relative';
+            dom.chartEl.appendChild(highlightEl);
+        }
+        highlightEl.style.display = '';
+        highlightEl.style.left = '0px';
+        highlightEl.style.top = region.top + 'px';
+        highlightEl.style.width = L.gridLeft + 'px';
+        highlightEl.style.height = region.height + 'px';
+        highlightEl.style.background = valid
+            ? 'rgba(99,102,241,0.15)' : 'rgba(239,68,68,0.15)';
+        highlightEl.style.border = valid
+            ? '2px solid rgba(99,102,241,0.5)' : '2px solid rgba(239,68,68,0.4)';
+    }
+    function hideHighlight() {
+        if (highlightEl) highlightEl.style.display = 'none';
+    }
+
+    // --- mousedown: Y軸ラベル領域でドラッグ開始 ---
+    dom.chartEl.addEventListener('mousedown', e => {
+        // シフトモードやブラシモード中は無効
+        if (state.shiftMode || state.brushMode) return;
+        if (e.button !== 0) return;
+        if (!isInYAxisArea(e.clientX)) return;
+
+        const hit = hitTestGrid(e.clientY);
+        if (!hit) return;
+
+        // マージ済みグリッドのドラッグも許可（移動先を変える用途に使える）
+        sourceGrid = hit;
+        // まだドラッグ確定しない（少し動かしてから確定）
+    });
+
+    // --- mousemove: ドラッグ中の表示 ---
+    document.addEventListener('mousemove', e => {
+        if (!sourceGrid) return;
+
+        // ゴーストが未作成 → ドラッグ開始
+        if (!ghostEl) {
+            ghostEl = createGhost(sourceGrid.region.name);
+            dom.chartEl.style.cursor = 'grabbing';
+        }
+
+        // ゴーストをマウスに追従させる
+        ghostEl.style.left = (e.clientX + 12) + 'px';
+        ghostEl.style.top  = (e.clientY - 12) + 'px';
+
+        // ターゲットグリッドのハイライト
+        const hit = hitTestGrid(e.clientY);
+        if (hit && hit.index !== sourceGrid.index) {
+            targetGrid = hit;
+            // 同じ単位かどうかで色を変える
+            const valid = hit.region.unit === sourceGrid.region.unit
+                       && !isMerged(hit.region.name)
+                       && !isMerged(sourceGrid.region.name);
+            showHighlight(hit.region, valid);
+            ghostEl.style.background = valid
+                ? 'rgba(99,102,241,0.9)' : 'rgba(239,68,68,0.9)';
+        } else {
+            targetGrid = null;
+            hideHighlight();
+            if (ghostEl) ghostEl.style.background = 'rgba(99,102,241,0.9)';
+        }
+    });
+
+    // --- mouseup: ドロップ → マージ実行 ---
+    document.addEventListener('mouseup', () => {
+        if (!sourceGrid) return;
+
+        if (ghostEl && targetGrid) {
+            const srcName = sourceGrid.region.name;
+            const tgtName = targetGrid.region.name;
+
+            if (sourceGrid.region.unit === targetGrid.region.unit
+                && !isMerged(srcName) && !isMerged(tgtName)) {
+                // マージ実行
+                addMerge(tgtName, srcName);
+                ensureColumnsAndRender();
+            } else {
+                showError('マージできません', '同じ単位で、まだマージされていないチャンネル同士のみマージ可能です。');
+            }
+        }
+
+        // クリーンアップ
+        if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+        hideHighlight();
+        sourceGrid = null;
+        targetGrid = null;
+        dom.chartEl.style.cursor = '';
+    });
+
+    // --- dblclick: マージ解除 ---
+    dom.chartEl.addEventListener('dblclick', e => {
+        if (state.shiftMode || state.brushMode) return;
+        if (!isInYAxisArea(e.clientX)) return;
+
+        const hit = hitTestGrid(e.clientY);
+        if (!hit) return;
+
+        const name = hit.region.name;
+        if (isMerged(name)) {
+            removeMerge(name);
+            ensureColumnsAndRender();
         }
     });
 }
@@ -694,6 +896,7 @@ async function setMainFile(newMainId) {
     if (oldMainId) state.files[oldMainId].role = 'sub';
     state.files[newMainId].role = 'main';
     state.selectedNames = new Set();  // clear selection on main change
+    state.mergedGroups  = [];
     await recomputeCustomRAMs();
     updateUI();
 }
@@ -709,6 +912,7 @@ function removeFile(fileId) {
 
     if (wasMain) {
         state.selectedNames = new Set();
+        state.mergedGroups  = [];
         const remaining = Object.keys(state.files);
         if (remaining.length) state.files[remaining[0]].role = 'main';
     }
@@ -719,6 +923,7 @@ function removeFile(fileId) {
 dom.clearBtn.addEventListener('click', () => {
     state.files         = {};
     state.selectedNames = new Set();
+    state.mergedGroups  = [];
     state.yRanges       = {};
     state.colorCtr      = 0;
     state.shiftFileId   = null;
@@ -1009,6 +1214,7 @@ function removeCustomRAM(id) {
         delete mainFile.colData[id];
     }
     state.selectedNames.delete(name);
+    removeMerge(name);
 
     renderCustomRAMList();
     renderColumnList();
@@ -1157,6 +1363,7 @@ function renderColumnList() {
         topRow.addEventListener('click', () => {
             if (on) {
                 state.selectedNames.delete(col.name);
+                removeMerge(col.name);
                 renderColumnList();
                 renderChart();
             } else {
@@ -1299,58 +1506,82 @@ function computeRmse(sampleTimes, mainFile, mainCols, subFile, subCols, offset) 
 /**
  * Builds render groups from the current selection.
  * Each selected RAM name gets one grid; sub files overlay on the same grid.
+ * マージされたチャンネルは1つのグリッドにまとめる。
  * Sub file time values are shifted by their offset.
  */
 function getActiveGroups() {
     const mainFile = getMainFile();
     if (!mainFile || !state.selectedNames.size) return { groups: new Map(), order: [] };
 
+    // マージペアのセカンダリ（2番目）を特定 → 独立グリッドを作らない
+    const mergedSecondaries = new Set();
+    const mergeMap = new Map(); // primary → secondary
+    for (const [a, b] of state.mergedGroups) {
+        if (state.selectedNames.has(a) && state.selectedNames.has(b)) {
+            mergedSecondaries.add(b);
+            mergeMap.set(a, b);
+        }
+    }
+
     const groups = new Map();
     const order  = [];
 
     for (const ramName of state.selectedNames) {
+        // セカンダリはスキップ（プライマリ側で処理される）
+        if (mergedSecondaries.has(ramName)) continue;
+
         const mc = mainFile.columns.find(c => c.name === ramName);
         if (!mc) continue;
 
+        // このグリッドに含まれるチャンネル名一覧
+        const partner = mergeMap.get(ramName);
+        const channelNames = partner ? [ramName, partner] : [ramName];
+
         order.push(ramName);
-        const grp = { unit: mc.unit, series: [] };
+        const grp = { unit: mc.unit, series: [], mergedNames: channelNames };
         groups.set(ramName, grp);
 
-        // ── Main series (solid line) ───────────────────────
-        const mtd  = mainFile.timeData;
-        const mvd  = mainFile.colData[mc.id];
-        if (!mvd) continue; // column data not yet loaded
-        const mPts = new Array(mtd.length);
-        for (let i = 0; i < mtd.length; i++) mPts[i] = [mtd[i], isNaN(mvd[i]) ? null : mvd[i]];
+        // 各チャンネルについてメイン＋サブのシリーズを構築
+        for (const chName of channelNames) {
+            const col = mainFile.columns.find(c => c.name === chName);
+            if (!col) continue;
 
-        grp.series.push({
-            id:       mc.id,
-            label:    `${ramName} [${mainFile.shortName}]`,
-            color:    mc.color,
-            dash:     false,
-            data:     mPts,
-        });
-
-        // ── Sub series (dashed lines, time-shifted) ────────
-        for (const subId of getSubFileIds()) {
-            const sf  = state.files[subId];
-            const sc  = sf.columns.find(c => c.name === ramName);
-            if (!sc) continue;
-
-            const std    = sf.timeData;
-            const svd    = sf.colData[sc.id];
-            if (!svd) continue; // column data not yet loaded
-            const offset = sf.offset;
-            const sPts   = new Array(std.length);
-            for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, isNaN(svd[i]) ? null : svd[i]];
+            // ── Main series (solid line) ───────────────────────
+            const mtd  = mainFile.timeData;
+            const mvd  = mainFile.colData[col.id];
+            if (!mvd) continue;
+            const mPts = new Array(mtd.length);
+            for (let i = 0; i < mtd.length; i++) mPts[i] = [mtd[i], isNaN(mvd[i]) ? null : mvd[i]];
 
             grp.series.push({
-                id:    sc.id,
-                label: `${ramName} [${sf.shortName}]`,
-                color: sc.color,
-                dash:  true,
-                data:  sPts,
+                id:       col.id,
+                label:    `${chName} [${mainFile.shortName}]`,
+                color:    col.color,
+                dash:     false,
+                data:     mPts,
             });
+
+            // ── Sub series (dashed lines, time-shifted) ────────
+            for (const subId of getSubFileIds()) {
+                const sf  = state.files[subId];
+                const sc  = sf.columns.find(c => c.name === chName);
+                if (!sc) continue;
+
+                const std    = sf.timeData;
+                const svd    = sf.colData[sc.id];
+                if (!svd) continue;
+                const offset = sf.offset;
+                const sPts   = new Array(std.length);
+                for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, isNaN(svd[i]) ? null : svd[i]];
+
+                grp.series.push({
+                    id:    sc.id,
+                    label: `${chName} [${sf.shortName}]`,
+                    color: sc.color,
+                    dash:  true,
+                    data:  sPts,
+                });
+            }
         }
     }
 
@@ -1475,7 +1706,11 @@ function renderChart() {
             min: globalXMin, max: globalXMax,
         });
 
-        const yLabel = grp.unit ? `${ramName}  (${grp.unit})` : ramName;
+        // マージされている場合は "A / B (unit)" 形式で表示
+        const yLabelName = grp.mergedNames.length > 1
+            ? grp.mergedNames.join(' / ')
+            : ramName;
+        const yLabel = grp.unit ? `${yLabelName}  (${grp.unit})` : yLabelName;
         const yValFmt = v => {
             if (v === 0) return '0';
             const a = Math.abs(v);
@@ -1621,6 +1856,15 @@ function renderChart() {
         state.zoomHistory.push({ start: xStart, end: xEnd });
         state.zoomHistoryIdx = 0;
     }
+
+    // ドラッグマージ判定用にグリッド領域情報を保存
+    state.gridRegions = order.map((name, i) => ({
+        name,
+        top:    topPx + i * (gridH + gapPx),
+        height: gridH,
+        unit:   groups.get(name).unit,
+        merged: (groups.get(name).mergedNames?.length ?? 1) > 1,
+    }));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1667,32 +1911,37 @@ function updatePerGridLabels() {
     const mainFile = getMainFile();
     if (!mainFile) return;
 
-    // Build one label per selected RAM, with values from ALL files
-    const order = [...state.selectedNames];
+    // Build one label per grid, with values from ALL channels and files
+    // getActiveGroups() のorder（マージ済み）を使うことでグリッドとインデックスが一致する
+    const { groups: activeGroups, order: activeOrder } = getActiveGroups();
     const gridLabels = [];
 
-    order.forEach((ramName, gi) => {
+    activeOrder.forEach((ramName, gi) => {
+        const grp = activeGroups.get(ramName);
+        if (!grp) return;
         const entries = [];
 
-        // Main file
-        const mc = mainFile.columns.find(c => c.name === ramName);
-        if (mc && mainFile.colData[mc.id]) {
-            const val = interpolate(mainFile.timeData, mainFile.colData[mc.id], xVal);
-            if (!isNaN(val)) {
-                entries.push({ color: mc.color, valStr: fmtVal(val), fileName: mainFile.shortName, val });
+        // グリッド内の全チャンネル（マージ相手含む）について値を取得
+        for (const chName of grp.mergedNames) {
+            // Main file
+            const mc = mainFile.columns.find(c => c.name === chName);
+            if (mc && mainFile.colData[mc.id]) {
+                const val = interpolate(mainFile.timeData, mainFile.colData[mc.id], xVal);
+                if (!isNaN(val)) {
+                    entries.push({ color: mc.color, valStr: fmtVal(val), fileName: mainFile.shortName, val });
+                }
             }
-        }
 
-        // Sub files
-        for (const subId of getSubFileIds()) {
-            const sf = state.files[subId];
-            const sc = sf.columns.find(c => c.name === ramName);
-            if (!sc || !sf.colData[sc.id]) continue;
-            // Sub file time is shifted by offset, so unshift xVal to look up in sub's timeData
-            const subT = xVal - (sf.offset || 0);
-            const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
-            if (!isNaN(val)) {
-                entries.push({ color: sc.color, valStr: fmtVal(val), fileName: sf.shortName, val });
+            // Sub files
+            for (const subId of getSubFileIds()) {
+                const sf = state.files[subId];
+                const sc = sf.columns.find(c => c.name === chName);
+                if (!sc || !sf.colData[sc.id]) continue;
+                const subT = xVal - (sf.offset || 0);
+                const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
+                if (!isNaN(val)) {
+                    entries.push({ color: sc.color, valStr: fmtVal(val), fileName: sf.shortName, val });
+                }
             }
         }
 
