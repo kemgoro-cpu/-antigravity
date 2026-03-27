@@ -405,16 +405,24 @@ function parseCSV(file) {
     }
 }
 
+/**
+ * セル文字列がTime列かどうかを判定する。
+ * "Time", "time", "| Time", "|Time", "時間" などにマッチする。
+ * パイプ記号(|)やスペースを除去してから判定する。
+ */
+function isTimeHeader(cell) {
+    if (typeof cell !== 'string') return false;
+    const cleaned = cell.replace(/[|\s]/g, '').toLowerCase();
+    return cleaned.includes('time') || cell.includes('時間');
+}
+
 function detectHeaderRows(raw) {
     const scanLimit = Math.min(50, raw.length);
     for (let r = 0; r < scanLimit; r++) {
         const row = raw[r];
         if (row.length < 2) continue;
-        // Partial match: any cell containing "time" or "時間"
-        const hasTime = row.some(c =>
-            typeof c === 'string' &&
-            (c.toLowerCase().includes('time') || c.includes('時間'))
-        );
+        // Partial match: any cell containing "time" or "時間"（パイプ付きも対応）
+        const hasTime = row.some(c => isTimeHeader(c));
         if (!hasTime) continue;
         const nameRow = r;
         let unitRow = -1;
@@ -469,9 +477,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
     const headers = raw[nameRow];
     const units   = unitRow >= 0 ? raw[unitRow] : Array(headers.length).fill('');
 
-    let timeIdx = headers.findIndex(h =>
-        typeof h === 'string' && (h.toLowerCase().includes('time') || h.includes('時間'))
-    );
+    let timeIdx = headers.findIndex(h => isTimeHeader(h));
     if (timeIdx < 0) timeIdx = 0;
 
     const timeUnit = unitRow >= 0 ? (raw[unitRow][timeIdx] || '').trim().toLowerCase() : '';
@@ -479,10 +485,14 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
     const columns = [];
     for (let i = 0; i < headers.length; i++) {
         if (i === timeIdx) continue;
+        // 列名の先頭末尾のパイプ(|)とスペースを除去（TRNファイル対応）
+        const rawName = (headers[i] || '').trim().replace(/^\|+\s*|\s*\|+$/g, '').trim();
+        // パイプだけの空セルや空文字はスキップ（区切り記号が独立した列になった場合）
+        if (!rawName) continue;
         columns.push({
             id:    `${fileId}_c${i}`,
-            name:  (headers[i] || `Col_${i}`).trim(),
-            unit:  (units[i]   || '').trim(),
+            name:  rawName || `Col_${i}`,
+            unit:  (units[i]   || '').trim().replace(/^\|+\s*|\s*\|+$/g, '').trim(),
             idx:   i,
             color: SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length],
         });
