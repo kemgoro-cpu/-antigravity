@@ -312,10 +312,14 @@ dom.fileInput.addEventListener('change', e => {
     dom.fileInput.value = '';
 });
 
+// 対応するファイル拡張子（.csv と .trn）
+const SUPPORTED_EXTENSIONS = ['.csv', '.trn'];
+
 function handleFiles(files) {
     Array.from(files).forEach(f => {
-        if (f.name.toLowerCase().endsWith('.csv')) parseCSV(f);
-        else alert(`Unsupported: ${f.name}\nPlease upload CSV files.`);
+        const ext = f.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+        if (SUPPORTED_EXTENSIONS.includes(ext)) parseCSV(f);
+        else alert(`未対応の形式です: ${f.name}\nCSV または TRN ファイルをアップロードしてください。`);
     });
 }
 
@@ -323,19 +327,30 @@ function handleFiles(files) {
 // CSV parsing
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * ファイル拡張子からPapaParseの区切り文字設定を返す。
+ * .trn → タブ区切り、.csv → PapaParseの自動検出に任せる
+ */
+function detectDelimiter(fileName) {
+    if (fileName.toLowerCase().endsWith('.trn')) return '\t';
+    return undefined; // undefinedならPapaParseが自動検出する
+}
+
 function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`);
+    const delimiter = detectDelimiter(file.name);
+    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, delimiter=${delimiter === '\t' ? 'TAB' : 'auto'})`);
     try {
         // Phase 1: Preview parse — only read first 50 rows to detect headers
         Papa.parse(file, {
+            delimiter: delimiter,
             header: false,
             dynamicTyping: false,
             skipEmptyLines: true,
             preview: 50,
             complete: res => {
                 try {
-                    onHeaderParsed(fileId, file.name, file, res.data);
+                    onHeaderParsed(fileId, file.name, file, res.data, delimiter);
                 } catch (e) {
                     showError(`Header parse failed: ${file.name}`, e.stack || e.message);
                 }
@@ -398,7 +413,7 @@ function toNumber(v) {
  * Extracts column metadata and stores File reference for lazy loading.
  * Does NOT load any column data yet — only time data is loaded via streaming.
  */
-function onHeaderParsed(fileId, fileName, file, raw) {
+function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
     const { nameRow, unitRow } = detectHeaderRows(raw);
     const dataStart = Math.max(nameRow, unitRow >= 0 ? unitRow : nameRow) + 1;
 
@@ -444,6 +459,7 @@ function onHeaderParsed(fileId, fileName, file, raw) {
 
     try {
         Papa.parse(file, {
+            delimiter: delimiter,
             header: false,
             dynamicTyping: false,
             skipEmptyLines: true,
@@ -468,7 +484,7 @@ function onHeaderParsed(fileId, fileName, file, raw) {
                         colData: {},  // empty — columns loaded on demand
                         role, offset: 0,
                         file,         // File reference for lazy column loading
-                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit },
+                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter },
                     };
 
                     if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
@@ -529,7 +545,7 @@ function loadColumnsForFile(fileId, colNames) {
         const colNamesStr = stillNeeded.map(c => c.name).join(', ');
         console.log(`[CSV Viewer] Loading columns [${colNamesStr}] from ${f.name}`);
 
-        const { dataStart, timeIdx } = f.headerInfo;
+        const { dataStart, timeIdx, delimiter: delim } = f.headerInfo;
 
         return new Promise(resolve => {
             try {
@@ -539,6 +555,7 @@ function loadColumnsForFile(fileId, colNames) {
                 let rowIdx = 0;
 
                 Papa.parse(f.file, {
+                    delimiter: delim,
                     header: false,
                     dynamicTyping: false,
                     skipEmptyLines: true,
