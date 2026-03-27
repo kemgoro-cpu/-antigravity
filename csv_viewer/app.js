@@ -88,7 +88,12 @@ const _builtinFuncNames = new Set(CUSTOM_RAM_FUNCTIONS.map(f => f.name));
 
 /**
  * 式をトークン列に分割する。
- * トークンの種類: op(演算子), num(数値), name(RAM名 or 関数名), comma(引数区切り)
+ * トークンの種類:
+ *   op(演算子), num(数値), name(RAM名 or 関数名),
+ *   crossref(ファイル間参照: s1:Name), comma(引数区切り)
+ *
+ * ファイル間参照の書式: s1:Fuel_Rate, s2:Actual_Speed など
+ *   s1 = サブファイル1番目, s2 = 2番目, ...
  */
 function tokenizeExpr(expr) {
     const tokens = [];
@@ -111,11 +116,19 @@ function tokenizeExpr(expr) {
             tokens.push({ type: 'num', value: parseFloat(num) });
             continue;
         }
-        // 識別子（RAM名 or 関数名）
-        // 英数字、アンダースコア、ドット、非ASCII（日本語など）を許可
+        // 識別子（RAM名 or 関数名 or ファイル間参照 s1:Name）
+        // 英数字、アンダースコア、ドット、コロン、非ASCII（日本語など）を許可
         let name = '';
         while (i < expr.length && !/[\s+\-*/()^,]/.test(expr[i])) name += expr[i++];
-        if (name) tokens.push({ type: 'name', value: name });
+        if (name) {
+            // ファイル間参照の判定: s1:Name, s2:Name 形式
+            const crossMatch = name.match(/^(s\d+):(.+)$/);
+            if (crossMatch) {
+                tokens.push({ type: 'crossref', fileKey: crossMatch[1], value: crossMatch[2] });
+            } else {
+                tokens.push({ type: 'name', value: name });
+            }
+        }
     }
     return tokens;
 }
@@ -193,6 +206,11 @@ function parseExprToAST(expr) {
             next();
             return { type: 'num', value: t.value };
         }
+        // ファイル間参照 (s1:Name)
+        if (t.type === 'crossref') {
+            next();
+            return { type: 'crossref', fileKey: t.fileKey, value: t.value };
+        }
         // 関数呼び出し or RAM名
         if (t.type === 'name') {
             next();
@@ -225,11 +243,13 @@ function parseExprToAST(expr) {
  * getArray(ramName) → Float32Array : RAM名からデータ配列を取得
  * timeData → Float64Array : 時間軸データ（積分・微分・遅延に使用）
  * len : データ点数
+ * getCrossRef(fileKey, ramName) → Float32Array : ファイル間参照（s1:Name等）を
+ *   メインの時間軸に補間して返す。省略時はcrossrefノードでNaNを返す。
  *
  * 各ノードの評価結果はFloat32Array（配列全体）で返す。
  * これにより時系列関数（integral, diff, mavg, delay）が実装できる。
  */
-function evaluateAST(ast, getArray, timeData, len) {
+function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
     // 定数 → 全要素同じ値の配列を返す
     function fillConst(v) {
         const arr = new Float32Array(len);
@@ -265,6 +285,14 @@ function evaluateAST(ast, getArray, timeData, len) {
         if (node.type === 'name') {
             const arr = getArray(node.value);
             return arr || fillConst(NaN);
+        }
+        // ファイル間参照: s1:Name → サブファイルのデータをメイン時間軸に補間
+        if (node.type === 'crossref') {
+            if (getCrossRef) {
+                const arr = getCrossRef(node.fileKey, node.value);
+                return arr || fillConst(NaN);
+            }
+            return fillConst(NaN);
         }
         if (node.type === 'unary') {
             const v = evalNode(node.operand);
@@ -1306,8 +1334,14 @@ function updateUI() {
 function renderFileList() {
     dom.fileList.innerHTML = '';
 
+    // サブファイルの番号を計算（s1, s2, ...）Custom RAM式で使う識別子
+    const subIds = getSubFileIds();
+    const subIndexMap = new Map(); // fid → 1-based index
+    subIds.forEach((sid, i) => subIndexMap.set(sid, i + 1));
+
     for (const [fid, f] of Object.entries(state.files)) {
         const isMain    = f.role === 'main';
+        const subNum    = subIndexMap.get(fid); // undefined for main
         const isShiftTgt = state.shiftMode && fid === state.shiftFileId;
         const li        = document.createElement('li');
         li.className    = `file-item${isShiftTgt ? ' shift-target' : ''}`;
@@ -1322,12 +1356,16 @@ function renderFileList() {
                 <button class="btn-auto" data-auto-id="${fid}" title="Auto-align to main">Auto</button>
             </div>`;
 
+        // バッジ表示: Main=M, Sub=s1,s2,...（Custom RAM式で使うID）
+        const badgeText = isMain ? 'M' : `s${subNum}`;
+        const badgeTitle = isMain ? 'Main file' : `Sub file (s${subNum}) — click to make this the Main\nCustom RAM式で s${subNum}:チャンネル名 と書くと参照できます`;
+
         li.innerHTML = `
             <div class="file-item-top">
                 <div class="role-badge ${isMain ? 'role-main' : 'role-sub'}"
                     data-roleid="${fid}"
-                    title="${isMain ? 'Main file' : 'Sub file — click to make this the Main'}"
-                >${isMain ? 'M' : 'S'}</div>
+                    title="${badgeTitle}"
+                >${badgeText}</div>
                 <span class="file-name-text" title="${esc(f.name)}">${esc(f.name)}</span>
                 <i class='bx bx-bug debug-file' data-fid="${fid}" title="Debug: パース結果を確認"></i>
                 <i class='bx bx-x remove-file' data-fid="${fid}" title="Remove"></i>
@@ -1502,8 +1540,26 @@ function extractExprNames(expr) {
 }
 
 /**
+ * 式からファイル間参照（s1:Name等）のカラム名を抽出する。
+ * @returns {{ fileKey: string, name: string }[]}
+ */
+function extractCrossRefs(expr) {
+    return tokenizeExpr(expr)
+        .filter(t => t.type === 'crossref')
+        .map(t => ({ fileKey: t.fileKey, name: t.value }));
+}
+
+/**
+ * 式にファイル間参照（s1:Name等）が含まれるかどうかを判定する。
+ */
+function hasCrossRef(expr) {
+    return tokenizeExpr(expr).some(t => t.type === 'crossref');
+}
+
+/**
  * Custom RAMの式をAST一括評価で計算する。
  * 時系列関数（integral, diff, mavg, delay）にも対応。
+ * ファイル間参照（s1:Name等）にも対応。
  * @param {string} expr - 計算式
  * @param {object} fileRecord - 対象ファイル（メインでもサブでも可）
  */
@@ -1519,7 +1575,39 @@ function computeCustomExpr(expr, fileRecord) {
         return fileRecord.colData[col.id] || null;
     };
 
-    return evaluateAST(ast, getArray, td, len);
+    // ファイル間参照（s1:Name等）→ サブファイルのデータをメイン時間軸に補間
+    // fileKey = "s1", "s2" ... → サブファイルの追加順（1始まり）
+    const getCrossRef = (fileKey, ramName) => {
+        const subIds = getSubFileIds();
+        // "s1" → index 0, "s2" → index 1 ...
+        const idx = parseInt(fileKey.replace('s', ''), 10) - 1;
+        if (idx < 0 || idx >= subIds.length) return null;
+
+        const subFile = state.files[subIds[idx]];
+        if (!subFile) return null;
+
+        const col = subFile.columns.find(c => c.name === ramName);
+        if (!col) return null;
+        const subVals = subFile.colData[col.id];
+        if (!subVals) return null;
+
+        // メインの時間軸に合わせて補間（オフセット考慮）
+        const subTd = subFile.timeData;
+        const offset = subFile.offset;
+        const out = new Float32Array(len);
+        for (let i = 0; i < len; i++) {
+            // メインの時刻tに対応するサブの時刻 = t - offset
+            const tSub = td[i] - offset;
+            if (tSub < subTd[0] || tSub > subTd[subTd.length - 1]) {
+                out[i] = NaN; // サブの範囲外
+            } else {
+                out[i] = interpolateArray(subTd, subVals, tSub, subTd.length);
+            }
+        }
+        return out;
+    };
+
+    return evaluateAST(ast, getArray, td, len, getCrossRef);
 }
 
 async function addCustomRAM(name, expr) {
@@ -1537,34 +1625,59 @@ async function addCustomRAM(name, expr) {
 
     // 式で参照されるカラム名を取得
     const refNames = extractExprNames(expr);
+    // ファイル間参照（s1:Name等）のカラム名も取得
+    const crossRefs = extractCrossRefs(expr);
+    const isCrossFile = crossRefs.length > 0;
 
-    // 全ファイルで参照カラムをロード
+    // メインファイルの参照カラムをロード
+    const mainFileId = getMainFileId();
     const loadPromises = [];
-    for (const [fid, f] of Object.entries(state.files)) {
-        loadPromises.push(loadColumnsForFile(fid, refNames));
+    if (mainFileId) loadPromises.push(loadColumnsForFile(mainFileId, refNames));
+
+    if (isCrossFile) {
+        // ファイル間参照: 該当サブファイルの参照カラムをロード
+        const subIds = getSubFileIds();
+        for (const cr of crossRefs) {
+            const idx = parseInt(cr.fileKey.replace('s', ''), 10) - 1;
+            if (idx >= 0 && idx < subIds.length) {
+                loadPromises.push(loadColumnsForFile(subIds[idx], [cr.name]));
+            }
+        }
+    } else {
+        // 通常のCustom RAM: 全ファイルで参照カラムをロード
+        for (const [fid, f] of Object.entries(state.files)) {
+            if (fid !== mainFileId) {
+                loadPromises.push(loadColumnsForFile(fid, refNames));
+            }
+        }
     }
     await Promise.all(loadPromises);
 
     const id = `custom_${Date.now()}`;
 
-    // まずメインファイルで計算してエラーチェック
+    // メインファイルで計算してエラーチェック
     const mainVals = computeCustomExpr(expr, mainFile);
     if (mainVals.every(v => isNaN(v))) {
         alert(`式のエラー: "${expr}" を評価できません。\nRAM名や関数名を確認してください。`);
         return;
     }
 
-    // 全ファイルにCustom RAMカラムを追加（メイン＋サブ）
-    // ファイルごとに異なる色を割り当てる
-    for (const [fid, f] of Object.entries(state.files)) {
-        const colId = (f === mainFile) ? id : `${id}_${fid}`;
+    if (isCrossFile) {
+        // ファイル間参照あり → メインファイルにだけ追加
         const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-        const colDef = { id: colId, name, unit: '', idx: -1, color, isCustom: true };
-        f.columns.unshift(colDef);
-
-        // そのファイルのデータで式を計算
-        const vals = (f === mainFile) ? mainVals : computeCustomExpr(expr, f);
-        f.colData[colId] = vals;
+        const colDef = { id, name, unit: '', idx: -1, color, isCustom: true, isCrossFile: true };
+        mainFile.columns.unshift(colDef);
+        mainFile.colData[id] = mainVals;
+    } else {
+        // 通常のCustom RAM → 全ファイルに追加（ファイルごとに異なる色）
+        for (const [fid, f] of Object.entries(state.files)) {
+            const colId = (f === mainFile) ? id : `${id}_${fid}`;
+            const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+            const colDef = { id: colId, name, unit: '', idx: -1, color, isCustom: true };
+            f.columns.unshift(colDef);
+            const vals = (f === mainFile) ? mainVals : computeCustomExpr(expr, f);
+            f.colData[colId] = vals;
+        }
     }
 
     state.customRAMs.push({ name, expr, id });
@@ -1607,31 +1720,58 @@ async function recomputeCustomRAMs() {
     // 全ファイルから既存のCustom RAMカラムを削除
     for (const [fid, f] of Object.entries(state.files)) {
         f.columns = f.columns.filter(c => !c.isCustom);
-        // Custom RAM用のcolDataを削除
         for (const key of Object.keys(f.colData)) {
             if (key.startsWith('custom_')) delete f.colData[key];
         }
     }
 
-    // 全ファイルで参照カラムをロード
+    // 全ファイルで参照カラムをロード（通常参照＋ファイル間参照）
     const allRefNames = [];
-    for (const cr of state.customRAMs) allRefNames.push(...extractExprNames(cr.expr));
-    if (allRefNames.length > 0) {
-        const loadPromises = [];
-        for (const [fid, f] of Object.entries(state.files)) {
-            loadPromises.push(loadColumnsForFile(fid, allRefNames));
-        }
-        await Promise.all(loadPromises);
+    const allCrossRefs = [];
+    for (const cr of state.customRAMs) {
+        allRefNames.push(...extractExprNames(cr.expr));
+        allCrossRefs.push(...extractCrossRefs(cr.expr));
     }
 
-    // 全ファイルでCustom RAMを再計算（ファイルごとに異なる色を割り当て）
+    const loadPromises = [];
+    if (allRefNames.length > 0) {
+        for (const [fid] of Object.entries(state.files)) {
+            loadPromises.push(loadColumnsForFile(fid, allRefNames));
+        }
+    }
+    // ファイル間参照のカラムもロード
+    const subIds = getSubFileIds();
+    for (const cr of allCrossRefs) {
+        const idx = parseInt(cr.fileKey.replace('s', ''), 10) - 1;
+        if (idx >= 0 && idx < subIds.length) {
+            loadPromises.push(loadColumnsForFile(subIds[idx], [cr.name]));
+        }
+    }
+    await Promise.all(loadPromises);
+
+    const mainFile = getMainFile();
+
+    // Custom RAMを再計算
     for (const cr of state.customRAMs) {
-        for (const [fid, f] of Object.entries(state.files)) {
-            const colId = (f.role === 'main') ? cr.id : `${cr.id}_${fid}`;
-            const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-            const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
-            f.columns.unshift(colDef);
-            f.colData[colId] = computeCustomExpr(cr.expr, f);
+        const isCross = hasCrossRef(cr.expr);
+
+        if (isCross) {
+            // ファイル間参照あり → メインファイルにだけ追加
+            if (mainFile) {
+                const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+                const colDef = { id: cr.id, name: cr.name, unit: '', idx: -1, color, isCustom: true, isCrossFile: true };
+                mainFile.columns.unshift(colDef);
+                mainFile.colData[cr.id] = computeCustomExpr(cr.expr, mainFile);
+            }
+        } else {
+            // 通常のCustom RAM → 全ファイルに追加
+            for (const [fid, f] of Object.entries(state.files)) {
+                const colId = (f.role === 'main') ? cr.id : `${cr.id}_${fid}`;
+                const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+                const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
+                f.columns.unshift(colDef);
+                f.colData[colId] = computeCustomExpr(cr.expr, f);
+            }
         }
     }
 }
@@ -1653,6 +1793,8 @@ async function addCustomRAMsToFile(fileId) {
 
     // 各Custom RAMを計算してカラムに追加
     for (const cr of state.customRAMs) {
+        // ファイル間参照ありの場合はメインにだけ存在するのでスキップ
+        if (hasCrossRef(cr.expr)) continue;
         // すでに同名カラムがあればスキップ
         if (f.columns.some(c => c.name === cr.name)) continue;
 
@@ -1739,7 +1881,17 @@ function showCustomRAMHelp() {
         ['mavg(Torque, 50)', 'トルクの50点移動平均'],
         ['delay(Speed, 0.5)', '速度を0.5秒遅延'],
         ['clamp(RPM, 0, 6000)', 'RPMを0〜6000に制限'],
+        ['Fuel_Rate - s1:Fuel_Rate', 'メインとs1の燃料差（ファイル間演算）'],
+        ['integral(Fuel_Rate - s1:Fuel_Rate)', 'ファイル間差分の累積値'],
     ];
+    // ファイル間参照の説明
+    html += `</div>`;
+    html += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">ファイル間参照</h4>`;
+    html += `<div style="font-size:11px;color:#a0a5b1;line-height:1.6;padding:0 4px;">`;
+    html += `<code style="color:#6ee7b7;">s1:チャンネル名</code> でサブファイル1のデータを参照できます。<br>`;
+    html += `s1, s2, ... はファイル一覧のバッジに表示される番号です。<br>`;
+    html += `サブのデータはメインの時間軸に補間され、オフセット(Δt)も考慮されます。</div>`;
+    html += `<div style="font-family:monospace;font-size:11px;color:#86efac;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;margin-top:6px;">`;
     for (const [ex, desc] of examples) {
         html += `<div style="margin-bottom:4px;"><span style="color:#818cf8;">${esc(ex)}</span> <span style="color:#a0a5b1;font-size:10px;">— ${esc(desc)}</span></div>`;
     }
