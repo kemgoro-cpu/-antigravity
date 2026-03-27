@@ -331,36 +331,77 @@ function handleFiles(files) {
  * ファイル拡張子からPapaParseの区切り文字設定を返す。
  * .trn → タブ区切り、.csv → PapaParseの自動検出に任せる
  */
-function detectDelimiter(fileName) {
-    if (fileName.toLowerCase().endsWith('.trn')) return '\t';
-    return undefined; // undefinedならPapaParseが自動検出する
+/**
+ * ファイル拡張子からPapaParseの区切り文字設定を返す。
+ * .trn → ホワイトスペース（空白）区切りなので前処理が必要
+ * .csv → PapaParseの自動検出に任せる
+ *
+ * 注意: PapaParseは空白区切りを直接サポートしていないため、
+ * .trn ファイルは parseCSV 内でテキストを前処理してからパースする。
+ */
+function isTrnFile(fileName) {
+    return fileName.toLowerCase().endsWith('.trn');
+}
+
+/**
+ * TRNファイル用: 連続する空白をタブ1つに置換し、行頭末の空白も除去する。
+ * PapaParseは空白区切りを直接サポートしていないため、タブ区切りに変換する。
+ */
+function convertWhitespaceToTabs(text) {
+    return text.split('\n')
+        .map(line => line.trim().replace(/\s+/g, '\t'))
+        .join('\n');
 }
 
 function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    const delimiter = detectDelimiter(file.name);
-    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, delimiter=${delimiter === '\t' ? 'TAB' : 'auto'})`);
-    try {
-        // Phase 1: Preview parse — only read first 50 rows to detect headers
-        Papa.parse(file, {
-            delimiter: delimiter,
-            header: false,
-            dynamicTyping: false,
-            skipEmptyLines: true,
-            preview: 50,
-            complete: res => {
-                try {
-                    onHeaderParsed(fileId, file.name, file, res.data, delimiter);
-                } catch (e) {
-                    showError(`Header parse failed: ${file.name}`, e.stack || e.message);
-                }
-            },
-            error: err => {
-                showError(`CSV parse error: ${file.name}`, err.message || String(err));
-            },
-        });
-    } catch (e) {
-        showError(`Failed to start parsing: ${file.name}`, e.stack || e.message);
+    const trn = isTrnFile(file.name);
+    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, format=${trn ? 'TRN(whitespace)' : 'CSV(auto)'})`);
+
+    if (trn) {
+        // TRNファイル: テキストを読み込んで空白→タブに変換してからパースする
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const converted = convertWhitespaceToTabs(reader.result);
+                // Phase 1: Preview parse（先頭50行だけ抽出してヘッダー検出）
+                const previewLines = converted.split('\n').slice(0, 50).join('\n');
+                const previewRes = Papa.parse(previewLines, {
+                    delimiter: '\t',
+                    header: false,
+                    dynamicTyping: false,
+                    skipEmptyLines: true,
+                });
+                // 変換済みテキストを保持するため、fileの代わりにconvertedを渡す
+                onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t');
+            } catch (e) {
+                showError(`TRN parse failed: ${file.name}`, e.stack || e.message);
+            }
+        };
+        reader.onerror = () => showError(`File read error: ${file.name}`, reader.error?.message);
+        reader.readAsText(file);
+    } else {
+        // CSVファイル: PapaParseに直接Fileオブジェクトを渡す
+        try {
+            Papa.parse(file, {
+                header: false,
+                dynamicTyping: false,
+                skipEmptyLines: true,
+                preview: 50,
+                complete: res => {
+                    try {
+                        onHeaderParsed(fileId, file.name, file, res.data, undefined);
+                    } catch (e) {
+                        showError(`Header parse failed: ${file.name}`, e.stack || e.message);
+                    }
+                },
+                error: err => {
+                    showError(`CSV parse error: ${file.name}`, err.message || String(err));
+                },
+            });
+        } catch (e) {
+            showError(`Failed to start parsing: ${file.name}`, e.stack || e.message);
+        }
     }
 }
 
@@ -532,14 +573,17 @@ function loadColumnsForFile(fileId, colNames) {
         if (stillNeeded.length === 0) return;
 
         // Verify File object is still readable before parsing
-        try {
-            await f.file.slice(0, 1).text();
-        } catch (e) {
-            showError(
-                `File re-read failed: ${f.name}`,
-                `File object is no longer accessible. This may be caused by browser security policy or the file was moved/deleted.\n${e.message}`
-            );
-            return;
+        // （TRNファイルは変換済み文字列なのでチェック不要）
+        if (f.file instanceof File) {
+            try {
+                await f.file.slice(0, 1).text();
+            } catch (e) {
+                showError(
+                    `File re-read failed: ${f.name}`,
+                    `File object is no longer accessible. This may be caused by browser security policy or the file was moved/deleted.\n${e.message}`
+                );
+                return;
+            }
         }
 
         const colNamesStr = stillNeeded.map(c => c.name).join(', ');
