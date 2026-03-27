@@ -2,6 +2,12 @@
    Premium Dark Theme - CSV Chart Viewer
    ============================================= */
 
+/* トースト通知のスライドインアニメーション */
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(40px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
 :root {
     --bg-main:        #0f1115;
     --bg-surface:     #1a1d24;

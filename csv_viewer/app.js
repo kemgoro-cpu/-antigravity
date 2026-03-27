@@ -224,6 +224,8 @@ const dom = {
     customExpr: $('custom-ram-expr'),
     customAdd:  $('custom-ram-add'),
     customList: $('custom-ram-list'),
+    exportPng:  $('export-png-btn'),
+    copyChart:  $('copy-chart-btn'),
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1193,10 +1195,14 @@ function renderChart() {
         state.chart.clear();
         dom.overlay.classList.remove('hidden');
         dom.resetBtn.disabled = true;
+        dom.exportPng.disabled = true;
+        dom.copyChart.disabled = true;
         state.numGrids = 0;
         return;
     }
     dom.overlay.classList.add('hidden');
+    dom.exportPng.disabled = false;
+    dom.copyChart.disabled = false;
     dom.resetBtn.disabled = false;
     state.numGrids = n;
 
@@ -1822,6 +1828,125 @@ function exitShiftMode() {
         });
     });
 })();
+
+// ─────────────────────────────────────────────────────────────
+// チャートエクスポート（PNG保存 / クリップボードにコピー）
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * EChartsからPNG画像のData URLを生成する。
+ * 背景色を明示的に設定してチャートが見えるようにする。
+ */
+function getChartImageDataURL() {
+    if (!state.chart) return null;
+    // EChartsの getDataURL で背景色つきPNGを生成
+    // （背景透明だと保存した画像が見づらいため、ダーク背景を付ける）
+    return state.chart.getDataURL({
+        type: 'png',
+        pixelRatio: 2,                     // 高解像度（Retina対応）
+        backgroundColor: '#0f1115',         // ダークテーマの背景色
+    });
+}
+
+/**
+ * Data URLをBlobに変換するユーティリティ関数。
+ * クリップボードAPIはBlobを要求するため、この変換が必要。
+ */
+function dataURLtoBlob(dataURL) {
+    // "data:image/png;base64,XXXXX" を分解する
+    const parts = dataURL.split(',');
+    const mime  = parts[0].match(/:(.*?);/)[1];  // MIMEタイプを抽出（例: "image/png"）
+    const raw   = atob(parts[1]);                 // Base64をデコード
+    const arr   = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+}
+
+/**
+ * チャートをPNGファイルとしてダウンロードする。
+ * ブラウザの「名前を付けて保存」ダイアログが表示される。
+ */
+function exportChartAsPNG() {
+    const dataURL = getChartImageDataURL();
+    if (!dataURL) return;
+
+    // ファイル名にメインファイル名と日時を含める
+    const mainFile = getMainFile();
+    const baseName = mainFile ? mainFile.name.replace(/\.csv$/i, '') : 'chart';
+    const now      = new Date();
+    const stamp    = now.getFullYear()
+        + String(now.getMonth() + 1).padStart(2, '0')
+        + String(now.getDate()).padStart(2, '0')
+        + '_'
+        + String(now.getHours()).padStart(2, '0')
+        + String(now.getMinutes()).padStart(2, '0')
+        + String(now.getSeconds()).padStart(2, '0');
+    const fileName = `${baseName}_${stamp}.png`;
+
+    // <a> タグを一時的に作って自動クリック → ダウンロードが始まる
+    const link  = document.createElement('a');
+    link.href     = dataURL;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showExportToast('PNG saved', fileName);
+}
+
+/**
+ * チャートをクリップボードに画像としてコピーする。
+ * Ctrl+V でExcelやチャットツールに貼り付けできる。
+ *
+ * 注意: Clipboard APIはHTTPS環境またはlocalhostでのみ動作する。
+ * file:// プロトコルでは動かないので、ローカルサーバーで開く必要がある。
+ */
+async function copyChartToClipboard() {
+    const dataURL = getChartImageDataURL();
+    if (!dataURL) return;
+
+    try {
+        const blob = dataURLtoBlob(dataURL);
+        // ClipboardItem APIでクリップボードに画像を書き込む
+        await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+        ]);
+        showExportToast('Copied!', 'チャート画像をクリップボードにコピーしました');
+    } catch (e) {
+        // file:// で開いている場合やHTTPSでない場合はここに来る
+        console.error('[CSV Viewer] Clipboard write failed:', e);
+        showError(
+            'クリップボードへのコピーに失敗しました',
+            'HTTPS環境（またはlocalhost）で開いてください。\nfile:// では Clipboard API が利用できません。\n' + e.message
+        );
+    }
+}
+
+/**
+ * エクスポート成功時の軽いトースト通知を表示する。
+ * エラー通知とは別に、短い緑色のフィードバックを出す。
+ */
+function showExportToast(title, detail) {
+    let container = document.getElementById('error-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'error-toast-container';
+        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.style.cssText = 'background:#122d1b;border:1px solid #22c55e;border-radius:8px;padding:12px 16px;color:#86efac;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
+    toast.innerHTML = `<div style="font-weight:600;margin-bottom:2px;color:#4ade80;">${esc(title)}</div>`
+        + `<div style="font-size:11px;color:#86efac;opacity:0.85;">${esc(detail)}</div>`;
+    toast.addEventListener('click', () => toast.remove());
+    container.appendChild(toast);
+    // 3秒で自動的に消える（成功通知なので短めに）
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+}
+
+// ボタンのクリックイベントを登録
+dom.exportPng.addEventListener('click', exportChartAsPNG);
+dom.copyChart.addEventListener('click', copyChartToClipboard);
 
 // ─────────────────────────────────────────────────────────────
 // Initialise
