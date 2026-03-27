@@ -44,10 +44,12 @@
 
                 <!-- Custom RAM -->
                 <div class="control-group">
-                    <h3><i class='bx bx-calculator'></i> Custom RAM</h3>
+                    <h3><i class='bx bx-calculator'></i> Custom RAM
+                        <i class='bx bx-help-circle' id="custom-ram-help" title="使える関数の一覧を表示" style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
+                    </h3>
                     <div class="custom-ram-form">
                         <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input">
-                        <input type="text" id="custom-ram-expr" placeholder="e.g. (RPM - Torque) / 2" class="custom-ram-input">
+                        <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input">
                         <button id="custom-ram-add" class="btn-primary btn-sm">Add</button>
                     </div>
                     <ul id="custom-ram-list" class="custom-ram-list"></ul>

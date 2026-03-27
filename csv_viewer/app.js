@@ -57,33 +57,79 @@ function esc(s) {
 
 // ─────────────────────────────────────────────────────────────
 // Expression parser for custom RAMs (recursive descent)
-// Supports: +, -, *, /, parentheses, number literals, RAM names
+// 対応: +, -, *, /, ^, 括弧, 数値リテラル, RAM名, 関数呼び出し
+//
+// 【基本数学】 abs(x), sqrt(x), pow(x,n), log(x), exp(x)
+//              sin(x), cos(x), tan(x), max(x,y), min(x,y), clamp(x,lo,hi)
+// 【時系列】   integral(x), diff(x), mavg(x,n), delay(x,t)
 // ─────────────────────────────────────────────────────────────
 
+// --- 利用可能な関数の定義（ヘルプ表示にも使用） ---
+const CUSTOM_RAM_FUNCTIONS = [
+    { name: 'abs',      args: 'x',        desc: '絶対値' },
+    { name: 'sqrt',     args: 'x',        desc: '平方根（ルート）' },
+    { name: 'pow',      args: 'x, n',     desc: 'xのn乗（べき乗）' },
+    { name: 'log',      args: 'x',        desc: '自然対数（ln）' },
+    { name: 'exp',      args: 'x',        desc: '指数関数（eのx乗）' },
+    { name: 'sin',      args: 'x',        desc: 'サイン（正弦）' },
+    { name: 'cos',      args: 'x',        desc: 'コサイン（余弦）' },
+    { name: 'tan',      args: 'x',        desc: 'タンジェント（正接）' },
+    { name: 'max',      args: 'x, y',     desc: '2値の大きい方' },
+    { name: 'min',      args: 'x, y',     desc: '2値の小さい方' },
+    { name: 'clamp',    args: 'x, lo, hi', desc: '値をlo〜hiの範囲に制限' },
+    { name: 'integral', args: 'x',        desc: '時間積分（台形法で累積値を計算）' },
+    { name: 'diff',     args: 'x',        desc: '時間微分（変化率 = 傾き）' },
+    { name: 'mavg',     args: 'x, n',     desc: '移動平均（n点で平滑化）' },
+    { name: 'delay',    args: 'x, t',     desc: '時間遅延（t秒ずらす）' },
+];
+
+// 関数名のセット（パーサーが関数呼び出しか RAM名 かを区別するために使う）
+const _builtinFuncNames = new Set(CUSTOM_RAM_FUNCTIONS.map(f => f.name));
+
+/**
+ * 式をトークン列に分割する。
+ * トークンの種類: op(演算子), num(数値), name(RAM名 or 関数名), comma(引数区切り)
+ */
 function tokenizeExpr(expr) {
     const tokens = [];
     let i = 0;
     while (i < expr.length) {
         const ch = expr[i];
         if (/\s/.test(ch)) { i++; continue; }
-        if ('+-*/()'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
-        // Number literal (including decimals and leading dot)
+        // カンマ（関数の引数区切り）
+        if (ch === ',') { tokens.push({ type: 'comma' }); i++; continue; }
+        // 演算子と括弧（^をべき乗演算子として追加）
+        if ('+-*/()^'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
+        // 数値リテラル（小数点、指数表記に対応）
         if (/[\d.]/.test(ch)) {
             let num = '';
-            while (i < expr.length && /[\d.eE]/.test(expr[i])) num += expr[i++];
+            while (i < expr.length && /[\d.eE\-+]/.test(expr[i])) {
+                // eE の直後の +/- は指数の符号として許可
+                if ((expr[i] === '+' || expr[i] === '-') && num.length > 0 && !/[eE]/.test(num[num.length - 1])) break;
+                num += expr[i++];
+            }
             tokens.push({ type: 'num', value: parseFloat(num) });
             continue;
         }
-        // RAM name: anything else that forms an identifier-like token
-        // Allow letters, digits, underscore, dot, and non-ASCII (for Japanese etc.)
+        // 識別子（RAM名 or 関数名）
+        // 英数字、アンダースコア、ドット、非ASCII（日本語など）を許可
         let name = '';
-        while (i < expr.length && !/[\s+\-*/()]/.test(expr[i])) name += expr[i++];
+        while (i < expr.length && !/[\s+\-*/()^,]/.test(expr[i])) name += expr[i++];
         if (name) tokens.push({ type: 'name', value: name });
     }
     return tokens;
 }
 
-function evaluateExpr(expr, getVal) {
+/**
+ * 式をAST（抽象構文木）にパースする。
+ * ASTノード:
+ *   { type: 'num', value: number }
+ *   { type: 'name', value: string }          -- RAM名
+ *   { type: 'binop', op, left, right }       -- 二項演算
+ *   { type: 'unary', op, operand }           -- 単項 +/-
+ *   { type: 'call', name, args: [ASTNode] }  -- 関数呼び出し
+ */
+function parseExprToAST(expr) {
     const tokens = tokenizeExpr(expr);
     let pos = 0;
 
@@ -95,59 +141,290 @@ function evaluateExpr(expr, getVal) {
         let left = parseTerm();
         while (peek() && (peek().value === '+' || peek().value === '-')) {
             const op = next().value;
-            const right = parseTerm();
-            left = op === '+' ? left + right : left - right;
+            left = { type: 'binop', op, left, right: parseTerm() };
         }
         return left;
     }
 
-    // term = factor (('*' | '/') factor)*
+    // term = power (('*' | '/') power)*
     function parseTerm() {
-        let left = parseFactor();
+        let left = parsePower();
         while (peek() && (peek().value === '*' || peek().value === '/')) {
             const op = next().value;
-            const right = parseFactor();
-            left = op === '*' ? left * right : left / right;
+            left = { type: 'binop', op, left, right: parsePower() };
         }
         return left;
     }
 
-    // factor = '(' expr ')' | number | unary-minus factor | ramName
+    // power = factor ('^' factor)?  （右結合）
+    function parsePower() {
+        let base = parseFactor();
+        if (peek() && peek().value === '^') {
+            next();
+            base = { type: 'binop', op: '^', left: base, right: parsePower() };
+        }
+        return base;
+    }
+
+    // factor = unary | '(' expr ')' | funcCall | number | ramName
     function parseFactor() {
         const t = peek();
-        if (!t) return NaN;
+        if (!t) return { type: 'num', value: NaN };
 
-        // Unary minus
+        // 単項マイナス
         if (t.type === 'op' && t.value === '-') {
             next();
-            return -parseFactor();
+            return { type: 'unary', op: '-', operand: parseFactor() };
         }
-        // Unary plus
+        // 単項プラス
         if (t.type === 'op' && t.value === '+') {
             next();
             return parseFactor();
         }
-        // Parenthesized expression
+        // 括弧
         if (t.type === 'op' && t.value === '(') {
-            next(); // consume '('
-            const val = parseExpr();
-            if (peek() && peek().value === ')') next(); // consume ')'
-            return val;
+            next();
+            const node = parseExpr();
+            if (peek() && peek().value === ')') next();
+            return node;
         }
-        // Number literal
+        // 数値
         if (t.type === 'num') {
             next();
-            return t.value;
+            return { type: 'num', value: t.value };
         }
-        // RAM name
+        // 関数呼び出し or RAM名
         if (t.type === 'name') {
             next();
-            return getVal(t.value);
+            // 次が '(' なら関数呼び出し
+            if (peek() && peek().value === '(') {
+                next(); // consume '('
+                const args = [];
+                if (!(peek() && peek().value === ')')) {
+                    args.push(parseExpr());
+                    while (peek() && peek().type === 'comma') {
+                        next(); // consume ','
+                        args.push(parseExpr());
+                    }
+                }
+                if (peek() && peek().value === ')') next();
+                return { type: 'call', name: t.value, args };
+            }
+            // RAM名
+            return { type: 'name', value: t.value };
         }
-        return NaN;
+        return { type: 'num', value: NaN };
     }
 
     return parseExpr();
+}
+
+/**
+ * ASTを全データポイント分まとめて評価し、Float32Arrayを返す。
+ *
+ * getArray(ramName) → Float32Array : RAM名からデータ配列を取得
+ * timeData → Float64Array : 時間軸データ（積分・微分・遅延に使用）
+ * len : データ点数
+ *
+ * 各ノードの評価結果はFloat32Array（配列全体）で返す。
+ * これにより時系列関数（integral, diff, mavg, delay）が実装できる。
+ */
+function evaluateAST(ast, getArray, timeData, len) {
+    // 定数 → 全要素同じ値の配列を返す
+    function fillConst(v) {
+        const arr = new Float32Array(len);
+        arr.fill(v);
+        return arr;
+    }
+
+    // 二項演算を要素ごとに適用
+    function binop(op, a, b) {
+        const out = new Float32Array(len);
+        for (let i = 0; i < len; i++) {
+            switch (op) {
+                case '+': out[i] = a[i] + b[i]; break;
+                case '-': out[i] = a[i] - b[i]; break;
+                case '*': out[i] = a[i] * b[i]; break;
+                case '/': out[i] = a[i] / b[i]; break;
+                case '^': out[i] = Math.pow(a[i], b[i]); break;
+            }
+        }
+        return out;
+    }
+
+    // 要素ごとに1引数の Math 関数を適用
+    function mapFn(arr, fn) {
+        const out = new Float32Array(len);
+        for (let i = 0; i < len; i++) out[i] = fn(arr[i]);
+        return out;
+    }
+
+    // --- ASTノードを再帰的に評価 ---
+    function evalNode(node) {
+        if (node.type === 'num') return fillConst(node.value);
+        if (node.type === 'name') {
+            const arr = getArray(node.value);
+            return arr || fillConst(NaN);
+        }
+        if (node.type === 'unary') {
+            const v = evalNode(node.operand);
+            const out = new Float32Array(len);
+            for (let i = 0; i < len; i++) out[i] = -v[i];
+            return out;
+        }
+        if (node.type === 'binop') {
+            return binop(node.op, evalNode(node.left), evalNode(node.right));
+        }
+        if (node.type === 'call') {
+            return evalCall(node.name, node.args);
+        }
+        return fillConst(NaN);
+    }
+
+    // --- 関数呼び出しの評価 ---
+    function evalCall(name, argNodes) {
+        switch (name) {
+            // ── 基本数学（要素ごと） ──
+            case 'abs':   return mapFn(evalNode(argNodes[0]), Math.abs);
+            case 'sqrt':  return mapFn(evalNode(argNodes[0]), Math.sqrt);
+            case 'log':   return mapFn(evalNode(argNodes[0]), Math.log);
+            case 'exp':   return mapFn(evalNode(argNodes[0]), Math.exp);
+            case 'sin':   return mapFn(evalNode(argNodes[0]), Math.sin);
+            case 'cos':   return mapFn(evalNode(argNodes[0]), Math.cos);
+            case 'tan':   return mapFn(evalNode(argNodes[0]), Math.tan);
+
+            case 'pow': {
+                const base = evalNode(argNodes[0]);
+                const exp  = evalNode(argNodes[1]);
+                return binop('^', base, exp);
+            }
+            case 'max': {
+                const a = evalNode(argNodes[0]), b = evalNode(argNodes[1]);
+                const out = new Float32Array(len);
+                for (let i = 0; i < len; i++) out[i] = Math.max(a[i], b[i]);
+                return out;
+            }
+            case 'min': {
+                const a = evalNode(argNodes[0]), b = evalNode(argNodes[1]);
+                const out = new Float32Array(len);
+                for (let i = 0; i < len; i++) out[i] = Math.min(a[i], b[i]);
+                return out;
+            }
+            case 'clamp': {
+                const x  = evalNode(argNodes[0]);
+                const lo = evalNode(argNodes[1]);
+                const hi = evalNode(argNodes[2]);
+                const out = new Float32Array(len);
+                for (let i = 0; i < len; i++) out[i] = Math.max(lo[i], Math.min(hi[i], x[i]));
+                return out;
+            }
+
+            // ── 時系列関数 ──
+
+            // integral(x): 台形法による時間積分（累積値）
+            case 'integral': {
+                const x = evalNode(argNodes[0]);
+                const out = new Float32Array(len);
+                out[0] = 0;
+                for (let i = 1; i < len; i++) {
+                    const dt = timeData[i] - timeData[i - 1];
+                    // 台形法: (前の値 + 現在の値) / 2 × 時間差
+                    out[i] = out[i - 1] + (x[i - 1] + x[i]) / 2 * dt;
+                }
+                return out;
+            }
+
+            // diff(x): 時間微分（前後の差分 / 時間差 = 変化率）
+            case 'diff': {
+                const x = evalNode(argNodes[0]);
+                const out = new Float32Array(len);
+                out[0] = 0; // 最初の点は微分できないので0
+                for (let i = 1; i < len; i++) {
+                    const dt = timeData[i] - timeData[i - 1];
+                    out[i] = dt > 0 ? (x[i] - x[i - 1]) / dt : 0;
+                }
+                return out;
+            }
+
+            // mavg(x, n): 移動平均（n点の窓で平滑化）
+            case 'mavg': {
+                const x = evalNode(argNodes[0]);
+                // nは定数として先頭の値を使う（全要素同じ値のはず）
+                const nArr = evalNode(argNodes[1]);
+                const n = Math.max(1, Math.round(nArr[0]));
+                const out = new Float32Array(len);
+                let sum = 0;
+                for (let i = 0; i < len; i++) {
+                    sum += isNaN(x[i]) ? 0 : x[i];
+                    if (i >= n) sum -= isNaN(x[i - n]) ? 0 : x[i - n];
+                    const count = Math.min(i + 1, n);
+                    out[i] = sum / count;
+                }
+                return out;
+            }
+
+            // delay(x, t): 時間遅延（t秒シフト、線形補間）
+            case 'delay': {
+                const x = evalNode(argNodes[0]);
+                const tArr = evalNode(argNodes[1]);
+                const delayT = tArr[0]; // 遅延時間（秒）は定数
+                const out = new Float32Array(len);
+                for (let i = 0; i < len; i++) {
+                    // 現在時刻から delayT 秒前の値を線形補間で取得
+                    const targetT = timeData[i] - delayT;
+                    out[i] = interpolateArray(timeData, x, targetT, len);
+                }
+                return out;
+            }
+
+            default:
+                // 未知の関数 → NaN
+                console.warn(`[Custom RAM] Unknown function: ${name}`);
+                return fillConst(NaN);
+        }
+    }
+
+    return evalNode(ast);
+}
+
+/**
+ * delay関数用: 時間配列から指定時刻の値を線形補間で取得する。
+ * interpolate() はFloat32Arrayにも対応させたバージョン。
+ */
+function interpolateArray(timeArr, valArr, t, n) {
+    if (n === 0) return NaN;
+    if (t <= timeArr[0])     return valArr[0];
+    if (t >= timeArr[n - 1]) return valArr[n - 1];
+    let lo = 0, hi = n - 1;
+    while (lo < hi - 1) {
+        const mid = (lo + hi) >> 1;
+        if (timeArr[mid] <= t) lo = mid; else hi = mid;
+    }
+    const dt = timeArr[hi] - timeArr[lo];
+    if (dt === 0) return valArr[lo];
+    return valArr[lo] + (t - timeArr[lo]) / dt * (valArr[hi] - valArr[lo]);
+}
+
+/**
+ * 後方互換: 1点ずつ評価する旧API（extractExprNamesで使用）
+ */
+function evaluateExpr(expr, getVal) {
+    const ast = parseExprToAST(expr);
+    function evalNode(node) {
+        if (node.type === 'num') return node.value;
+        if (node.type === 'name') return getVal(node.value);
+        if (node.type === 'unary') return -evalNode(node.operand);
+        if (node.type === 'binop') {
+            const l = evalNode(node.left), r = evalNode(node.right);
+            switch (node.op) {
+                case '+': return l + r; case '-': return l - r;
+                case '*': return l * r; case '/': return l / r;
+                case '^': return Math.pow(l, r);
+            }
+        }
+        return NaN;
+    }
+    return evalNode(ast);
 }
 
 // Actual hex values — ECharts does NOT understand CSS variables
@@ -1191,9 +1468,30 @@ function showDebugModal(fileId) {
 // Custom RAM (computed channels)
 // ─────────────────────────────────────────────────────────────
 
-/** Extract RAM names referenced in an expression */
+/** Extract RAM names referenced in an expression (組み込み関数名は除外) */
 function extractExprNames(expr) {
-    return tokenizeExpr(expr).filter(t => t.type === 'name').map(t => t.value);
+    return tokenizeExpr(expr)
+        .filter(t => t.type === 'name' && !_builtinFuncNames.has(t.value))
+        .map(t => t.value);
+}
+
+/**
+ * Custom RAMの式をAST一括評価で計算する。
+ * 時系列関数（integral, diff, mavg, delay）にも対応。
+ */
+function computeCustomExpr(expr, mainFile) {
+    const td = mainFile.timeData;
+    const len = td.length;
+    const ast = parseExprToAST(expr);
+
+    // RAM名 → Float32Array を返す関数
+    const getArray = (ramName) => {
+        const col = mainFile.columns.find(c => c.name === ramName);
+        if (!col) return null;
+        return mainFile.colData[col.id] || null;
+    };
+
+    return evaluateAST(ast, getArray, td, len);
 }
 
 async function addCustomRAM(name, expr) {
@@ -1215,20 +1513,11 @@ async function addCustomRAM(name, expr) {
     if (mainFileId) await loadColumnsForFile(mainFileId, refNames);
 
     const id = `custom_${Date.now()}`;
-    const td = mainFile.timeData;
-    const vals = new Float32Array(td.length);
-
-    for (let i = 0; i < td.length; i++) {
-        vals[i] = evaluateExpr(expr, ramName => {
-            const col = mainFile.columns.find(c => c.name === ramName);
-            if (!col) return NaN;
-            return mainFile.colData[col.id]?.[i] ?? NaN;
-        });
-    }
+    const vals = computeCustomExpr(expr, mainFile);
 
     // Check if all NaN (likely bad expression)
     if (vals.every(v => isNaN(v))) {
-        alert(`Expression error: could not evaluate "${expr}". Check RAM names.`);
+        alert(`式のエラー: "${expr}" を評価できません。\nRAM名や関数名を確認してください。`);
         return;
     }
 
@@ -1284,16 +1573,7 @@ async function recomputeCustomRAMs() {
 
     // Recompute each custom RAM in order (so earlier custom RAMs can be referenced by later ones)
     for (const cr of state.customRAMs) {
-        const td = mainFile.timeData;
-        const vals = new Float32Array(td.length);
-
-        for (let i = 0; i < td.length; i++) {
-            vals[i] = evaluateExpr(cr.expr, ramName => {
-                const col = mainFile.columns.find(c => c.name === ramName);
-                if (!col) return NaN;
-                return mainFile.colData[col.id]?.[i] ?? NaN;
-            });
-        }
+        const vals = computeCustomExpr(cr.expr, mainFile);
 
         const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
         const colDef = { id: cr.id, name: cr.name, unit: '', idx: -1, color, isCustom: true };
@@ -1323,6 +1603,82 @@ dom.customAdd.addEventListener('click', () => {
     dom.customName.value = '';
     dom.customExpr.value = '';
 });
+
+// ── Custom RAM ヘルプモーダル ──
+$('custom-ram-help')?.addEventListener('click', showCustomRAMHelp);
+
+function showCustomRAMHelp() {
+    let html = `<h3 style="margin:0 0 12px;color:#818cf8;">Custom RAM 関数リファレンス</h3>`;
+
+    // 演算子
+    html += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">演算子</h4>`;
+    html += `<table style="border-collapse:collapse;width:100%;font-size:11px;margin-bottom:8px;">`;
+    const ops = [
+        ['+, -, *, /', '四則演算'],
+        ['^', 'べき乗（例: X^2）'],
+        ['( )', '括弧でグループ化'],
+    ];
+    for (const [op, desc] of ops) {
+        html += `<tr><td style="padding:3px 8px;color:#6ee7b7;font-family:monospace;white-space:nowrap;">${esc(op)}</td>`
+            + `<td style="padding:3px 8px;color:#f0f0f0;">${esc(desc)}</td></tr>`;
+    }
+    html += `</table>`;
+
+    // 関数をカテゴリ分け
+    const categories = [
+        { label: '基本数学', names: ['abs','sqrt','pow','log','exp'] },
+        { label: '三角関数', names: ['sin','cos','tan'] },
+        { label: '比較・制限', names: ['max','min','clamp'] },
+        { label: '時系列解析', names: ['integral','diff','mavg','delay'] },
+    ];
+
+    for (const cat of categories) {
+        html += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">${esc(cat.label)}</h4>`;
+        html += `<table style="border-collapse:collapse;width:100%;font-size:11px;margin-bottom:4px;">`;
+        for (const fname of cat.names) {
+            const f = CUSTOM_RAM_FUNCTIONS.find(fn => fn.name === fname);
+            if (!f) continue;
+            html += `<tr>`
+                + `<td style="padding:3px 8px;color:#6ee7b7;font-family:monospace;white-space:nowrap;">${esc(f.name)}(${esc(f.args)})</td>`
+                + `<td style="padding:3px 8px;color:#f0f0f0;">${esc(f.desc)}</td>`
+                + `</tr>`;
+        }
+        html += `</table>`;
+    }
+
+    // 使用例
+    html += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">使用例</h4>`;
+    html += `<div style="font-family:monospace;font-size:11px;color:#86efac;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;">`;
+    const examples = [
+        ['abs(Speed - Target)', '速度と目標値の偏差（絶対値）'],
+        ['sqrt(X^2 + Y^2)', 'ベクトルの大きさ'],
+        ['integral(Power)', 'パワーの累積（エネルギー量）'],
+        ['diff(Speed)', '速度の変化率（加速度）'],
+        ['mavg(Torque, 50)', 'トルクの50点移動平均'],
+        ['delay(Speed, 0.5)', '速度を0.5秒遅延'],
+        ['clamp(RPM, 0, 6000)', 'RPMを0〜6000に制限'],
+    ];
+    for (const [ex, desc] of examples) {
+        html += `<div style="margin-bottom:4px;"><span style="color:#818cf8;">${esc(ex)}</span> <span style="color:#a0a5b1;font-size:10px;">— ${esc(desc)}</span></div>`;
+    }
+    html += `</div>`;
+
+    // モーダル表示
+    let overlay = document.getElementById('debug-modal-overlay');
+    if (overlay) overlay.remove();
+    overlay = document.createElement('div');
+    overlay.id = 'debug-modal-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:520px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
+    modal.innerHTML = html
+        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#debug-modal-overlay').remove()" `
+        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}
 
 dom.colSearch.addEventListener('input', renderColumnList);
 
