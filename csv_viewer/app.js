@@ -1827,44 +1827,58 @@ function interpolate(timeArr, valArr, t) {
 // Auto-align: minimize RMSE between main and sub file
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Auto-alignのチャンネル選択モーダルを表示する。
+ * ユーザーが使いたいチャンネルと探索範囲を選んでからアライメントを実行する。
+ */
 async function autoAlign(subFileId) {
     const mainFile = getMainFile();
     const subFile  = state.files[subFileId];
     if (!mainFile || !subFile) return;
 
-    // Find channels that are selected AND exist in both main and sub
-    const commonNames = [...state.selectedNames].filter(name =>
-        subFile.columns.some(c => c.name === name)
-    );
+    // main と sub の両方に存在するチャンネル名を収集
+    const mainNames = new Set(mainFile.columns.map(c => c.name));
+    const subNames  = new Set(subFile.columns.map(c => c.name));
+    const commonAll = [...mainNames].filter(n => subNames.has(n));
 
-    if (!commonNames.length) {
-        alert('Select at least one channel that exists in both files for auto-alignment.');
+    if (!commonAll.length) {
+        alert('両ファイルに共通するチャンネルがありません。');
         return;
     }
 
-    // Ensure required columns are loaded in both files
+    // --- チャンネル選択モーダルを表示 ---
+    const selectedChannels = await showAlignChannelModal(commonAll, subFileId);
+    if (!selectedChannels || !selectedChannels.names.length) return; // キャンセル
+
+    const chosenNames = selectedChannels.names;
+    const searchRange = selectedChannels.range; // 探索範囲（秒）
+
+    // 必要なカラムをロード
     const mainFileId = getMainFileId();
     await Promise.all([
-        loadColumnsForFile(mainFileId, commonNames),
-        loadColumnsForFile(subFileId, commonNames),
+        loadColumnsForFile(mainFileId, chosenNames),
+        loadColumnsForFile(subFileId, chosenNames),
     ]);
 
-    const mainCols = commonNames.map(name => mainFile.columns.find(c => c.name === name)).filter(Boolean);
-    const subCols  = commonNames.map(name => subFile.columns.find(c => c.name === name)).filter(Boolean);
+    const mainCols = chosenNames.map(name => mainFile.columns.find(c => c.name === name)).filter(Boolean);
+    const subCols  = chosenNames.map(name => subFile.columns.find(c => c.name === name)).filter(Boolean);
 
-    // Build downsampled sample times from main (max 2000 points)
+    if (!mainCols.length) {
+        alert('選択されたチャンネルのデータが読み込めませんでした。');
+        return;
+    }
+
+    // ダウンサンプルした時刻配列を作成（最大2000点）
     const mTd  = mainFile.timeData;
     const step = Math.max(1, Math.floor(mTd.length / 2000));
     const sampleTimes = [];
     for (let i = 0; i < mTd.length; i += step) sampleTimes.push(mTd[i]);
 
-    const sTd      = subFile.timeData;
-    const mainDur  = mTd[mTd.length - 1] - mTd[0];
-    const subDur   = sTd[sTd.length - 1] - sTd[0];
-    const halfRange = Math.max(mainDur, subDur) * 0.75;
+    // 探索範囲を設定（ユーザー指定 or 自動）
+    const halfRange = searchRange;
 
-    // Coarse search (200 steps across ±halfRange)
-    const COARSE = 200;
+    // 粗い探索（400ステップ ±halfRange）— ステップ数を増やして精度向上
+    const COARSE = 400;
     let bestOff  = 0, bestRmse = Infinity;
     for (let s = 0; s <= COARSE; s++) {
         const off  = -halfRange + s * (halfRange * 2 / COARSE);
@@ -1872,9 +1886,9 @@ async function autoAlign(subFileId) {
         if (rmse < bestRmse) { bestRmse = rmse; bestOff = off; }
     }
 
-    // Fine search (100 steps ± one coarse step around best)
+    // 細かい探索（200ステップ、粗い1ステップ幅の前後）
     const fineW = halfRange * 2 / COARSE * 2;
-    const FINE  = 100;
+    const FINE  = 200;
     for (let s = 0; s <= FINE; s++) {
         const off  = bestOff - fineW + s * (fineW * 2 / FINE);
         const rmse = computeRmse(sampleTimes, mainFile, mainCols, subFile, subCols, off);
@@ -1887,8 +1901,109 @@ async function autoAlign(subFileId) {
     renderChart();
 }
 
+/**
+ * Auto-align用のチャンネル選択＆探索範囲設定モーダル。
+ * ユーザーが使いたいチャンネルにチェックを入れて「実行」を押す。
+ * @returns {Promise<{names: string[], range: number}|null>} 選択結果、またはキャンセル時null
+ */
+function showAlignChannelModal(commonNames, subFileId) {
+    return new Promise(resolve => {
+        // 既存モーダルがあれば削除
+        const old = document.getElementById('align-channel-modal');
+        if (old) old.remove();
+
+        const subFile = state.files[subFileId];
+        const mainFile = getMainFile();
+        // デフォルト探索範囲: 短い方のファイル時間長の25%（繰り返しパターン対策）
+        const mTd = mainFile.timeData;
+        const sTd = subFile.timeData;
+        const mainDur = mTd[mTd.length - 1] - mTd[0];
+        const subDur  = sTd[sTd.length - 1] - sTd[0];
+        const defaultRange = Math.round(Math.min(mainDur, subDur) * 0.25);
+
+        // 現在選択中のチャンネル（チェックを入れるデフォルト候補）
+        const currentlySelected = new Set(state.selectedNames);
+
+        const modal = document.createElement('div');
+        modal.id = 'align-channel-modal';
+        // デバッグモーダルと同じインラインスタイルで統一
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+
+        // チャンネルリストを生成
+        const channelItems = commonNames.map(name => {
+            const checked = currentlySelected.has(name) ? 'checked' : '';
+            // チェックボックス＋チャンネル名のラベル
+            return `<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:13px;transition:background 0.15s;"
+                onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                <input type="checkbox" value="${name}" ${checked} style="accent-color:#6366f1;"> ${name}
+            </label>`;
+        }).join('');
+
+        modal.innerHTML = `
+            <div style="background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:24px 28px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;">
+                <h3 style="margin:0 0 8px;font-size:16px;"><i class='bx bx-target-lock'></i> Auto-Align 設定</h3>
+                <p style="color:#a0a5b1;font-size:12px;margin-bottom:16px;line-height:1.5;">
+                    位置合わせに使うチャンネルと探索範囲を指定してください。<br>
+                    チャンネルを絞ると精度が上がります（例: 目標車速）。
+                </p>
+
+                <div style="margin-bottom:14px;">
+                    <h4 style="font-size:13px;margin-bottom:6px;">チャンネル選択</h4>
+                    <div style="display:flex;gap:6px;margin-bottom:6px;">
+                        <button id="align-select-all" style="background:#22262f;color:#a0a5b1;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;">全選択</button>
+                        <button id="align-select-none" style="background:#22262f;color:#a0a5b1;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;">全解除</button>
+                    </div>
+                    <div class="align-ch-list" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:4px;">${channelItems}</div>
+                </div>
+
+                <div style="margin-bottom:18px;">
+                    <h4 style="font-size:13px;margin-bottom:6px;">探索範囲 (±秒)</h4>
+                    <input type="number" id="align-range-input" value="${defaultRange}" min="1" step="1"
+                        style="width:120px;background:#22262f;color:#f0f0f0;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:6px 10px;font-size:13px;">
+                    <p style="color:#a0a5b1;font-size:11px;margin-top:4px;">ヒント: NEDCのUrban1サイクル≒195秒。範囲を狭めるとサイクル飛びを防げます。</p>
+                </div>
+
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button id="align-run-btn" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:13px;font-weight:500;display:flex;align-items:center;gap:4px;"><i class='bx bx-play'></i> 実行</button>
+                    <button id="align-cancel-btn" style="background:#22262f;color:#a0a5b1;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">キャンセル</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // 全選択 / 全解除ボタン
+        modal.querySelector('#align-select-all').addEventListener('click', () => {
+            modal.querySelectorAll('.align-ch-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+        });
+        modal.querySelector('#align-select-none').addEventListener('click', () => {
+            modal.querySelectorAll('.align-ch-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+        });
+
+        // 実行ボタン
+        modal.querySelector('#align-run-btn').addEventListener('click', () => {
+            const checked = [...modal.querySelectorAll('.align-ch-list input:checked')].map(cb => cb.value);
+            const range   = parseFloat(modal.querySelector('#align-range-input').value);
+            modal.remove();
+            if (!checked.length) {
+                alert('1つ以上のチャンネルを選択してください。');
+                resolve(null);
+                return;
+            }
+            resolve({ names: checked, range: isNaN(range) || range <= 0 ? defaultRange : range });
+        });
+
+        // キャンセルボタン & オーバーレイクリック
+        const cancel = () => { modal.remove(); resolve(null); };
+        modal.querySelector('#align-cancel-btn').addEventListener('click', cancel);
+        modal.addEventListener('click', e => { if (e.target === modal) cancel(); });
+    });
+}
+
 function computeRmse(sampleTimes, mainFile, mainCols, subFile, subCols, offset) {
     let sumSq = 0, count = 0;
+    const mTd = mainFile.timeData;
+    const sTd = subFile.timeData;
 
     for (let ci = 0; ci < mainCols.length; ci++) {
         const mc = mainCols[ci], sc = subCols[ci];
@@ -1897,9 +2012,8 @@ function computeRmse(sampleTimes, mainFile, mainCols, subFile, subCols, offset) 
         const mVals = mainFile.colData[mc.id];
         const sVals = subFile.colData[sc.id];
         if (!mVals || !sVals) continue;
-        const sTd   = subFile.timeData;
 
-        // Normalise by main signal range to balance channels of different magnitudes
+        // main信号のレンジで正規化（異なるスケールのチャンネルをバランスさせる）
         let mMin = Infinity, mMax = -Infinity;
         for (let i = 0; i < mVals.length; i++) {
             if (!isNaN(mVals[i])) { if (mVals[i] < mMin) mMin = mVals[i]; if (mVals[i] > mMax) mMax = mVals[i]; }
@@ -1909,11 +2023,11 @@ function computeRmse(sampleTimes, mainFile, mainCols, subFile, subCols, offset) 
         for (let si = 0; si < sampleTimes.length; si++) {
             const t = sampleTimes[si];
             const tSub = t - offset;
-            // Skip if outside sub file's time range (no extrapolation)
+            // sub の時間範囲外ならスキップ（外挿しない）
             if (tSub < sTd[0] || tSub > sTd[sTd.length - 1]) continue;
 
-            const mIdx = si * Math.max(1, Math.floor(mainFile.timeData.length / sampleTimes.length));
-            const mVal = mVals[Math.min(mIdx, mVals.length - 1)];
+            // main側もinterpolateで正確な値を取得（旧コードのインデックス推定バグを修正）
+            const mVal = interpolate(mTd, mVals, t);
             const sVal = interpolate(sTd, sVals, tSub);
 
             if (isNaN(mVal) || isNaN(sVal)) continue;
