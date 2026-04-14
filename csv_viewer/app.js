@@ -44,11 +44,45 @@ window.addEventListener('unhandledrejection', e => {
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const SERIES_COLORS = [
-    '#6366f1', '#ec4899', '#10b981', '#f59e0b',
-    '#8b5cf6', '#06b6d4', '#f43f5e', '#84cc16',
-    '#0ea5e9', '#a855f7', '#14b8a6', '#fb923c',
-];
+// 色相を均等に分散させた20色パレット（隣接する色が同系色にならないよう配置）
+// HSLで色相を黄金角（≈137.5°）ずつずらし、彩度・明度を交互に変えて区別しやすくしている
+const SERIES_COLORS = generateDistinctColors(20);
+
+/**
+ * 視覚的に区別しやすい色を指定数だけ生成する。
+ * 黄金角（≈137.5°）で色相をずらすことで、隣接する色が同系色になるのを避ける。
+ * @param {number} n - 生成する色の数
+ * @returns {string[]} #RRGGBB の配列
+ */
+function generateDistinctColors(n) {
+    const colors = [];
+    const goldenAngle = 137.508; // 黄金角（度）
+    for (let i = 0; i < n; i++) {
+        const hue = (i * goldenAngle) % 360;
+        // 彩度と明度を交互に変えて、色相が近くても区別できるようにする
+        const sat = (i % 2 === 0) ? 75 : 60;
+        const lit = (i % 3 === 0) ? 60 : (i % 3 === 1) ? 50 : 65;
+        colors.push(hslToHex(hue, sat, lit));
+    }
+    return colors;
+}
+
+/** HSL → #RRGGBB 変換 */
+function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if      (h < 60)  { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else              { r = c; g = 0; b = x; }
+    const toHex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 
 // HTML-escape to safely insert text into innerHTML
 function esc(s) {
@@ -498,6 +532,8 @@ const state = {
     gridRegions:    [],     // [{ name, top, height, unit }] ドラッグ判定用
     mergeDrag:      null,   // { sourceName, ghostEl } マージドラッグ中の状態
     bitChannels:    new Set(), // Bitモード（0/1表示、グリッド高さ縮小）のチャンネル名
+    monoColorMode:  false,     // 単色モード: trueならファイル単位の色で描画
+    fileColors:     {},        // fileId → '#RRGGBB' ファイルごとの色（単色モード用）
 };
 
 // 復元待ちの設定（ファイル読込後に適用される）
@@ -608,6 +644,7 @@ const dom = {
     customList: $('custom-ram-list'),
     customSuggest:    $('custom-ram-suggest'),
     customValidation: $('custom-ram-validation'),
+    monoColorBtn: $('mono-color-btn'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
     exportSettings: $('export-settings-btn'),
@@ -1091,6 +1128,12 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
                         headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter },
                     };
 
+                    // ファイル色を自動割り当て（単色モード用）
+                    if (!state.fileColors[fileId]) {
+                        const fileCount = Object.keys(state.fileColors).length;
+                        state.fileColors[fileId] = SERIES_COLORS[fileCount % SERIES_COLORS.length];
+                    }
+
                     if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
 
                     // 保留中の設定があればファイル読込後に適用する
@@ -1282,6 +1325,7 @@ async function setMainFile(newMainId) {
 function removeFile(fileId) {
     const wasMain = state.files[fileId]?.role === 'main';
     delete state.files[fileId];
+    delete state.fileColors[fileId];
 
     if (state.shiftFileId === fileId) {
         state.shiftFileId = getSubFileIds()[0] ?? null;
@@ -1306,6 +1350,7 @@ dom.clearBtn.addEventListener('click', () => {
     _bitManualOff.clear();
     state.yRanges       = {};
     state.colorCtr      = 0;
+    state.fileColors    = {};
     state.shiftFileId   = null;
     state.zoomHistory   = [];
     state.zoomHistoryIdx = -1;
@@ -1369,14 +1414,21 @@ function renderFileList() {
 
         // バッジ表示: Main=M, Sub=s1,s2,...（Custom RAM式で使うID）
         const badgeText = isMain ? 'M' : `s${subNum}`;
-        const badgeTitle = isMain ? 'Main file' : `Sub file (s${subNum}) — click to make this the Main\nCustom RAM式で s${subNum}:チャンネル名 と書くと参照できます`;
+        const badgeTitle = isMain
+            ? 'Main file — 右クリックで色変更'
+            : `Sub file (s${subNum}) — クリックでMain切替 / 右クリックで色変更\nCustom RAM式で s${subNum}:チャンネル名 と書くと参照できます`;
+        // ファイル色をバッジの背景色に反映
+        const fColor = state.fileColors[fid] || '#6366f1';
 
         li.innerHTML = `
             <div class="file-item-top">
                 <div class="role-badge ${isMain ? 'role-main' : 'role-sub'}"
                     data-roleid="${fid}"
                     title="${badgeTitle}"
+                    style="background:${fColor};color:#fff;border-color:${fColor};"
                 >${badgeText}</div>
+                <input type="color" class="file-color-picker" data-colorid="${fid}"
+                    value="${fColor}" style="display:none;">
                 <span class="file-name-text" title="${esc(f.name)}">${esc(f.name)}</span>
                 <i class='bx bx-bug debug-file' data-fid="${fid}" title="Debug: パース結果を確認"></i>
                 <i class='bx bx-x remove-file' data-fid="${fid}" title="Remove"></i>
@@ -1398,9 +1450,26 @@ function renderFileList() {
         dom.fileList.appendChild(li);
     }
 
-    // Role toggle
+    // Role toggle（左クリック）
     dom.fileList.querySelectorAll('[data-roleid]').forEach(el => {
         el.addEventListener('click', () => setMainFile(el.dataset.roleid));
+        // 右クリックでカラーピッカーを開く
+        el.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const picker = el.parentElement.querySelector('.file-color-picker');
+            if (picker) picker.click();
+        });
+    });
+
+    // ファイル色変更（カラーピッカー）
+    dom.fileList.querySelectorAll('.file-color-picker').forEach(inp => {
+        inp.addEventListener('input', () => {
+            const fid = inp.dataset.colorid;
+            state.fileColors[fid] = inp.value;
+            renderFileList(); // バッジ色を更新
+            if (state.monoColorMode) renderChart(); // 単色モード中ならチャートも更新
+            saveSettings();
+        });
     });
 
     // Remove
@@ -2611,10 +2680,16 @@ function getActiveGroups() {
             const mPts = new Array(mtd.length);
             for (let i = 0; i < mtd.length; i++) mPts[i] = [mtd[i], isNaN(mvd[i]) ? null : mvd[i]];
 
+            // 単色モード時はファイルの色を使う、通常時はチャンネル個別の色
+            const mainFileId = getMainFileId();
+            const mainColor = state.monoColorMode
+                ? (state.fileColors[mainFileId] || col.color)
+                : col.color;
+
             grp.series.push({
                 id:       col.id,
                 label:    `${chName} [${mainFile.shortName}]`,
-                color:    col.color,
+                color:    mainColor,
                 dash:     false,
                 data:     mPts,
             });
@@ -2632,10 +2707,14 @@ function getActiveGroups() {
                 const sPts   = new Array(std.length);
                 for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, isNaN(svd[i]) ? null : svd[i]];
 
+                const subColor = state.monoColorMode
+                    ? (state.fileColors[subId] || sc.color)
+                    : sc.color;
+
                 grp.series.push({
                     id:    sc.id,
                     label: `${chName} [${sf.shortName}]`,
-                    color: sc.color,
+                    color: subColor,
                     dash:  true,
                     data:  sPts,
                 });
@@ -3086,6 +3165,16 @@ function updatePerGridLabels() {
 dom.zoomBtn.addEventListener('click', toggleBoxZoom);
 dom.resetBtn.addEventListener('click', resetZoom);
 
+// ── 単色モード切り替え ──
+dom.monoColorBtn.addEventListener('click', toggleMonoColor);
+
+function toggleMonoColor() {
+    state.monoColorMode = !state.monoColorMode;
+    dom.monoColorBtn.classList.toggle('btn-active', state.monoColorMode);
+    renderChart();
+    saveSettings();
+}
+
 function toggleBoxZoom() { state.brushMode ? exitBoxZoom() : enterBoxZoom(); }
 
 function enterBoxZoom() {
@@ -3500,6 +3589,9 @@ function saveSettings() {
             sidebarWidth: sidebar ? sidebar.offsetWidth : null,
             // Y軸範囲のユーザー設定
             yRanges: state.yRanges,
+            // 単色モード設定
+            monoColorMode: state.monoColorMode,
+            fileColors: state.fileColors,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     } catch (e) {
@@ -3617,6 +3709,13 @@ function applySettings(s) {
 
     // Y軸範囲を復元
     if (s.yRanges) state.yRanges = s.yRanges;
+
+    // 単色モード設定を復元
+    if (s.monoColorMode !== undefined) {
+        state.monoColorMode = s.monoColorMode;
+        dom.monoColorBtn.classList.toggle('btn-active', state.monoColorMode);
+    }
+    if (s.fileColors) state.fileColors = s.fileColors;
 
     // ファイルがまだ読み込まれていない場合は、残りの設定を保留する
     _pendingSettings = s;
