@@ -606,6 +606,8 @@ const dom = {
     customExpr: $('custom-ram-expr'),
     customAdd:  $('custom-ram-add'),
     customList: $('custom-ram-list'),
+    customSuggest:    $('custom-ram-suggest'),
+    customValidation: $('custom-ram-validation'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
     exportSettings: $('export-settings-btn'),
@@ -1262,8 +1264,17 @@ async function setMainFile(newMainId) {
     if (oldMainId === newMainId) return;
     if (oldMainId) state.files[oldMainId].role = 'sub';
     state.files[newMainId].role = 'main';
-    state.selectedNames = new Set();  // clear selection on main change
-    state.mergedGroups  = [];
+
+    // 新しいMainファイルに存在するチャンネルだけ選択を維持する
+    const newMain = state.files[newMainId];
+    const newColNames = new Set(newMain.columns.map(c => c.name));
+    state.selectedNames = new Set(
+        [...state.selectedNames].filter(name => newColNames.has(name))
+    );
+    // マージグループも両方のチャンネルが新Mainに存在するペアだけ残す
+    state.mergedGroups = state.mergedGroups.filter(
+        ([a, b]) => newColNames.has(a) && newColNames.has(b)
+    );
     await recomputeCustomRAMs();
     updateUI();
 }
@@ -1634,20 +1645,19 @@ async function addCustomRAM(name, expr) {
     const loadPromises = [];
     if (mainFileId) loadPromises.push(loadColumnsForFile(mainFileId, refNames));
 
+    // 全ファイルで参照カラムをロード（ファイル間参照の有無に関わらず）
+    for (const [fid, f] of Object.entries(state.files)) {
+        if (fid !== mainFileId) {
+            loadPromises.push(loadColumnsForFile(fid, refNames));
+        }
+    }
+    // ファイル間参照がある場合、該当サブファイルの参照カラムもロード
     if (isCrossFile) {
-        // ファイル間参照: 該当サブファイルの参照カラムをロード
         const subIds = getSubFileIds();
         for (const cr of crossRefs) {
             const idx = parseInt(cr.fileKey.replace('s', ''), 10) - 1;
             if (idx >= 0 && idx < subIds.length) {
                 loadPromises.push(loadColumnsForFile(subIds[idx], [cr.name]));
-            }
-        }
-    } else {
-        // 通常のCustom RAM: 全ファイルで参照カラムをロード
-        for (const [fid, f] of Object.entries(state.files)) {
-            if (fid !== mainFileId) {
-                loadPromises.push(loadColumnsForFile(fid, refNames));
             }
         }
     }
@@ -1662,22 +1672,14 @@ async function addCustomRAM(name, expr) {
         return;
     }
 
-    if (isCrossFile) {
-        // ファイル間参照あり → メインファイルにだけ追加
+    // 全ファイルに追加（ファイル間参照の有無に関わらず全ファイルで計算）
+    for (const [fid, f] of Object.entries(state.files)) {
+        const colId = (f === mainFile) ? id : `${id}_${fid}`;
         const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-        const colDef = { id, name, unit: '', idx: -1, color, isCustom: true, isCrossFile: true };
-        mainFile.columns.unshift(colDef);
-        mainFile.colData[id] = mainVals;
-    } else {
-        // 通常のCustom RAM → 全ファイルに追加（ファイルごとに異なる色）
-        for (const [fid, f] of Object.entries(state.files)) {
-            const colId = (f === mainFile) ? id : `${id}_${fid}`;
-            const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-            const colDef = { id: colId, name, unit: '', idx: -1, color, isCustom: true };
-            f.columns.unshift(colDef);
-            const vals = (f === mainFile) ? mainVals : computeCustomExpr(expr, f);
-            f.colData[colId] = vals;
-        }
+        const colDef = { id: colId, name, unit: '', idx: -1, color, isCustom: true, isCrossFile };
+        f.columns.unshift(colDef);
+        const vals = (f === mainFile) ? mainVals : computeCustomExpr(expr, f);
+        f.colData[colId] = vals;
     }
 
     state.customRAMs.push({ name, expr, id });
@@ -1752,26 +1754,15 @@ async function recomputeCustomRAMs() {
     const mainFile = getMainFile();
 
     // Custom RAMを再計算
+    // Custom RAMを全ファイルに再計算・追加（ファイル間参照の有無に関わらず）
     for (const cr of state.customRAMs) {
         const isCross = hasCrossRef(cr.expr);
-
-        if (isCross) {
-            // ファイル間参照あり → メインファイルにだけ追加
-            if (mainFile) {
-                const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-                const colDef = { id: cr.id, name: cr.name, unit: '', idx: -1, color, isCustom: true, isCrossFile: true };
-                mainFile.columns.unshift(colDef);
-                mainFile.colData[cr.id] = computeCustomExpr(cr.expr, mainFile);
-            }
-        } else {
-            // 通常のCustom RAM → 全ファイルに追加
-            for (const [fid, f] of Object.entries(state.files)) {
-                const colId = (f.role === 'main') ? cr.id : `${cr.id}_${fid}`;
-                const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-                const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
-                f.columns.unshift(colDef);
-                f.colData[colId] = computeCustomExpr(cr.expr, f);
-            }
+        for (const [fid, f] of Object.entries(state.files)) {
+            const colId = (f.role === 'main') ? cr.id : `${cr.id}_${fid}`;
+            const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
+            const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true, isCrossFile: isCross };
+            f.columns.unshift(colDef);
+            f.colData[colId] = computeCustomExpr(cr.expr, f);
         }
     }
 }
@@ -1791,17 +1782,16 @@ async function addCustomRAMsToFile(fileId) {
         await loadColumnsForFile(fileId, allRefNames);
     }
 
-    // 各Custom RAMを計算してカラムに追加
+    // 各Custom RAMを計算してカラムに追加（ファイル間参照ありも含む）
     for (const cr of state.customRAMs) {
-        // ファイル間参照ありの場合はメインにだけ存在するのでスキップ
-        if (hasCrossRef(cr.expr)) continue;
         // すでに同名カラムがあればスキップ
         if (f.columns.some(c => c.name === cr.name)) continue;
 
+        const isCross = hasCrossRef(cr.expr);
         const colId  = (f.role === 'main') ? cr.id : `${cr.id}_${fileId}`;
         const color  = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
 
-        const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true };
+        const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true, isCrossFile: isCross };
         f.columns.unshift(colDef);
         f.colData[colId] = computeCustomExpr(cr.expr, f);
     }
@@ -1826,7 +1816,281 @@ dom.customAdd.addEventListener('click', () => {
     addCustomRAM(dom.customName.value, dom.customExpr.value);
     dom.customName.value = '';
     dom.customExpr.value = '';
+    // バリデーション表示をクリア
+    dom.customValidation.textContent = '';
+    dom.customValidation.className = 'custom-ram-validation';
 });
+
+// ── Custom RAM サジェスト（オートコンプリート） ──
+
+/** 式のカーソル位置から直前の「単語」を抽出する */
+function getWordAtCursor(input) {
+    const pos = input.selectionStart;
+    const text = input.value.substring(0, pos);
+    // 演算子・括弧・空白で区切った最後のトークンを取得
+    const m = text.match(/((?:[a-zA-Z_]\w*:)?[a-zA-Z_]\w*)$/);
+    return m ? { word: m[1], start: pos - m[1].length, end: pos } : null;
+}
+
+/** サジェスト候補を構築する */
+function buildSuggestions(partial) {
+    const results = [];
+    const lower = partial.toLowerCase();
+
+    // ファイル間参照プレフィックス（s1:, s2:, ...）のチェック
+    const crossMatch = partial.match(/^(s\d+):(.*)$/i);
+    let targetFile = null;
+    let searchTerm = lower;
+
+    if (crossMatch) {
+        // s1:Foo → サブファイルのチャンネル名で検索
+        const fileKey = crossMatch[1].toLowerCase();
+        searchTerm = crossMatch[2].toLowerCase();
+        const subIds = getSubFileIds();
+        const idx = parseInt(fileKey.replace('s', ''), 10) - 1;
+        if (idx >= 0 && idx < subIds.length) {
+            targetFile = state.files[subIds[idx]];
+        }
+    }
+
+    if (targetFile) {
+        // サブファイルのチャンネル名を候補に
+        for (const col of targetFile.columns) {
+            if (!col.isCustom && col.name.toLowerCase().startsWith(searchTerm)) {
+                results.push({ text: `${crossMatch[1]}:${col.name}`, type: `[${targetFile.shortName}]` });
+            }
+        }
+    } else {
+        // Mainファイルのチャンネル名を候補に
+        const mainFile = getMainFile();
+        if (mainFile) {
+            for (const col of mainFile.columns) {
+                if (col.name.toLowerCase().startsWith(lower)) {
+                    results.push({ text: col.name, type: col.isCustom ? 'Custom' : 'CH' });
+                }
+            }
+        }
+        // 関数名も候補に
+        for (const fn of CUSTOM_RAM_FUNCTIONS) {
+            if (fn.name.toLowerCase().startsWith(lower)) {
+                results.push({ text: fn.name + '(', type: 'fn' });
+            }
+        }
+    }
+
+    return results.slice(0, 15); // 最大15件
+}
+
+let _suggestIdx = -1; // サジェストのアクティブインデックス
+
+/** サジェストを表示する */
+function showSuggest() {
+    const wordInfo = getWordAtCursor(dom.customExpr);
+    if (!wordInfo || wordInfo.word.length < 1) {
+        hideSuggest();
+        return;
+    }
+
+    const items = buildSuggestions(wordInfo.word);
+    if (items.length === 0) {
+        hideSuggest();
+        return;
+    }
+
+    _suggestIdx = -1;
+    dom.customSuggest.innerHTML = '';
+    for (const item of items) {
+        const li = document.createElement('li');
+        li.innerHTML = `${esc(item.text)}<span class="suggest-type">${esc(item.type)}</span>`;
+        li.dataset.text = item.text;
+        li.addEventListener('mousedown', e => {
+            e.preventDefault(); // inputからフォーカスを奪わない
+            applySuggest(item.text, wordInfo);
+        });
+        dom.customSuggest.appendChild(li);
+    }
+    dom.customSuggest.classList.add('visible');
+}
+
+function hideSuggest() {
+    dom.customSuggest.classList.remove('visible');
+    dom.customSuggest.innerHTML = '';
+    _suggestIdx = -1;
+}
+
+/** サジェストを確定して式に挿入する */
+function applySuggest(text, wordInfo) {
+    const expr = dom.customExpr;
+    const before = expr.value.substring(0, wordInfo.start);
+    const after  = expr.value.substring(wordInfo.end);
+    expr.value = before + text + after;
+    // カーソルを挿入テキストの末尾へ
+    const newPos = wordInfo.start + text.length;
+    expr.setSelectionRange(newPos, newPos);
+    expr.focus();
+    hideSuggest();
+    // バリデーションも更新
+    validateCustomExpr();
+}
+
+// 式入力欄のイベント: サジェスト表示＋バリデーション
+dom.customExpr.addEventListener('input', () => {
+    showSuggest();
+    _validateDebounce();
+});
+
+dom.customExpr.addEventListener('focus', () => {
+    // フォーカス時にもバリデーション実行
+    _validateDebounce();
+});
+
+dom.customExpr.addEventListener('blur', () => {
+    // 少し遅延してから閉じる（mousedownイベントの発火を待つ）
+    setTimeout(hideSuggest, 150);
+});
+
+// キーボードでサジェストを操作
+dom.customExpr.addEventListener('keydown', e => {
+    const items = dom.customSuggest.querySelectorAll('li');
+    if (!dom.customSuggest.classList.contains('visible') || items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _suggestIdx = Math.min(_suggestIdx + 1, items.length - 1);
+        items.forEach((li, i) => li.classList.toggle('active', i === _suggestIdx));
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _suggestIdx = Math.max(_suggestIdx - 1, 0);
+        items.forEach((li, i) => li.classList.toggle('active', i === _suggestIdx));
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+        if (_suggestIdx >= 0 && _suggestIdx < items.length) {
+            e.preventDefault();
+            const wordInfo = getWordAtCursor(dom.customExpr);
+            if (wordInfo) applySuggest(items[_suggestIdx].dataset.text, wordInfo);
+        }
+    } else if (e.key === 'Escape') {
+        hideSuggest();
+    }
+});
+
+// ── Custom RAM バリデーション＆プレビュー ──
+
+let _validateTimer = null;
+const _validateDebounce = () => {
+    clearTimeout(_validateTimer);
+    _validateTimer = setTimeout(validateCustomExpr, 300);
+};
+
+/** 式のバリデーションと結果プレビューを行う */
+function validateCustomExpr() {
+    const expr = dom.customExpr.value.trim();
+    const vEl = dom.customValidation;
+
+    if (!expr) {
+        vEl.textContent = '';
+        vEl.className = 'custom-ram-validation';
+        dom.customAdd.disabled = false;
+        return;
+    }
+
+    const mainFile = getMainFile();
+    if (!mainFile) {
+        vEl.textContent = 'ファイルを読み込んでください';
+        vEl.className = 'custom-ram-validation error';
+        dom.customAdd.disabled = true;
+        return;
+    }
+
+    const errors = [];
+
+    // 1. 括弧の対応チェック
+    let depth = 0;
+    for (const ch of expr) {
+        if (ch === '(') depth++;
+        if (ch === ')') depth--;
+        if (depth < 0) break;
+    }
+    if (depth !== 0) errors.push('括弧の対応が不正です');
+
+    // 2. トークン化してチャンネル名・関数名をチェック
+    try {
+        const tokens = tokenizeExpr(expr);
+        const colNames = new Set(mainFile.columns.map(c => c.name));
+        const subIds = getSubFileIds();
+
+        for (let ti = 0; ti < tokens.length; ti++) {
+            const t = tokens[ti];
+            const nextIsOpen = (ti + 1 < tokens.length && tokens[ti + 1].type === 'op' && tokens[ti + 1].value === '(');
+            if (t.type === 'name') {
+                if (nextIsOpen) {
+                    // 次が'('なので関数呼び出し → 関数名チェック
+                    if (!_builtinFuncNames.has(t.value)) {
+                        errors.push(`"${t.value}" は未知の関数です`);
+                    }
+                } else {
+                    // チャンネル名チェック（Mainファイルに存在するか）
+                    if (!colNames.has(t.value)) {
+                        errors.push(`"${t.value}" はMainファイルに存在しません`);
+                    }
+                }
+            } else if (t.type === 'crossref') {
+                // ファイル間参照チェック
+                const idx = parseInt(t.fileKey.replace('s', ''), 10) - 1;
+                if (idx < 0 || idx >= subIds.length) {
+                    errors.push(`"${t.fileKey}" に対応するサブファイルがありません（現在 ${subIds.length} ファイル）`);
+                } else {
+                    // サブファイルのチャンネル名チェック
+                    const sf = state.files[subIds[idx]];
+                    if (sf && !sf.columns.some(c => c.name === t.value)) {
+                        errors.push(`"${t.value}" は ${sf.shortName} に存在しません`);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        errors.push('式の構文エラー: ' + e.message);
+    }
+
+    if (errors.length > 0) {
+        // 重複除去して最大3件表示
+        const unique = [...new Set(errors)].slice(0, 3);
+        vEl.textContent = unique.join(' / ');
+        vEl.className = 'custom-ram-validation error';
+        dom.customAdd.disabled = true;
+        return;
+    }
+
+    // 3. 計算結果プレビュー（エラーがなければ）
+    try {
+        const vals = computeCustomExpr(expr, mainFile);
+        let min = Infinity, max = -Infinity, sum = 0, cnt = 0;
+        for (let i = 0; i < vals.length; i++) {
+            const v = vals[i];
+            if (!isNaN(v) && isFinite(v)) {
+                if (v < min) min = v;
+                if (v > max) max = v;
+                sum += v;
+                cnt++;
+            }
+        }
+        if (cnt === 0) {
+            vEl.textContent = '⚠ 全値がNaN — 参照チャンネルのデータを確認してください';
+            vEl.className = 'custom-ram-validation error';
+            dom.customAdd.disabled = true;
+        } else {
+            const avg = sum / cnt;
+            // 数値を見やすくフォーマット（小数4桁まで）
+            const fmt = (v) => Math.abs(v) >= 1000 ? v.toFixed(1) : v.toPrecision(4);
+            vEl.textContent = `min: ${fmt(min)} / max: ${fmt(max)} / avg: ${fmt(avg)}`;
+            vEl.className = 'custom-ram-validation preview';
+            dom.customAdd.disabled = false;
+        }
+    } catch (e) {
+        vEl.textContent = '計算エラー: ' + e.message;
+        vEl.className = 'custom-ram-validation error';
+        dom.customAdd.disabled = true;
+    }
+}
 
 // ── Custom RAM ヘルプモーダル ──
 $('custom-ram-help')?.addEventListener('click', showCustomRAMHelp);
@@ -1988,6 +2252,24 @@ function renderColumnList() {
             });
             topRow.appendChild(bitBadge);
         }
+
+        // 「式に挿入」ボタン: クリックでCustom RAM式入力欄にチャンネル名を挿入
+        const insertBtn = document.createElement('i');
+        insertBtn.className = 'bx bx-plus-circle col-insert-btn';
+        insertBtn.title = '式に挿入';
+        insertBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            const expr = dom.customExpr;
+            const pos = expr.selectionStart ?? expr.value.length;
+            const before = expr.value.substring(0, pos);
+            const after  = expr.value.substring(pos);
+            expr.value = before + col.name + after;
+            const newPos = pos + col.name.length;
+            expr.setSelectionRange(newPos, newPos);
+            expr.focus();
+            validateCustomExpr();
+        });
+        topRow.appendChild(insertBtn);
 
         item.appendChild(topRow);
 

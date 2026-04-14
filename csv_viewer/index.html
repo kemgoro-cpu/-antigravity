@@ -49,9 +49,13 @@
                     </h3>
                     <div class="custom-ram-form">
                         <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input">
-                        <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input">
+                        <div style="position:relative;flex:1;">
+                            <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off">
+                            <ul id="custom-ram-suggest" class="custom-ram-suggest"></ul>
+                        </div>
                         <button id="custom-ram-add" class="btn-primary btn-sm">Add</button>
                     </div>
+                    <div id="custom-ram-validation" class="custom-ram-validation"></div>
                     <ul id="custom-ram-list" class="custom-ram-list"></ul>
                 </div>
 
