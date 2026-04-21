@@ -14,15 +14,15 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2><i class='bx bx-line-chart'></i> CSV Viewer</h2>
+                <h2><i class='bx bx-line-chart' aria-hidden="true"></i> CSV Viewer</h2>
             </div>
             <div class="sidebar-content">
 
                 <!-- File Upload -->
                 <div class="control-group">
-                    <h3><i class='bx bx-upload'></i> Files</h3>
+                    <h3><i class='bx bx-upload' aria-hidden="true"></i> Files</h3>
                     <div id="drop-zone" class="drop-zone">
-                        <i class='bx bx-cloud-upload'></i>
+                        <i class='bx bx-cloud-upload' aria-hidden="true"></i>
                         <p>Drag & Drop files here</p>
                         <p class="small">CSV / TRN</p>
                         <button class="btn-primary" onclick="document.getElementById('file-input').click()">Browse Files</button>
@@ -33,7 +33,7 @@
 
                 <!-- Parse Settings -->
                 <div class="control-group">
-                    <h3><i class='bx bx-cog'></i> Settings</h3>
+                    <h3><i class='bx bx-cog' aria-hidden="true"></i> Settings</h3>
                     <div class="settings-grid">
                         <label>Name Row:</label>
                         <input type="number" id="name-row-idx" value="1" min="1">
@@ -44,8 +44,8 @@
 
                 <!-- Custom RAM -->
                 <div class="control-group">
-                    <h3><i class='bx bx-calculator'></i> Custom RAM
-                        <i class='bx bx-help-circle' id="custom-ram-help" title="使える関数の一覧を表示" style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
+                    <h3><i class='bx bx-calculator' aria-hidden="true"></i> Custom RAM
+                        <i class='bx bx-help-circle' id="custom-ram-help" title="使える関数の一覧を表示" role="button" tabindex="0" aria-label="使える関数の一覧を表示" style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
                     </h3>
                     <div class="custom-ram-form">
                         <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input">
@@ -61,10 +61,10 @@
 
                 <!-- Channel Selection (main file only) -->
                 <div class="control-group active-columns-group">
-                    <h3><i class='bx bx-list-ul'></i> Channels <span id="channel-source-label" class="channel-source-label"></span></h3>
+                    <h3><i class='bx bx-list-ul' aria-hidden="true"></i> Channels <span id="channel-source-label" class="channel-source-label"></span></h3>
                     <div class="search-box">
-                        <i class='bx bx-search'></i>
-                        <input type="text" id="column-search" placeholder="Search channels...">
+                        <i class='bx bx-search' aria-hidden="true"></i>
+                        <input type="text" id="column-search" placeholder="Search channels..." aria-label="チャンネル検索">
                     </div>
                     <div id="column-list" class="column-list">
                         <div class="placeholder-text">Upload a CSV to see channels</div>
@@ -82,55 +82,58 @@
             <div class="toolbar">
                 <div class="toolbar-left">
                     <button id="clear-all-btn" class="btn-secondary" disabled>
-                        <i class='bx bx-trash'></i> Clear All
+                        <i class='bx bx-trash' aria-hidden="true"></i> Clear All
                     </button>
                     <div class="toolbar-sep"></div>
-                    <button id="zoom-mode-btn" class="btn-secondary" title="Click then drag on chart to box-zoom">
-                        <i class='bx bx-selection'></i> Box Zoom
+                    <button id="zoom-mode-btn" class="btn-secondary" title="Click then drag on chart to box-zoom (B)">
+                        <i class='bx bx-selection' aria-hidden="true"></i> Box Zoom
                     </button>
-                    <button id="reset-zoom-btn" class="btn-secondary" disabled title="Reset to full view">
-                        <i class='bx bx-reset'></i> Reset View
+                    <button id="reset-zoom-btn" class="btn-secondary" disabled title="Reset to full view (R)">
+                        <i class='bx bx-reset' aria-hidden="true"></i> Reset View
                     </button>
                     <div class="toolbar-sep"></div>
-                    <button id="shift-mode-btn" class="btn-secondary" disabled title="Drag chart to shift sub file timeline">
-                        <i class='bx bx-transfer-alt'></i> Time Shift
+                    <button id="shift-mode-btn" class="btn-secondary" disabled title="Drag chart to shift sub file timeline (T)">
+                        <i class='bx bx-transfer-alt' aria-hidden="true"></i> Time Shift
                     </button>
                     <div class="toolbar-sep"></div>
                     <label class="sampling-label" title="Data sampling mode">
-                        <i class='bx bx-pulse'></i>
-                        <select id="sampling-mode">
+                        <i class='bx bx-pulse' aria-hidden="true"></i>
+                        <select id="sampling-mode" aria-label="Data sampling mode">
                             <option value="lttb" selected>LTTB (fast)</option>
                             <option value="">None (exact)</option>
                         </select>
                     </label>
                     <div class="toolbar-sep"></div>
                     <button id="mono-color-btn" class="btn-secondary" title="単色モード: ファイルごとに同じ色で表示">
-                        <i class='bx bx-palette'></i> Mono Color
+                        <i class='bx bx-palette' aria-hidden="true"></i> Mono Color
                     </button>
                     <div class="toolbar-sep"></div>
-                    <button id="export-png-btn" class="btn-secondary" disabled title="Save chart as PNG file">
-                        <i class='bx bx-download'></i> Save PNG
+                    <button id="export-png-btn" class="btn-secondary" disabled title="Save chart as PNG file (Ctrl+S)">
+                        <i class='bx bx-download' aria-hidden="true"></i> Save PNG
                     </button>
-                    <button id="copy-chart-btn" class="btn-secondary" disabled title="Copy chart to clipboard">
-                        <i class='bx bx-copy'></i> Copy
+                    <button id="copy-chart-btn" class="btn-secondary" disabled title="Copy chart to clipboard (Ctrl+Shift+C)">
+                        <i class='bx bx-copy' aria-hidden="true"></i> Copy
                     </button>
                     <div class="toolbar-sep"></div>
                     <button id="export-settings-btn" class="btn-secondary" title="設定をJSONファイルにエクスポート">
-                        <i class='bx bx-export'></i> Settings
+                        <i class='bx bx-export' aria-hidden="true"></i> Settings
                     </button>
                     <button id="import-settings-btn" class="btn-secondary" title="JSONファイルから設定をインポート">
-                        <i class='bx bx-import'></i> Load
+                        <i class='bx bx-import' aria-hidden="true"></i> Load
                     </button>
                 </div>
                 <div class="toolbar-right">
                     <span id="toolbar-hint" class="toolbar-hint"></span>
+                    <button id="shortcuts-help-btn" class="btn-secondary" aria-label="キーボードショートカット一覧" title="キーボードショートカット (?)">
+                        <i class='bx bx-keyboard' aria-hidden="true"></i>
+                    </button>
                 </div>
             </div>
 
             <div class="chart-container">
                 <div id="chart" class="echarts-dom"></div>
                 <div id="chart-overlay" class="chart-overlay">
-                    <i class='bx bx-line-chart icon-large'></i>
+                    <i class='bx bx-line-chart icon-large' aria-hidden="true"></i>
                     <p>Select channels from the sidebar to visualize</p>
                 </div>
             </div>

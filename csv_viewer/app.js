@@ -41,6 +41,56 @@ window.addEventListener('unhandledrejection', e => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Modal accessibility helper
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * モーダル共通のアクセシビリティ処理を仕込む。
+ * - role="dialog" / aria-modal="true" を付与
+ * - Esc キーで閉じる
+ * - 開く直前のフォーカス要素を覚え、閉じたときに戻す
+ * - 初期フォーカスをモーダル内の最初のボタンに移動
+ *
+ * @param {HTMLElement} overlay  body直下に appendChild した overlay 要素
+ * @param {HTMLElement} modalEl  overlay 内のモーダル本体（中央の枠）
+ */
+function setupModalA11y(overlay, modalEl) {
+    const prevFocus = document.activeElement;
+    modalEl.setAttribute('role', 'dialog');
+    modalEl.setAttribute('aria-modal', 'true');
+    modalEl.setAttribute('tabindex', '-1');
+
+    // Esc で閉じる（capture で他のkeydownより先に拾う）
+    const escHandler = (e) => {
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            e.preventDefault();
+            overlay.remove();
+        }
+    };
+    document.addEventListener('keydown', escHandler, true);
+
+    // overlay が DOM から外れたら後始末: リスナー解除＋フォーカス復帰
+    const observer = new MutationObserver(() => {
+        if (!document.body.contains(overlay)) {
+            observer.disconnect();
+            document.removeEventListener('keydown', escHandler, true);
+            if (prevFocus && typeof prevFocus.focus === 'function') {
+                // 元の要素がまだ DOM にあれば戻す
+                if (document.body.contains(prevFocus)) prevFocus.focus();
+            }
+        }
+    });
+    observer.observe(document.body, { childList: true });
+
+    // 初期フォーカスをモーダル内の最初のフォーカス可能要素に
+    setTimeout(() => {
+        const focusable = modalEl.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        (focusable || modalEl).focus();
+    }, 0);
+}
+
+// ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
 
@@ -1606,6 +1656,7 @@ function showDebugModal(fileId) {
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2163,6 +2214,13 @@ function validateCustomExpr() {
 
 // ── Custom RAM ヘルプモーダル ──
 $('custom-ram-help')?.addEventListener('click', showCustomRAMHelp);
+// role="button" で自作ボタン化した <i> はキーボード操作も自前で用意する必要がある
+$('custom-ram-help')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        showCustomRAMHelp();
+    }
+});
 
 function showCustomRAMHelp() {
     let html = `<h3 style="margin:0 0 12px;color:#818cf8;">Custom RAM 関数リファレンス</h3>`;
@@ -2245,6 +2303,7 @@ function showCustomRAMHelp() {
         + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
 }
 
 dom.colSearch.addEventListener('input', renderColumnList);
@@ -3307,20 +3366,129 @@ function zoomRedo() {
     }
 }
 
-// キーボードショートカット: Ctrl+Z = Undo, Ctrl+Y = Redo
+// キーボードショートカット（全体）
+// - 入力欄にフォーカスがある場合は大半を無効にする（テキスト編集との衝突回避）
+// - ただし Ctrl+S / Ctrl+Shift+C はブラウザ既定の挙動を抑止したいのでガードの外で処理
 document.addEventListener('keydown', e => {
-    // 入力欄にフォーカスがあるときは無効にする（テキスト編集のUndo/Redoと競合しないように）
     const tag = e.target.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    const inInput = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT');
+    const modalOpen = !!document.getElementById('debug-modal-overlay');
 
+    // ── 入力欄でも動くショートカット（グローバル優先） ──
+    // Ctrl+S: PNG保存（ブラウザの「ページ保存」を上書き）
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (!dom.exportPng.disabled) exportChartAsPNG();
+        return;
+    }
+    // Ctrl+Shift+C: チャートをクリップボードにコピー
+    if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'C' || e.key === 'c')) {
+        e.preventDefault();
+        if (!dom.copyChart.disabled) copyChartToClipboard();
+        return;
+    }
+
+    // ── 以下は入力欄・モーダル中では無効 ──
+    if (inInput || modalOpen) return;
+
+    // Ctrl+Z / Ctrl+Y: ズーム Undo/Redo（従来互換）
     if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
         e.preventDefault();
         zoomUndo();
-    } else if (e.ctrlKey && e.key === 'y') {
+        return;
+    }
+    if (e.ctrlKey && e.key === 'y') {
         e.preventDefault();
         zoomRedo();
+        return;
+    }
+
+    // ? : ショートカット一覧モーダル（Shift+/ で発火）
+    if (e.key === '?') {
+        e.preventDefault();
+        showShortcutsModal();
+        return;
+    }
+
+    // Esc: モード離脱（Box Zoom / Time Shift）
+    if (e.key === 'Escape') {
+        if (state.brushMode) { exitBoxZoom(); return; }
+        if (state.shiftMode) { exitShiftMode(); return; }
+    }
+
+    // 単打キー: B / T / R（修飾キーなしのときだけ）
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        if (e.key === 'b' || e.key === 'B') {
+            e.preventDefault();
+            toggleBoxZoom();
+            return;
+        }
+        if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            // Sub ファイルが無いときは何もしない（enterShiftMode内でも同様にガード）
+            toggleShiftMode();
+            return;
+        }
+        if (e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+            resetZoom();
+            return;
+        }
     }
 });
+
+/**
+ * キーボードショートカット一覧を表示するモーダル。
+ * 既存の `showCustomRAMHelp()` と同じ overlay ID（debug-modal-overlay）を使うことで、
+ * どのモーダルも同時には1つしか開かない設計にしている。
+ */
+function showShortcutsModal() {
+    const rows = [
+        ['?',              'このショートカット一覧を表示'],
+        ['Esc',            'Box Zoom / Time Shift モードを抜ける'],
+        ['B',              'Box Zoom モードを切り替え'],
+        ['T',              'Time Shift モードを切り替え（Sub ファイルが必要）'],
+        ['R',              'ズームをリセット（全範囲表示）'],
+        ['Ctrl + Z',       'ズーム操作を1つ戻す'],
+        ['Ctrl + Y',       'ズーム操作を1つやり直す'],
+        ['Ctrl + S',       'チャートをPNGとして保存'],
+        ['Ctrl + Shift + C', 'チャートをクリップボードにコピー'],
+    ];
+
+    let html = `<h3 id="shortcuts-modal-title" style="margin:0 0 12px;color:#818cf8;">キーボードショートカット</h3>`;
+    html += `<p style="color:#a0a5b1;font-size:11px;margin:0 0 10px;">入力欄にフォーカスがあるときは単打キー (B / T / R / ?) は無効になります。</p>`;
+    html += `<table style="border-collapse:collapse;width:100%;font-size:12px;">`;
+    for (const [key, desc] of rows) {
+        html += `<tr>`
+            + `<td style="padding:5px 8px;color:#6ee7b7;font-family:monospace;white-space:nowrap;vertical-align:top;">${esc(key)}</td>`
+            + `<td style="padding:5px 8px;color:#f0f0f0;">${esc(desc)}</td>`
+            + `</tr>`;
+    }
+    html += `</table>`;
+
+    // 既存モーダルがあれば閉じる
+    let overlay = document.getElementById('debug-modal-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'debug-modal-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.setAttribute('aria-labelledby', 'shortcuts-modal-title');
+    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
+    modal.innerHTML = html
+        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#debug-modal-overlay').remove()" `
+        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
+}
+
+// ツールバーの ? ボタン（追加予定）からもモーダルを開けるようにする
+$('shortcuts-help-btn')?.addEventListener('click', showShortcutsModal);
 
 // ─────────────────────────────────────────────────────────────
 // Time shift controls
