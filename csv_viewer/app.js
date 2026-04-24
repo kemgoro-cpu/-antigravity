@@ -70,11 +70,53 @@ function setupModalA11y(overlay, modalEl) {
     };
     document.addEventListener('keydown', escHandler, true);
 
+    // フォーカストラップ: Tab / Shift+Tab をモーダル内に閉じ込める
+    // モーダルを開いている間はモーダル外にタブ移動できないようにする（スクリーンリーダー対策）
+    const trapHandler = (e) => {
+        // IME変換中の Tab は素通し（日本語入力との衝突を避ける）
+        if (e.isComposing) return;
+        if (e.key !== 'Tab') return;
+
+        // Tab が押されるたびにリストを再取得（モーダル内容が動的に変わる場合に対応）
+        const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        const candidates = Array.from(modalEl.querySelectorAll(focusableSelector)).filter(el =>
+            // disabled な要素と、非表示（offsetParent===null）な要素は除外
+            !el.disabled && el.offsetParent !== null
+        );
+
+        if (candidates.length === 0) {
+            // フォーカス可能な要素が無いときはブラウザのデフォルト動作だけ止める
+            e.preventDefault();
+            return;
+        }
+
+        const first = candidates[0];
+        const last  = candidates[candidates.length - 1];
+        const isInsideModal = modalEl.contains(document.activeElement);
+
+        if (e.shiftKey) {
+            // Shift+Tab: 先頭にいる（またはモーダル外）→ 末尾に折り返す
+            if (!isInsideModal || document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            // Tab: 末尾にいる（またはモーダル外）→ 先頭に折り返す
+            if (!isInsideModal || document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    };
+    document.addEventListener('keydown', trapHandler);
+
     // overlay が DOM から外れたら後始末: リスナー解除＋フォーカス復帰
+    // trapHandler も必ず解除してメモリリークを防ぐ
     const observer = new MutationObserver(() => {
         if (!document.body.contains(overlay)) {
             observer.disconnect();
             document.removeEventListener('keydown', escHandler, true);
+            document.removeEventListener('keydown', trapHandler);
             if (prevFocus && typeof prevFocus.focus === 'function') {
                 // 元の要素がまだ DOM にあれば戻す
                 if (document.body.contains(prevFocus)) prevFocus.focus();
@@ -1571,7 +1613,8 @@ function showDebugModal(fileId) {
     const td = f.timeData;
 
     // --- セクション1: headerInfo（パース設定）---
-    let html = `<h3 style="margin:0 0 12px;color:#818cf8;">Parse Info</h3>`;
+    // id を振ることで aria-labelledby からモーダルタイトルを参照できる
+    let html = `<h3 id="debug-modal-title" style="margin:0 0 12px;color:#818cf8;">Parse Info</h3>`;
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;margin-bottom:16px;">`;
     const infoRows = [
         ['ファイル名', f.name],
@@ -1640,18 +1683,20 @@ function showDebugModal(fileId) {
     }
 
     // --- モーダル表示 ---
-    let overlay = document.getElementById('debug-modal-overlay');
+    let overlay = document.getElementById('app-modal-overlay');
     if (overlay) overlay.remove();
 
     overlay = document.createElement('div');
-    overlay.id = 'debug-modal-overlay';
+    overlay.id = 'app-modal-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
     const modal = document.createElement('div');
+    // aria-labelledby でスクリーンリーダーがモーダルのタイトルを読み上げられるようにする
+    modal.setAttribute('aria-labelledby', 'debug-modal-title');
     modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:640px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
     modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#debug-modal-overlay').remove()" `
+        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
         + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
 
     overlay.appendChild(modal);
@@ -2223,7 +2268,8 @@ $('custom-ram-help')?.addEventListener('keydown', e => {
 });
 
 function showCustomRAMHelp() {
-    let html = `<h3 style="margin:0 0 12px;color:#818cf8;">Custom RAM 関数リファレンス</h3>`;
+    // id を振ることで aria-labelledby からモーダルタイトルを参照できる
+    let html = `<h3 id="custom-ram-help-title" style="margin:0 0 12px;color:#818cf8;">Custom RAM 関数リファレンス</h3>`;
 
     // 演算子
     html += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">演算子</h4>`;
@@ -2289,17 +2335,19 @@ function showCustomRAMHelp() {
     html += `</div>`;
 
     // モーダル表示
-    let overlay = document.getElementById('debug-modal-overlay');
+    let overlay = document.getElementById('app-modal-overlay');
     if (overlay) overlay.remove();
     overlay = document.createElement('div');
-    overlay.id = 'debug-modal-overlay';
+    overlay.id = 'app-modal-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
     const modal = document.createElement('div');
+    // aria-labelledby でスクリーンリーダーがモーダルのタイトルを読み上げられるようにする
+    modal.setAttribute('aria-labelledby', 'custom-ram-help-title');
     modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:520px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
     modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#debug-modal-overlay').remove()" `
+        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
         + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
@@ -3367,29 +3415,33 @@ function zoomRedo() {
 }
 
 // キーボードショートカット（全体）
-// - 入力欄にフォーカスがある場合は大半を無効にする（テキスト編集との衝突回避）
-// - ただし Ctrl+S / Ctrl+Shift+C はブラウザ既定の挙動を抑止したいのでガードの外で処理
+// - 入力欄にフォーカスがある場合、またはモーダルが開いている場合はすべて無効にする
+// - Ctrl+S / Ctrl+Shift+C も入力欄・モーダル中では無効（ブラウザ既定に任せる）
 document.addEventListener('keydown', e => {
     const tag = e.target.tagName;
     const inInput = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT');
-    const modalOpen = !!document.getElementById('debug-modal-overlay');
+    const modalOpen = !!document.getElementById('app-modal-overlay');
 
-    // ── 入力欄でも動くショートカット（グローバル優先） ──
-    // Ctrl+S: PNG保存（ブラウザの「ページ保存」を上書き）
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        if (!dom.exportPng.disabled) exportChartAsPNG();
-        return;
-    }
-    // Ctrl+Shift+C: チャートをクリップボードにコピー
-    if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'C' || e.key === 'c')) {
-        e.preventDefault();
-        if (!dom.copyChart.disabled) copyChartToClipboard();
-        return;
-    }
-
-    // ── 以下は入力欄・モーダル中では無効 ──
+    // 入力欄・モーダル中はここより下のショートカット全部無効
+    // （Custom RAM 式を編集中に Ctrl+S で誤保存、モーダル中に誤操作するのを防ぐ）
     if (inInput || modalOpen) return;
+
+    // Ctrl+S: PNG保存（チャートが保存可能なときだけブラウザの「ページ保存」を上書き）
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
+        if (!dom.exportPng.disabled) {
+            e.preventDefault();
+            exportChartAsPNG();
+        }
+        return;
+    }
+    // Ctrl+Shift+C: クリップボードコピー（保存可能なときだけ preventDefault）
+    if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'C' || e.key === 'c')) {
+        if (!dom.copyChart.disabled) {
+            e.preventDefault();
+            copyChartToClipboard();
+        }
+        return;
+    }
 
     // Ctrl+Z / Ctrl+Y: ズーム Undo/Redo（従来互換）
     if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
@@ -3439,7 +3491,7 @@ document.addEventListener('keydown', e => {
 
 /**
  * キーボードショートカット一覧を表示するモーダル。
- * 既存の `showCustomRAMHelp()` と同じ overlay ID（debug-modal-overlay）を使うことで、
+ * 既存の `showCustomRAMHelp()` と同じ overlay ID（app-modal-overlay）を使うことで、
  * どのモーダルも同時には1つしか開かない設計にしている。
  */
 function showShortcutsModal() {
@@ -3467,11 +3519,11 @@ function showShortcutsModal() {
     html += `</table>`;
 
     // 既存モーダルがあれば閉じる
-    let overlay = document.getElementById('debug-modal-overlay');
+    let overlay = document.getElementById('app-modal-overlay');
     if (overlay) overlay.remove();
 
     overlay = document.createElement('div');
-    overlay.id = 'debug-modal-overlay';
+    overlay.id = 'app-modal-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
@@ -3479,7 +3531,7 @@ function showShortcutsModal() {
     modal.setAttribute('aria-labelledby', 'shortcuts-modal-title');
     modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
     modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#debug-modal-overlay').remove()" `
+        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
         + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
 
     overlay.appendChild(modal);

@@ -705,10 +705,10 @@ textarea:focus-visible,
     box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
 }
 
-/* 既存のテキスト入力系は outline を消していたので、focus-visible では再度表示する */
+/* 既存のテキスト入力系は outline-offset だけ上書きする。
+   outline の色・太さは親セレクタ（button:focus-visible, input:focus-visible...）が適用されるので重複して書かない */
 input[type="text"]:focus-visible,
 input[type="number"]:focus-visible,
 .custom-ram-input:focus-visible {
-    outline: 2px solid var(--accent);
     outline-offset: 1px;
 }
