@@ -635,7 +635,7 @@ let _pendingSettings = null;
 //   role: 'main' | 'sub'
 //   offset: number (seconds, for sub files)
 //   file: File object reference (for lazy column loading)
-//   headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit } (cached parse metadata)
+//   headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding } (cached parse metadata)
 
 // ─────────────────────────────────────────────────────────────
 // チャンネルマージ管理ヘルパー
@@ -1035,44 +1035,107 @@ function convertWhitespaceToTabs(text) {
         .join('\n');
 }
 
-function parseCSV(file) {
+function decodeBytes(bytes, encoding, fatal = false) {
+    try {
+        return {
+            ok: true,
+            text: new TextDecoder(encoding, { fatal }).decode(bytes),
+        };
+    } catch (e) {
+        return { ok: false, text: '', error: e };
+    }
+}
+
+function countPattern(text, pattern) {
+    const matches = text.match(pattern);
+    return matches ? matches.length : 0;
+}
+
+function scoreDecodedText(text) {
+    const replacementChars = countPattern(text, /\uFFFD/g);
+    const japaneseChars = countPattern(text, /[\u3040-\u30ff\u3400-\u9fff]/g);
+    const mojibakeHints = countPattern(text, /[縺繧譁荳蜷逕謗髢陦]/g);
+    return japaneseChars * 2 - replacementChars * 80 - mojibakeHints * 3;
+}
+
+function detectTextEncoding(bytes) {
+    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+        return 'utf-8';
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+        return 'utf-16le';
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+        return 'utf-16be';
+    }
+
+    const utf8 = decodeBytes(bytes, 'utf-8', true);
+    if (!utf8.ok) return 'shift-jis';
+
+    const sjis = decodeBytes(bytes, 'shift-jis');
+    if (!sjis.ok) return 'utf-8';
+
+    // Valid UTF-8 is preferred; only override it when it strongly looks like mojibake.
+    return scoreDecodedText(utf8.text) < -5 && scoreDecodedText(sjis.text) > scoreDecodedText(utf8.text)
+        ? 'shift-jis'
+        : 'utf-8';
+}
+
+async function detectFileEncoding(file) {
+    const sampleSize = Math.min(file.size, 256 * 1024);
+    const bytes = new Uint8Array(await file.slice(0, sampleSize).arrayBuffer());
+    return detectTextEncoding(bytes);
+}
+
+async function readFileAsDecodedText(file, encoding) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const decoded = decodeBytes(bytes, encoding);
+    if (!decoded.ok) throw decoded.error || new Error(`Unsupported encoding: ${encoding}`);
+    return decoded.text;
+}
+
+async function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     const trn = isTrnFile(file.name);
-    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, format=${trn ? 'TRN(whitespace)' : 'CSV(auto)'})`);
+    let encoding = 'utf-8';
+    try {
+        encoding = await detectFileEncoding(file);
+    } catch (e) {
+        showError(`File read error: ${file.name}`, e.stack || e.message);
+        return;
+    }
+    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, format=${trn ? 'TRN(whitespace)' : 'CSV(auto)'}, encoding=${encoding})`);
 
     if (trn) {
         // TRNファイル: テキストを読み込んで空白→タブに変換してからパースする
-        const reader = new FileReader();
-        reader.onload = () => {
-            try {
-                const converted = convertWhitespaceToTabs(reader.result);
-                // Phase 1: Preview parse（先頭50行だけ抽出してヘッダー検出）
-                const previewLines = converted.split('\n').slice(0, 50).join('\n');
-                const previewRes = Papa.parse(previewLines, {
-                    delimiter: '\t',
-                    header: false,
-                    dynamicTyping: false,
-                    skipEmptyLines: true,
-                });
-                // 変換済みテキストを保持するため、fileの代わりにconvertedを渡す
-                onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t');
-            } catch (e) {
-                showError(`TRN parse failed: ${file.name}`, e.stack || e.message);
-            }
-        };
-        reader.onerror = () => showError(`File read error: ${file.name}`, reader.error?.message);
-        reader.readAsText(file);
+        try {
+            const text = await readFileAsDecodedText(file, encoding);
+            const converted = convertWhitespaceToTabs(text);
+            // Phase 1: Preview parse（先頭50行だけ抽出してヘッダー検出）
+            const previewLines = converted.split('\n').slice(0, 50).join('\n');
+            const previewRes = Papa.parse(previewLines, {
+                delimiter: '\t',
+                header: false,
+                dynamicTyping: false,
+                skipEmptyLines: true,
+            });
+            // 変換済みテキストを保持するため、fileの代わりにconvertedを渡す
+            onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding);
+        } catch (e) {
+            showError(`TRN parse failed: ${file.name}`, e.stack || e.message);
+        }
     } else {
         // CSVファイル: PapaParseに直接Fileオブジェクトを渡す
         try {
             Papa.parse(file, {
+                encoding,
                 header: false,
                 dynamicTyping: false,
                 skipEmptyLines: true,
                 preview: 50,
                 complete: res => {
                     try {
-                        onHeaderParsed(fileId, file.name, file, res.data, undefined);
+                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding);
                     } catch (e) {
                         showError(`Header parse failed: ${file.name}`, e.stack || e.message);
                     }
@@ -1144,7 +1207,7 @@ function toNumber(v) {
  * Extracts column metadata and stores File reference for lazy loading.
  * Does NOT load any column data yet — only time data is loaded via streaming.
  */
-function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
+function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
     const { nameRow, unitRow } = detectHeaderRows(raw);
     const dataStart = Math.max(nameRow, unitRow >= 0 ? unitRow : nameRow) + 1;
 
@@ -1193,6 +1256,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
     try {
         Papa.parse(file, {
             delimiter: delimiter,
+            encoding,
             header: false,
             dynamicTyping: false,
             skipEmptyLines: true,
@@ -1217,7 +1281,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter) {
                         colData: {},  // empty — columns loaded on demand
                         role, offset: 0,
                         file,         // File reference for lazy column loading
-                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter },
+                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding },
                     };
 
                     // ファイル色を自動割り当て（単色モード用）
@@ -1301,7 +1365,7 @@ function loadColumnsForFile(fileId, colNames) {
         const colNamesStr = stillNeeded.map(c => c.name).join(', ');
         console.log(`[CSV Viewer] Loading columns [${colNamesStr}] from ${f.name}`);
 
-        const { dataStart, timeIdx, delimiter: delim } = f.headerInfo;
+        const { dataStart, timeIdx, delimiter: delim, encoding } = f.headerInfo;
 
         return new Promise(resolve => {
             try {
@@ -1312,6 +1376,7 @@ function loadColumnsForFile(fileId, colNames) {
 
                 Papa.parse(f.file, {
                     delimiter: delim,
+                    encoding,
                     header: false,
                     dynamicTyping: false,
                     skipEmptyLines: true,
