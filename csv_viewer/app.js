@@ -32,6 +32,26 @@ function showError(message, detail) {
     setTimeout(() => { if (toast.parentNode) toast.remove(); }, 15000);
 }
 
+function showWarning(message, detail) {
+    console.warn(`[CSV Viewer] ${message}`, detail || '');
+
+    let container = document.getElementById('error-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'error-toast-container';
+        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = 'background:#2a1f0c;border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;color:#fcd34d;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
+    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;color:#fbbf24;">${esc(message)}</div>`
+        + (detail ? `<div style="font-size:11px;color:#fde68a;opacity:0.85;word-break:break-all;max-height:80px;overflow:auto;">${esc(String(detail))}</div>` : '');
+    toast.addEventListener('click', () => toast.remove());
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 9000);
+}
+
 // Catch all unhandled errors
 window.addEventListener('error', e => {
     showError('Unhandled error', `${e.message}\n at ${e.filename}:${e.lineno}:${e.colno}`);
@@ -626,16 +646,17 @@ const state = {
     bitChannels:    new Set(), // Bitモード（0/1表示、グリッド高さ縮小）のチャンネル名
     monoColorMode:  false,     // 単色モード: trueならファイル単位の色で描画
     fileColors:     {},        // fileId → '#RRGGBB' ファイルごとの色（単色モード用）
+    parseJobs:      new Map(), // jobId → { name, detail, cancelled }
 };
 
 // 復元待ちの設定（ファイル読込後に適用される）
 let _pendingSettings = null;
 
-// FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, headerInfo }
+// FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, previewRows, headerInfo }
 //   role: 'main' | 'sub'
 //   offset: number (seconds, for sub files)
 //   file: File object reference (for lazy column loading)
-//   headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding } (cached parse metadata)
+//   headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding, encodingMode } (cached parse metadata)
 
 // ─────────────────────────────────────────────────────────────
 // チャンネルマージ管理ヘルパー
@@ -717,6 +738,7 @@ const dom = {
     dropZone:   $('drop-zone'),
     fileInput:  $('file-input'),
     fileList:   $('file-list'),
+    parseStatusList: $('parse-status-list'),
     colSearch:  $('column-search'),
     colList:    $('column-list'),
     colHdr:     $('channel-source-label'),
@@ -729,6 +751,8 @@ const dom = {
     hintEl:     $('toolbar-hint'),
     nameRow:    $('name-row-idx'),
     unitRow:    $('unit-row-idx'),
+    encoding:   $('encoding-mode'),
+    parsePreview: $('parse-preview'),
     sampling:   $('sampling-mode'),
     customName: $('custom-ram-name'),
     customExpr: $('custom-ram-expr'),
@@ -741,6 +765,10 @@ const dom = {
     copyChart:  $('copy-chart-btn'),
     exportSettings: $('export-settings-btn'),
     importSettings: $('import-settings-btn'),
+    presetSelect: $('settings-preset-select'),
+    presetSave: $('preset-save-btn'),
+    presetLoad: $('preset-load-btn'),
+    presetDelete: $('preset-delete-btn'),
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -999,7 +1027,58 @@ function handleFiles(files) {
     Array.from(files).forEach(f => {
         const ext = f.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
         if (SUPPORTED_EXTENSIONS.includes(ext)) parseCSV(f);
-        else alert(`未対応の形式です: ${f.name}\nCSV または TRN ファイルをアップロードしてください。`);
+        else showError(`未対応の形式です: ${f.name}`, 'CSV または TRN ファイルをアップロードしてください。');
+    });
+}
+
+function createParseJob(name, detail) {
+    const id = 'job_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    const job = { id, name, detail, rows: 0, cancelled: false };
+    state.parseJobs.set(id, job);
+    renderParseJobs();
+    return job;
+}
+
+function updateParseJob(job, detail, rows) {
+    if (!job || !state.parseJobs.has(job.id)) return;
+    if (detail !== undefined) job.detail = detail;
+    if (rows !== undefined) job.rows = rows;
+    renderParseJobs();
+}
+
+function finishParseJob(job) {
+    if (!job) return;
+    state.parseJobs.delete(job.id);
+    renderParseJobs();
+}
+
+function renderParseJobs() {
+    if (!dom.parseStatusList) return;
+    dom.parseStatusList.innerHTML = '';
+    for (const job of state.parseJobs.values()) {
+        const rowText = job.rows ? ` / ${job.rows.toLocaleString()} rows` : '';
+        const el = document.createElement('div');
+        el.className = 'parse-job';
+        el.innerHTML = `
+            <div class="parse-job-top">
+                <span class="parse-job-name" title="${esc(job.name)}">${esc(job.name)}</span>
+                <button class="btn-secondary parse-job-cancel" data-cancel-job="${job.id}" title="読み込みをキャンセル">
+                    <i class='bx bx-x' aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="parse-job-detail">${esc(job.detail + rowText)}</div>
+            <div class="parse-job-bar"><span></span></div>
+        `;
+        dom.parseStatusList.appendChild(el);
+    }
+    dom.parseStatusList.querySelectorAll('[data-cancel-job]').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const job = state.parseJobs.get(e.currentTarget.dataset.cancelJob);
+            if (job) {
+                job.cancelled = true;
+                updateParseJob(job, 'Cancelling...', job.rows);
+            }
+        });
     });
 }
 
@@ -1023,63 +1102,14 @@ function isTrnFile(fileName) {
     return fileName.toLowerCase().endsWith('.trn');
 }
 
-/**
- * TRNファイル用: パイプ記号(|)を除去し、連続する空白をタブ1つに置換する。
- * PapaParseは空白区切りを直接サポートしていないため、タブ区切りに変換する。
- * パイプはTRNヘッダーの装飾記号で、データ行には存在しないため、
- * 残すと列数がズレてしまう。
- */
-function convertWhitespaceToTabs(text) {
-    return text.split('\n')
-        .map(line => line.replace(/\|/g, ' ').trim().replace(/\s+/g, '\t'))
-        .join('\n');
-}
-
-function decodeBytes(bytes, encoding, fatal = false) {
-    try {
-        return {
-            ok: true,
-            text: new TextDecoder(encoding, { fatal }).decode(bytes),
-        };
-    } catch (e) {
-        return { ok: false, text: '', error: e };
-    }
-}
-
-function countPattern(text, pattern) {
-    const matches = text.match(pattern);
-    return matches ? matches.length : 0;
-}
-
-function scoreDecodedText(text) {
-    const replacementChars = countPattern(text, /\uFFFD/g);
-    const japaneseChars = countPattern(text, /[\u3040-\u30ff\u3400-\u9fff]/g);
-    const mojibakeHints = countPattern(text, /[縺繧譁荳蜷逕謗髢陦]/g);
-    return japaneseChars * 2 - replacementChars * 80 - mojibakeHints * 3;
-}
-
-function detectTextEncoding(bytes) {
-    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-        return 'utf-8';
-    }
-    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-        return 'utf-16le';
-    }
-    if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-        return 'utf-16be';
-    }
-
-    const utf8 = decodeBytes(bytes, 'utf-8', true);
-    if (!utf8.ok) return 'shift-jis';
-
-    const sjis = decodeBytes(bytes, 'shift-jis');
-    if (!sjis.ok) return 'utf-8';
-
-    // Valid UTF-8 is preferred; only override it when it strongly looks like mojibake.
-    return scoreDecodedText(utf8.text) < -5 && scoreDecodedText(sjis.text) > scoreDecodedText(utf8.text)
-        ? 'shift-jis'
-        : 'utf-8';
-}
+const {
+    convertWhitespaceToTabs,
+    decodeBytes,
+    detectTextEncoding,
+    detectHeaderRows: detectHeaderRowsBase,
+    isTimeHeader,
+    toNumber,
+} = window.CSVUtils;
 
 async function detectFileEncoding(file) {
     const sampleSize = Math.min(file.size, 256 * 1024);
@@ -1094,23 +1124,34 @@ async function readFileAsDecodedText(file, encoding) {
     return decoded.text;
 }
 
+function getRequestedEncoding() {
+    return dom.encoding?.value || 'auto';
+}
+
 async function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     const trn = isTrnFile(file.name);
+    const requestedEncoding = getRequestedEncoding();
+    const parseJob = createParseJob(file.name, 'Detecting encoding...');
     let encoding = 'utf-8';
     try {
-        encoding = await detectFileEncoding(file);
+        encoding = requestedEncoding === 'auto'
+            ? await detectFileEncoding(file)
+            : requestedEncoding;
     } catch (e) {
+        finishParseJob(parseJob);
         showError(`File read error: ${file.name}`, e.stack || e.message);
         return;
     }
-    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, format=${trn ? 'TRN(whitespace)' : 'CSV(auto)'}, encoding=${encoding})`);
+    console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, format=${trn ? 'TRN(whitespace)' : 'CSV(auto)'}, encoding=${encoding}, mode=${requestedEncoding})`);
 
     if (trn) {
         // TRNファイル: テキストを読み込んで空白→タブに変換してからパースする
         try {
+            updateParseJob(parseJob, 'Decoding TRN...', 0);
             const text = await readFileAsDecodedText(file, encoding);
             const converted = convertWhitespaceToTabs(text);
+            updateParseJob(parseJob, 'Parsing header...', 0);
             // Phase 1: Preview parse（先頭50行だけ抽出してヘッダー検出）
             const previewLines = converted.split('\n').slice(0, 50).join('\n');
             const previewRes = Papa.parse(previewLines, {
@@ -1120,13 +1161,15 @@ async function parseCSV(file) {
                 skipEmptyLines: true,
             });
             // 変換済みテキストを保持するため、fileの代わりにconvertedを渡す
-            onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding);
+            onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding, requestedEncoding, parseJob);
         } catch (e) {
+            finishParseJob(parseJob);
             showError(`TRN parse failed: ${file.name}`, e.stack || e.message);
         }
     } else {
         // CSVファイル: PapaParseに直接Fileオブジェクトを渡す
         try {
+            updateParseJob(parseJob, 'Parsing header...', 0);
             Papa.parse(file, {
                 encoding,
                 header: false,
@@ -1135,71 +1178,50 @@ async function parseCSV(file) {
                 preview: 50,
                 complete: res => {
                     try {
-                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding);
+                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding, requestedEncoding, parseJob);
                     } catch (e) {
+                        finishParseJob(parseJob);
                         showError(`Header parse failed: ${file.name}`, e.stack || e.message);
                     }
                 },
                 error: err => {
+                    finishParseJob(parseJob);
                     showError(`CSV parse error: ${file.name}`, err.message || String(err));
                 },
             });
         } catch (e) {
+            finishParseJob(parseJob);
             showError(`Failed to start parsing: ${file.name}`, e.stack || e.message);
         }
     }
 }
 
-/**
- * セル文字列がTime列かどうかを判定する。
- * "Time", "time", "| Time", "|Time", "時間" などにマッチする。
- * パイプ記号(|)やスペースを除去してから判定する。
- */
-function isTimeHeader(cell) {
-    if (typeof cell !== 'string') return false;
-    const cleaned = cell.replace(/[|\s]/g, '').toLowerCase();
-    return cleaned.includes('time') || cell.includes('時間');
-}
-
 function detectHeaderRows(raw) {
-    const scanLimit = Math.min(50, raw.length);
-    for (let r = 0; r < scanLimit; r++) {
-        const row = raw[r];
-        if (row.length < 2) continue;
-        // Partial match: any cell containing "time" or "時間"（パイプ付きも対応）
-        const hasTime = row.some(c => isTimeHeader(c));
-        if (!hasTime) continue;
-        const nameRow = r;
-        let unitRow = -1;
-        if (r + 1 < raw.length) {
-            const next = raw[r + 1];
-            const timeUnits = ['s', 'ms', 'sec', 'min'];
-            const hasTimeUnit = next.some(c =>
-                typeof c === 'string' && timeUnits.includes(c.trim().toLowerCase())
-            );
-            if (hasTimeUnit) {
-                unitRow = r + 1;
-            } else {
-                // Unit row not detected — default to the row right after channel names
-                unitRow = r + 1;
-            }
-        }
-        return { nameRow, unitRow };
-    }
-    return {
-        nameRow: parseInt(dom.nameRow.value, 10) - 1,
-        unitRow: parseInt(dom.unitRow.value, 10) - 1,
-    };
+    return detectHeaderRowsBase(
+        raw,
+        parseInt(dom.nameRow.value, 10) - 1,
+        parseInt(dom.unitRow.value, 10) - 1
+    );
 }
 
-function toNumber(v) {
-    if (typeof v === 'number') return v;
-    if (typeof v !== 'string') return NaN;
-    const u = v.trim().toUpperCase();
-    if (u === 'TRUE')  return 1;
-    if (u === 'FALSE') return 0;
-    const n = parseFloat(v);
-    return isNaN(n) ? NaN : n;
+function describeHeaderParseIssue(raw, nameRow, unitRow, dataStart) {
+    if (!raw || raw.length === 0) {
+        return 'ファイルの先頭からCSV行を読み取れませんでした。文字コード、区切り文字、空ファイルでないことを確認してください。';
+    }
+    if (nameRow < 0 || nameRow >= raw.length) {
+        return `Name Row (${nameRow + 1}) が読み取った範囲外です。Settings の Name Row を確認してください。`;
+    }
+    const headers = raw[nameRow] || [];
+    if (headers.length < 2) {
+        return `Name Row (${nameRow + 1}) に2列以上のヘッダーがありません。ヘッダー行を確認してください。`;
+    }
+    if (unitRow >= raw.length) {
+        return `Unit Row (${unitRow + 1}) が読み取った範囲外です。Settings の Unit Row を確認してください。`;
+    }
+    if (raw.length <= dataStart) {
+        return `データ開始行 (${dataStart + 1}) 以降の行がありません。Name Row / Unit Row の設定を確認してください。`;
+    }
+    return '';
 }
 
 /**
@@ -1207,12 +1229,20 @@ function toNumber(v) {
  * Extracts column metadata and stores File reference for lazy loading.
  * Does NOT load any column data yet — only time data is loaded via streaming.
  */
-function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
+function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodingMode, parseJob) {
+    if (parseJob?.cancelled) {
+        finishParseJob(parseJob);
+        showWarning(`読み込みをキャンセルしました: ${fileName}`);
+        return;
+    }
+
     const { nameRow, unitRow } = detectHeaderRows(raw);
     const dataStart = Math.max(nameRow, unitRow >= 0 ? unitRow : nameRow) + 1;
 
-    if (raw.length <= dataStart) {
-        alert(`Could not parse "${fileName}".\nTry adjusting Name/Unit Row in Settings.`);
+    const parseIssue = describeHeaderParseIssue(raw, nameRow, unitRow, dataStart);
+    if (parseIssue) {
+        finishParseJob(parseJob);
+        showError(`CSVヘッダーを読み取れません: ${fileName}`, parseIssue);
         return;
     }
 
@@ -1223,7 +1253,13 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
     const units   = unitRow >= 0 ? raw[unitRow] : Array(headers.length).fill('');
 
     let timeIdx = headers.findIndex(h => isTimeHeader(h));
-    if (timeIdx < 0) timeIdx = 0;
+    if (timeIdx < 0) {
+        timeIdx = 0;
+        showWarning(
+            `Time列が見つかりません: ${fileName}`,
+            '先頭列を時間軸として使用します。意図と違う場合は、時間列のヘッダーに Time または 時間 を含めてください。'
+        );
+    }
 
     const timeUnit = unitRow >= 0 ? (raw[unitRow][timeIdx] || '').trim().toLowerCase() : '';
 
@@ -1243,6 +1279,15 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
         });
     }
 
+    if (columns.length === 0) {
+        finishParseJob(parseJob);
+        showError(
+            `チャンネルが見つかりません: ${fileName}`,
+            `Name Row (${nameRow + 1}) に Time 列以外のチャンネル名がありません。ヘッダー行を確認してください。`
+        );
+        return;
+    }
+
     const hasMain   = Object.values(state.files).some(f => f.role === 'main');
     const role      = hasMain ? 'sub' : 'main';
     const shortName = fileName.length > 22 ? fileName.slice(0, 20) + '…' : fileName;
@@ -1252,6 +1297,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
     let rowIdx = 0;
 
     console.log(`[CSV Viewer] Phase 2: streaming time data for ${fileName} (dataStart=${dataStart}, timeIdx=${timeIdx})`);
+    updateParseJob(parseJob, 'Loading time data...', 0);
 
     try {
         Papa.parse(file, {
@@ -1260,8 +1306,15 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
             header: false,
             dynamicTyping: false,
             skipEmptyLines: true,
-            step: function(result) {
+            step: function(result, parser) {
+                if (parseJob?.cancelled) {
+                    parser.abort();
+                    finishParseJob(parseJob);
+                    showWarning(`読み込みをキャンセルしました: ${fileName}`);
+                    return;
+                }
                 rowIdx++;
+                if (rowIdx % 2000 === 0) updateParseJob(parseJob, 'Loading time data...', rowIdx);
                 if (rowIdx <= dataStart) return; // skip header rows
                 const row = result.data;
                 if (!row) return;
@@ -1271,8 +1324,17 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
                 }
             },
             complete: function() {
+                if (parseJob?.cancelled) return;
                 try {
                     console.log(`[CSV Viewer] Time data loaded: ${timeChunks.length} points for ${fileName}`);
+                    finishParseJob(parseJob);
+                    if (timeChunks.length === 0) {
+                        showError(
+                            `時間データが見つかりません: ${fileName}`,
+                            `Time列 (${timeIdx + 1}列目) に数値として読めるデータがありません。データ開始行、区切り文字、時間列を確認してください。`
+                        );
+                        return;
+                    }
                     const timeData = new Float64Array(timeChunks.length);
                     for (let i = 0; i < timeChunks.length; i++) timeData[i] = timeChunks[i];
 
@@ -1281,8 +1343,10 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
                         colData: {},  // empty — columns loaded on demand
                         role, offset: 0,
                         file,         // File reference for lazy column loading
-                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding },
+                        previewRows: raw.slice(0, Math.min(raw.length, dataStart + 4)),
+                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding, encodingMode },
                     };
+                    updateParsePreview(state.files[fileId]);
 
                     // ファイル色を自動割り当て（単色モード用）
                     if (!state.fileColors[fileId]) {
@@ -1310,10 +1374,12 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding) {
                 }
             },
             error: err => {
+                finishParseJob(parseJob);
                 showError(`Time data parse error: ${fileName}`, err.message || String(err));
             },
         });
     } catch (e) {
+        finishParseJob(parseJob);
         showError(`Failed to start time streaming: ${fileName}`, e.stack || e.message);
     }
 }
@@ -1343,7 +1409,7 @@ function loadColumnsForFile(fileId, colNames) {
 
     // If there's already a parse in progress for this file, chain after it
     const prev = _parseQueue.get(fileId) || Promise.resolve();
-    const job = prev.then(async () => {
+    const queueJob = prev.then(async () => {
         // Re-check which columns still need loading (previous parse may have loaded some)
         const stillNeeded = colsToLoad.filter(col => !f.colData[col.id]);
         if (stillNeeded.length === 0) return;
@@ -1364,6 +1430,7 @@ function loadColumnsForFile(fileId, colNames) {
 
         const colNamesStr = stillNeeded.map(c => c.name).join(', ');
         console.log(`[CSV Viewer] Loading columns [${colNamesStr}] from ${f.name}`);
+        const loadJob = createParseJob(f.name, `Loading columns: ${colNamesStr}`);
 
         const { dataStart, timeIdx, delimiter: delim, encoding } = f.headerInfo;
 
@@ -1380,8 +1447,16 @@ function loadColumnsForFile(fileId, colNames) {
                     header: false,
                     dynamicTyping: false,
                     skipEmptyLines: true,
-                    step: function(result) {
+                    step: function(result, parser) {
+                        if (loadJob.cancelled) {
+                            parser.abort();
+                            finishParseJob(loadJob);
+                            showWarning(`カラム読み込みをキャンセルしました: ${f.name}`);
+                            resolve();
+                            return;
+                        }
                         rowIdx++;
+                        if (rowIdx % 2000 === 0) updateParseJob(loadJob, `Loading columns: ${colNamesStr}`, rowIdx);
                         if (rowIdx <= dataStart) return;
                         const row = result.data;
                         if (!row) return;
@@ -1392,7 +1467,9 @@ function loadColumnsForFile(fileId, colNames) {
                         }
                     },
                     complete: function() {
+                        if (loadJob.cancelled) return;
                         try {
+                            finishParseJob(loadJob);
                             for (const col of stillNeeded) {
                                 f.colData[col.id] = new Float32Array(tempArrs[col.id]);
                             }
@@ -1405,11 +1482,13 @@ function loadColumnsForFile(fileId, colNames) {
                         resolve();
                     },
                     error: function(err) {
+                        finishParseJob(loadJob);
                         showError(`Column parse error: ${f.name}`, err.message || String(err));
                         resolve();
                     },
                 });
             } catch (e) {
+                finishParseJob(loadJob);
                 showError(`Failed to start column loading: ${f.name}`, e.stack || e.message);
                 resolve();
             }
@@ -1417,7 +1496,7 @@ function loadColumnsForFile(fileId, colNames) {
     });
 
     // Clean up queue entry when done
-    const cleanup = job.then(() => {
+    const cleanup = queueJob.then(() => {
         if (_parseQueue.get(fileId) === cleanup) _parseQueue.delete(fileId);
     });
     _parseQueue.set(fileId, cleanup);
@@ -1459,6 +1538,29 @@ function getMainFile()   { return Object.values(state.files).find(f => f.role ==
 function getMainFileId() { return Object.keys(state.files).find(id => state.files[id].role === 'main'); }
 function getSubFileIds() { return Object.keys(state.files).filter(id => state.files[id].role === 'sub'); }
 
+function updateParsePreview(fileRecord) {
+    if (!dom.parsePreview || !fileRecord) return;
+    const hi = fileRecord.headerInfo;
+    const encodingLabel = hi.encodingMode === 'auto'
+        ? `Auto → ${hi.encoding}`
+        : hi.encoding;
+    const channelNames = fileRecord.columns.slice(0, 5).map(c => c.name).join(', ');
+    const more = fileRecord.columns.length > 5 ? `, +${fileRecord.columns.length - 5}` : '';
+    const timeHeader = fileRecord.previewRows?.[hi.nameRow]?.[hi.timeIdx] || `#${hi.timeIdx}`;
+
+    dom.parsePreview.classList.remove('hidden');
+    dom.parsePreview.innerHTML = `
+        <div class="parse-preview-title" title="${esc(fileRecord.name)}">${esc(fileRecord.name)}</div>
+        <dl class="parse-preview-grid">
+            <dt>Encoding</dt><dd>${esc(encodingLabel)}</dd>
+            <dt>Rows</dt><dd>Name ${hi.nameRow + 1}, Unit ${hi.unitRow >= 0 ? hi.unitRow + 1 : '-'}, Data ${hi.dataStart + 1}</dd>
+            <dt>Time</dt><dd>${esc(timeHeader)} (${esc(hi.timeUnit || 'unitなし')})</dd>
+            <dt>Data</dt><dd>${fileRecord.timeData.length} points / ${fileRecord.columns.length} channels</dd>
+        </dl>
+        <div class="parse-preview-channels" title="${esc(channelNames + more)}">${esc(channelNames + more || 'チャンネルなし')}</div>
+    `;
+}
+
 async function setMainFile(newMainId) {
     const oldMainId = getMainFileId();
     if (oldMainId === newMainId) return;
@@ -1497,9 +1599,14 @@ function removeFile(fileId) {
     }
 
     updateUI();
+    const latestFile = Object.values(state.files).at(-1);
+    if (latestFile) updateParsePreview(latestFile);
+    else if (dom.parsePreview) dom.parsePreview.classList.add('hidden');
 }
 
 dom.clearBtn.addEventListener('click', () => {
+    for (const job of state.parseJobs.values()) job.cancelled = true;
+    state.parseJobs.clear();
     state.files         = {};
     state.selectedNames = new Set();
     state.mergedGroups  = [];
@@ -1513,6 +1620,8 @@ dom.clearBtn.addEventListener('click', () => {
     state.zoomHistoryIdx = -1;
     _pendingSettings    = null; // 保留設定もクリア
     if (state.shiftMode) exitShiftMode();
+    if (dom.parsePreview) dom.parsePreview.classList.add('hidden');
+    renderParseJobs();
     updateUI();
     // localStorageの保存データもクリア
     try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
@@ -1576,6 +1685,9 @@ function renderFileList() {
             : `Sub file (s${subNum}) — クリックでMain切替 / 右クリックで色変更\nCustom RAM式で s${subNum}:チャンネル名 と書くと参照できます`;
         // ファイル色をバッジの背景色に反映
         const fColor = state.fileColors[fid] || '#6366f1';
+        const encodingLabel = f.headerInfo?.encodingMode === 'auto'
+            ? `Auto:${f.headerInfo.encoding}`
+            : (f.headerInfo?.encoding || '');
 
         li.innerHTML = `
             <div class="file-item-top">
@@ -1587,6 +1699,7 @@ function renderFileList() {
                 <input type="color" class="file-color-picker" data-colorid="${fid}"
                     value="${fColor}" style="display:none;">
                 <span class="file-name-text" title="${esc(f.name)}">${esc(f.name)}</span>
+                ${encodingLabel ? `<span class="encoding-badge" title="CSV文字コード">${esc(encodingLabel)}</span>` : ''}
                 <i class='bx bx-bug debug-file' data-fid="${fid}" title="Debug: パース結果を確認"></i>
                 <i class='bx bx-x remove-file' data-fid="${fid}" title="Remove"></i>
             </div>
@@ -1690,6 +1803,7 @@ function showDebugModal(fileId) {
         ['timeIdx (列番号)', hi.timeIdx],
         ['timeUnit', hi.timeUnit || '(なし)'],
         ['delimiter', hi.delimiter === '\t' ? 'TAB (\\t)' : hi.delimiter === undefined ? 'auto' : JSON.stringify(hi.delimiter)],
+        ['encoding', hi.encodingMode === 'auto' ? `Auto → ${hi.encoding}` : hi.encoding],
         ['columns数', f.columns.length],
         ['timeData長', td.length],
     ];
@@ -1743,6 +1857,17 @@ function showDebugModal(fileId) {
             // タブを見やすく可視化
             const vis = esc(lines[i]).replace(/\t/g, '<span style="color:#6366f1;">⇥</span>');
             html += `<span style="color:#a0a5b1;">[${i}]</span> ${vis}<span style="color:#f59e0b;font-weight:600;">${label}</span>\n`;
+        }
+        html += `</pre>`;
+    } else if (f.previewRows && f.previewRows.length) {
+        html += `<h3 style="margin:0 0 8px;color:#818cf8;">読み込みプレビュー</h3>`;
+        html += `<pre style="font-size:10px;color:#fda4af;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre;max-width:100%;">`;
+        for (let i = 0; i < f.previewRows.length; i++) {
+            let label = '';
+            if (i === hi.nameRow)  label = ' ← nameRow';
+            if (i === hi.unitRow)  label = ' ← unitRow';
+            if (i === hi.dataStart) label = ' ← dataStart';
+            html += `<span style="color:#a0a5b1;">[${i}]</span> ${esc(f.previewRows[i].join(' | '))}<span style="color:#f59e0b;font-weight:600;">${label}</span>\n`;
         }
         html += `</pre>`;
     }
@@ -3612,6 +3737,7 @@ $('shortcuts-help-btn')?.addEventListener('click', showShortcutsModal);
 // ─────────────────────────────────────────────────────────────
 
 dom.sampling.addEventListener('change', () => { renderChart(); saveSettings(); });
+dom.encoding?.addEventListener('change', saveSettings);
 
 if (dom.shiftBtn) dom.shiftBtn.addEventListener('click', toggleShiftMode);
 
@@ -3842,6 +3968,7 @@ dom.copyChart.addEventListener('click', copyChartToClipboard);
 // ─────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'csvViewer_settings';
+const PRESETS_STORAGE_KEY = 'csvViewer_presets';
 
 /**
  * 現在の設定をlocalStorageに保存する。
@@ -3868,6 +3995,7 @@ function saveSettings() {
             // パース設定
             nameRowIdx: dom.nameRow.value,
             unitRowIdx: dom.unitRow.value,
+            encodingMode: dom.encoding?.value || 'auto',
             // サンプリングモード
             samplingMode: dom.sampling.value,
             // サイドバー幅
@@ -3918,10 +4046,99 @@ function buildSettingsForExport() {
         bitManualOff: [..._bitManualOff],
         nameRowIdx: dom.nameRow.value,
         unitRowIdx: dom.unitRow.value,
+        encodingMode: dom.encoding?.value || 'auto',
         samplingMode: dom.sampling.value,
         sidebarWidth: sidebar ? sidebar.offsetWidth : null,
         yRanges: state.yRanges,
     };
+}
+
+function buildPresetSettings() {
+    return {
+        _format: 'CSV Viewer Preset',
+        _version: 1,
+        selectedNames: [...state.selectedNames],
+        customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
+        mergedGroups: state.mergedGroups,
+        bitManualOff: [..._bitManualOff],
+        nameRowIdx: dom.nameRow.value,
+        unitRowIdx: dom.unitRow.value,
+        encodingMode: dom.encoding?.value || 'auto',
+        samplingMode: dom.sampling.value,
+        yRanges: state.yRanges,
+        monoColorMode: state.monoColorMode,
+        fileColors: state.fileColors,
+    };
+}
+
+function loadPresets() {
+    try {
+        const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+        console.warn('[CSV Viewer] Failed to load presets:', e);
+        return {};
+    }
+}
+
+function savePresets(presets) {
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+}
+
+function renderPresetSelect() {
+    if (!dom.presetSelect) return;
+    const presets = loadPresets();
+    const selected = dom.presetSelect.value;
+    dom.presetSelect.innerHTML = '<option value="">Preset...</option>';
+    Object.keys(presets).sort((a, b) => a.localeCompare(b, 'ja')).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        dom.presetSelect.appendChild(opt);
+    });
+    if (selected && presets[selected]) dom.presetSelect.value = selected;
+}
+
+function saveCurrentPreset() {
+    const name = prompt('保存するプリセット名を入力してください', dom.presetSelect?.value || '');
+    if (!name) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const presets = loadPresets();
+    presets[trimmed] = buildPresetSettings();
+    savePresets(presets);
+    renderPresetSelect();
+    if (dom.presetSelect) dom.presetSelect.value = trimmed;
+    showExportToast('プリセットを保存しました', trimmed);
+}
+
+function loadSelectedPreset() {
+    const name = dom.presetSelect?.value;
+    if (!name) {
+        showWarning('プリセットが選択されていません');
+        return;
+    }
+    const presets = loadPresets();
+    if (!presets[name]) {
+        showWarning('プリセットが見つかりません', name);
+        renderPresetSelect();
+        return;
+    }
+    applySettings(presets[name]);
+    showExportToast('プリセットを適用しました', name);
+}
+
+function deleteSelectedPreset() {
+    const name = dom.presetSelect?.value;
+    if (!name) {
+        showWarning('削除するプリセットが選択されていません');
+        return;
+    }
+    const presets = loadPresets();
+    delete presets[name];
+    savePresets(presets);
+    renderPresetSelect();
+    showExportToast('プリセットを削除しました', name);
 }
 
 /**
@@ -3979,6 +4196,7 @@ function applySettings(s) {
     // パース設定を復元
     if (s.nameRowIdx) dom.nameRow.value = s.nameRowIdx;
     if (s.unitRowIdx) dom.unitRow.value = s.unitRowIdx;
+    if (s.encodingMode && dom.encoding) dom.encoding.value = s.encodingMode;
 
     // サンプリングモードを復元
     if (s.samplingMode !== undefined) dom.sampling.value = s.samplingMode;
@@ -4005,8 +4223,13 @@ function applySettings(s) {
     // ファイルがまだ読み込まれていない場合は、残りの設定を保留する
     _pendingSettings = s;
 
-    // ファイル読込前の状態を表示
-    showPendingFiles(s.fileInfos || []);
+    if (getMainFile()) {
+        applyPendingSettings();
+        updateUI();
+    } else {
+        // ファイル読込前の状態を表示
+        showPendingFiles(s.fileInfos || []);
+    }
 }
 
 /**
@@ -4104,6 +4327,10 @@ initChart();
 // 設定エクスポート/インポートボタンのイベント登録
 dom.exportSettings.addEventListener('click', exportSettings);
 dom.importSettings.addEventListener('click', importSettings);
+dom.presetSave?.addEventListener('click', saveCurrentPreset);
+dom.presetLoad?.addEventListener('click', loadSelectedPreset);
+dom.presetDelete?.addEventListener('click', deleteSelectedPreset);
+renderPresetSelect();
 
 // 起動時にlocalStorageから設定を復元
 const _savedSettings = loadSettings();
