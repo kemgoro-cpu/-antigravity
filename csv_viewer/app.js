@@ -852,6 +852,8 @@ const dom = {
     clearBtn:   $('clear-all-btn'),
     zoomBtn:    $('zoom-mode-btn'),
     resetBtn:   $('reset-zoom-btn'),
+    undoBtn:    $('undo-btn'),
+    redoBtn:    $('redo-btn'),
     shiftBtn:   $('shift-mode-btn'),
     arrangeBtn: $('arrange-mode-btn'),
     hintEl:     $('toolbar-hint'),
@@ -2587,6 +2589,9 @@ async function addCustomRAM(name, expr, unit = '') {
     renderCustomRAMList();
     renderColumnList();
     renderChart();
+    // 永続化とUndo履歴記録。これがないとリロードでRAMが消え、Undo対象にもならない
+    // （復元処理から呼ばれた場合はrecordHistory側のフラグで二重記録が防がれる）
+    saveSettings();
 }
 
 function removeCustomRAM(id) {
@@ -2613,6 +2618,8 @@ function removeCustomRAM(id) {
     renderCustomRAMList();
     renderColumnList();
     renderChart();
+    // 永続化とUndo履歴記録（addCustomRAMと対になる）
+    saveSettings();
 }
 
 async function recomputeCustomRAMs() {
@@ -4283,6 +4290,10 @@ function updatePerGridLabels() {
 dom.zoomBtn.addEventListener('click', toggleBoxZoom);
 dom.resetBtn.addEventListener('click', resetZoom);
 
+// ── Undo / Redo ──
+dom.undoBtn.addEventListener('click', appUndo);
+dom.redoBtn.addEventListener('click', appRedo);
+
 // ── 単色モード切り替え ──
 dom.monoColorBtn.addEventListener('click', toggleMonoColor);
 
@@ -4572,8 +4583,9 @@ function showShortcutsModal() {
         ['B',              'Box Zoom モードを切り替え'],
         ['T',              'Time Shift モードを切り替え（Sub ファイルが必要）'],
         ['R',              'ズームをリセット（全範囲表示）'],
-        ['Ctrl + Z',       'ズーム操作を1つ戻す'],
-        ['Ctrl + Y',       'ズーム操作を1つやり直す'],
+        ['Ctrl + Z',       '直前の操作を元に戻す（ズーム・チャンネル選択・設定など）'],
+        ['Ctrl + Y',       '操作をやり直す'],
+        ['Ctrl + Shift + Z', '操作をやり直す（Ctrl + Y と同じ）'],
         ['Ctrl + S',       'チャートをPNGとして保存'],
         ['Ctrl + Shift + C', 'チャートをクリップボードにコピー'],
     ];
