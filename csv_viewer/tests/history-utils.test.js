@@ -110,6 +110,15 @@ function testInputNotMutated() {
     assert.equal(input.sidebarWidth, 300);
 }
 
+// エントリのsettingsが入力からdeep copyされていること
+// (ネストしたオブジェクトを後から書き換えても過去のエントリが変わらない)
+function testDeepCopyIsolation() {
+    const live = { yRanges: { ChA: { min: 0, max: 10 } } };
+    const e = entry(live, Z, 1);
+    live.yRanges.ChA.min = -999; // アプリ側でstateが書き換わったと想定
+    assert.equal(e.settings.yRanges.ChA.min, 0); // 履歴エントリは影響を受けない
+}
+
 // reset で空に戻ること
 function testReset() {
     const h = CSVHistory.createHistory();
@@ -129,6 +138,7 @@ testRedoTruncation();
 testCoalesce();
 testMaxLimit();
 testInputNotMutated();
+testDeepCopyIsolation();
 testReset();
 
 console.log('history-utils tests passed');

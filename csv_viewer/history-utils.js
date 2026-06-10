@@ -56,10 +56,13 @@
      * @param {string|null} coalesceKey 連続操作の統合キー(例 'fileColor:f3')
      */
     function makeEntry(settings, zoom, ts, coalesceKey = null) {
-        const normalized = normalizeSettings(settings);
+        const key = JSON.stringify(normalizeSettings(settings));
         return {
-            key: JSON.stringify(normalized),
-            settings: normalized,
+            key,
+            // keyのstringifyを再利用したdeep copy。
+            // collectSettingsはstateへの生の参照(yRanges等)を含むため、
+            // 浅いコピーだと後の操作で過去の履歴エントリまで書き換わってしまう
+            settings: JSON.parse(key),
             zoom: { start: zoom.start, end: zoom.end },
             ts,
             coalesceKey,

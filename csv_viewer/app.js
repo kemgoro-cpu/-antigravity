@@ -4833,8 +4833,10 @@ let _saveSettingsTimer = null;
  * 設定保存を予約する（500msのdebounce）。
  * 約18箇所から呼ばれるため、連続操作のたびにJSON.stringifyを即時実行しないようまとめる。
  * 実際の書き込みは saveSettingsNow が行う。
+ * @param {string|null} coalesceKey Undo履歴の連続操作統合キー（カラーピッカー等の
+ *   連続発火する操作で指定すると、短時間の連続変更が1つの履歴エントリにまとまる）
  */
-function saveSettings() {
+function saveSettings(coalesceKey = null) {
     clearTimeout(_saveSettingsTimer);
     _saveSettingsTimer = setTimeout(flushSettingsSave, 500);
 }
@@ -4857,47 +4859,58 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /**
+ * 現在の設定を1つのオブジェクトにまとめる。
+ * localStorage保存(saveSettingsNow)とUndo履歴のスナップショットの両方で使う
+ * 単一情報源。ここがずれると「Undoで戻した状態」と「リロードで復元される状態」が
+ * 食い違うため、設定項目の追加は必ずこの関数に対して行うこと。
+ * 注意: channelAliases / yRanges / fileColors は生の参照を返す。
+ * 履歴に保存する場合は呼び出し側(CSVHistory.makeEntry)がdeep copyする。
+ */
+function collectSettings() {
+    const sidebar = document.querySelector('.sidebar');
+    return {
+        _version: 3,
+        // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
+        fileInfos: Object.values(state.files).map(f => ({
+            name: f.name,
+            role: f.role,
+            offset: f.offset,
+            timeUnitOverride: f.headerInfo?.timeScaleSource === 'manual'
+                ? (f.headerInfo.timeScaleUnit === 'ms' ? 'ms' : 's')
+                : null,
+        })),
+        // 選択中のチャンネル名
+        selectedNames: [...state.selectedNames],
+        // Custom RAM式
+        customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
+        chartGroups: serializeChartGroups(),
+        timeUnitOverrides: serializeTimeUnitOverrides(),
+        channelAliases: state.channelAliases,
+        // Bit手動Offリスト
+        bitManualOff: [..._bitManualOff],
+        // パース設定
+        nameRowIdx: dom.nameRow.value,
+        unitRowIdx: dom.unitRow.value,
+        encodingMode: dom.encoding?.value || 'auto',
+        // サンプリングモード
+        samplingMode: dom.sampling.value,
+        // サイドバー幅
+        sidebarWidth: sidebar ? sidebar.offsetWidth : null,
+        // Y軸範囲のユーザー設定
+        yRanges: state.yRanges,
+        // 単色モード設定
+        monoColorMode: state.monoColorMode,
+        fileColors: state.fileColors,
+    };
+}
+
+/**
  * 現在の設定をlocalStorageに保存する。
  * ファイルデータ本体は保存しない（名前・role・offsetだけ）。
  */
 function saveSettingsNow() {
     try {
-        const sidebar = document.querySelector('.sidebar');
-        const settings = {
-            _version: 3,
-            // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
-            fileInfos: Object.values(state.files).map(f => ({
-                name: f.name,
-                role: f.role,
-                offset: f.offset,
-                timeUnitOverride: f.headerInfo?.timeScaleSource === 'manual'
-                    ? (f.headerInfo.timeScaleUnit === 'ms' ? 'ms' : 's')
-                    : null,
-            })),
-            // 選択中のチャンネル名
-            selectedNames: [...state.selectedNames],
-            // Custom RAM式
-            customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
-            chartGroups: serializeChartGroups(),
-            timeUnitOverrides: serializeTimeUnitOverrides(),
-            channelAliases: state.channelAliases,
-            // Bit手動Offリスト
-            bitManualOff: [..._bitManualOff],
-            // パース設定
-            nameRowIdx: dom.nameRow.value,
-            unitRowIdx: dom.unitRow.value,
-            encodingMode: dom.encoding?.value || 'auto',
-            // サンプリングモード
-            samplingMode: dom.sampling.value,
-            // サイドバー幅
-            sidebarWidth: sidebar ? sidebar.offsetWidth : null,
-            // Y軸範囲のユーザー設定
-            yRanges: state.yRanges,
-            // 単色モード設定
-            monoColorMode: state.monoColorMode,
-            fileColors: state.fileColors,
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(collectSettings()));
         _storageWarnShown = false; // 保存に成功したら次回失敗時に再度通知できるようにする
     } catch (e) {
         console.warn('[CSV Viewer] Failed to save settings:', e);
@@ -5146,12 +5159,13 @@ function applySettings(rawSettings) {
     _pendingSettings = s;
 
     if (getMainFile()) {
-        applyPendingSettings().then(updateUI)
+        // 適用完了を待てるようPromiseを返す（Undo/Redoの直列化で使用）
+        return applyPendingSettings().then(updateUI)
             .catch(e => showError('保存済み設定の適用に失敗しました', e.stack || e.message));
-    } else {
-        // ファイル読込前の状態を表示
-        showPendingFiles(s.fileInfos || []);
     }
+    // ファイル読込前の状態を表示
+    showPendingFiles(s.fileInfos || []);
+    return Promise.resolve();
 }
 
 /**
