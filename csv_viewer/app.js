@@ -637,9 +637,6 @@ const state = {
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
     customRAMs:     [],     // [{ name, unit, expr, id }]
-    zoomHistory:    [],     // X軸ズーム状態の履歴 [{ start, end }, ...]
-    zoomHistoryIdx: -1,     // 現在の履歴位置（-1 = 履歴なし）
-    zoomUndoRedoing: false, // Undo/Redo操作中フラグ（履歴の二重記録を防止）
     chartGroups:    [],     // [{ id, channels:[{name,axisId}], axes:[{id,unit,representative}] }]
     arrangeMode:    false,
     channelAliases: {},     // mainChannelName → [aliasName, ...] 全Subファイル共通の別名対応
@@ -1606,10 +1603,14 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                             .then(() => {
                                 updateUI();
                                 saveSettings();
+                                // ファイルが増えたのでUndo履歴を取り直す（追加前には戻せない）
+                                resetHistoryBaseline();
                             });
                     } else {
                         updateUI();
                         saveSettings();
+                        // ファイルが増えたのでUndo履歴を取り直す（追加前には戻せない）
+                        resetHistoryBaseline();
                     }
                 } catch (e) {
                     showError(`Failed to process time data: ${fileName}`, e.stack || e.message);
@@ -2016,8 +2017,6 @@ async function setManualTimeUnit(fileId, unit) {
     const changed = applyTimeScale(fileRecord, scale, 'manual', unit, 'user override');
     if (!changed) return;
 
-    state.zoomHistory = [];
-    state.zoomHistoryIdx = -1;
     updateParsePreview(fileRecord);
 
     if (state.customRAMs.length) await recomputeCustomRAMs();
@@ -2025,6 +2024,9 @@ async function setManualTimeUnit(fileId, unit) {
     renderColumnList();
     renderChart();
     saveSettings();
+    // 時間軸スケールが変わると過去のスナップショットのズーム位置が意味を失うため、
+    // Undo履歴をクリアして現在状態を新しい起点にする
+    resetHistoryBaseline();
     showExportToast('Time単位を変更しました', `${fileRecord.shortName}: ${unit} → 秒基準`);
 }
 
@@ -2096,6 +2098,10 @@ function removeFile(fileId) {
     const latestFile = Object.values(state.files).at(-1);
     if (latestFile) updateParsePreview(latestFile);
     else if (dom.parsePreview) dom.parsePreview.classList.add('hidden');
+
+    // ファイル構成が変わった（削除されたファイルのデータは戻せない）ので、
+    // Undo履歴をクリアして現在状態を新しい起点にする
+    resetHistoryBaseline();
 }
 
 dom.clearBtn.addEventListener('click', () => {
@@ -2111,8 +2117,9 @@ dom.clearBtn.addEventListener('click', () => {
     state.colorCtr      = 0;
     state.fileColors    = {};
     state.shiftFileId   = null;
-    state.zoomHistory   = [];
-    state.zoomHistoryIdx = -1;
+    // ファイルが無くなるのでUndo履歴も空にする（起点は積まない）
+    CSVHistory.reset(appHistory);
+    updateUndoRedoButtons();
     _pendingSettings    = null; // 保留設定もクリア
     if (state.shiftMode) exitShiftMode();
     if (state.arrangeMode) exitArrangeMode();
@@ -2254,7 +2261,9 @@ function renderFileList() {
             state.fileColors[fid] = inp.value;
             renderFileList(); // バッジ色を更新
             if (state.monoColorMode) renderChart(); // 単色モード中ならチャートも更新
-            saveSettings();
+            // inputイベントはドラッグ中に連続発火するため、coalesceKeyを渡して
+            // 短時間の連続変更をUndo履歴1エントリにまとめる
+            saveSettings('fileColor:' + fid);
         });
     });
 
@@ -3728,10 +3737,14 @@ function renderChart() {
     if (!state.chart) initChart();
 
     // Preserve current X-axis dataZoom state before notMerge rebuild
-    let savedXZoom = null;
-    const curOpt = state.chart.getOption();
-    if (curOpt && curOpt.dataZoom && curOpt.dataZoom.length >= 2) {
-        savedXZoom = { start: curOpt.dataZoom[0].start, end: curOpt.dataZoom[0].end };
+    // Undo/Redo復元中は履歴エントリのズーム位置を優先する
+    // （復元が引き起こす全ての再描画が目標ズームで描かれるため、タイミングに依存しない）
+    let savedXZoom = _pendingZoomRestore ? { ..._pendingZoomRestore } : null;
+    if (!savedXZoom) {
+        const curOpt = state.chart.getOption();
+        if (curOpt && curOpt.dataZoom && curOpt.dataZoom.length >= 2) {
+            savedXZoom = { start: curOpt.dataZoom[0].start, end: curOpt.dataZoom[0].end };
+        }
     }
 
     const active = getActiveGroups();
@@ -4042,10 +4055,10 @@ function renderChart() {
     }, { notMerge: true });
     state.yAxisIndexByGroup = yAxisIndexByGroup;
 
-    // 初回描画時にズーム初期状態を履歴の起点として記録する
-    if (state.zoomHistory.length === 0) {
-        state.zoomHistory.push({ start: xStart, end: xEnd });
-        state.zoomHistoryIdx = 0;
+    // 初回描画時に現在状態をUndo履歴の起点として記録する
+    // （復元中は除外。復元はrestoreHistoryEntryが履歴位置を管理している）
+    if (appHistory.entries.length === 0 && !_restoringHistory && getMainFile()) {
+        seedHistoryBaseline({ start: xStart, end: xEnd });
     }
 
     // ドラッグマージ判定用にグリッド領域情報を保存
@@ -4316,8 +4329,8 @@ function onBrushEnd(params) {
     state.chart.dispatchAction({ type: 'brush', areas: [] });
     exitBoxZoom();
 
-    // Box Zoom完了後、現在のズーム状態を履歴に記録する
-    recordZoomHistory();
+    // Box Zoom完了後、現在の状態を履歴に記録する（設定不変・ズーム変化のエントリになる）
+    recordHistory();
 }
 
 function resetZoom() {
@@ -4333,84 +4346,141 @@ function resetZoom() {
             state.chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: idx, start: 0, end: 100 })
         );
     }
+    // Reset View後もCtrl+Zで直前のズーム状態へ戻れるよう記録する
+    recordHistory();
 }
 
 // ─────────────────────────────────────────────────────────────
-// Zoom Undo / Redo（Ctrl+Z / Ctrl+Y）
+// Undo / Redo（Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z）
+// ズーム・チャンネル選択・マージ・Custom RAMなど全操作を1本の履歴で管理する。
+// 履歴の積み方・辿り方の純粋ロジックは history-utils.js (CSVHistory) 側にある。
 // ─────────────────────────────────────────────────────────────
 
-const ZOOM_HISTORY_MAX = 50; // 履歴の最大保持数
+// アプリ全体の操作履歴。各エントリは「設定スナップショット+X軸ズーム範囲」
+const appHistory = CSVHistory.createHistory(CSVHistory.HISTORY_MAX);
+// 復元処理中フラグ。復元が呼ぶsaveSettings→recordHistoryの再記録を防ぐ
+let _restoringHistory = false;
+// Ctrl+Z連打時に復元処理を1つずつ順番に実行するためのキュー
+let _restoreQueue = Promise.resolve();
+// 復元時にrenderChartへ渡すズーム指示（renderChartのsavedXZoomに注入される）
+let _pendingZoomRestore = null;
 
 /**
- * Box Zoom実行後に呼ばれ、現在のズーム状態を履歴に記録する。
- * スクロールやスライダーによるズーム変更は記録しない。
+ * 現在のX軸ズーム範囲(%)を取得する。チャート未描画時は全範囲を返す。
  */
-function recordZoomHistory() {
-    // X軸のdataZoom（index 0）の状態を取得
-    const opts = state.chart.getOption();
-    if (!opts?.dataZoom?.length) return;
-    const dz = opts.dataZoom[0];
-    const snap = { start: dz.start, end: dz.end };
+function getCurrentZoom() {
+    const dz = state.chart?.getOption()?.dataZoom?.[0];
+    return dz ? { start: dz.start, end: dz.end } : { start: 0, end: 100 };
+}
 
-    // 直前の履歴と同じなら記録しない（重複防止）
-    if (state.zoomHistoryIdx >= 0) {
-        const prev = state.zoomHistory[state.zoomHistoryIdx];
-        if (prev && Math.abs(prev.start - snap.start) < 0.001
-                  && Math.abs(prev.end - snap.end) < 0.001) {
-            return;
+/**
+ * 現在の状態を履歴に記録する。saveSettings()から毎回呼ばれる（=全操作が自動記録される）。
+ * 起点(seedHistoryBaseline)が積まれる前や復元中は何もしない。
+ */
+function recordHistory(coalesceKey = null) {
+    if (_restoringHistory) return;
+    if (!getMainFile()) return;
+    if (appHistory.entries.length === 0) return; // 起点未設定（ファイル読込直後に積まれる）
+    CSVHistory.push(appHistory,
+        CSVHistory.makeEntry(collectSettings(), getCurrentZoom(), Date.now(), coalesceKey));
+    updateUndoRedoButtons();
+}
+
+/**
+ * 現在の状態を履歴の起点として記録する。
+ * 起点より前には戻れない（起点だけの状態ではUndo不可）。
+ */
+function seedHistoryBaseline(zoom) {
+    CSVHistory.push(appHistory,
+        CSVHistory.makeEntry(collectSettings(), zoom, Date.now(), null));
+    updateUndoRedoButtons();
+}
+
+/**
+ * 履歴を全クリアし、ファイルがあれば現在状態を新しい起点にする。
+ * ファイル追加/削除・Time単位変更など「過去に戻れない区切り」で呼ぶ。
+ */
+function resetHistoryBaseline() {
+    CSVHistory.reset(appHistory);
+    if (getMainFile()) seedHistoryBaseline(getCurrentZoom());
+    updateUndoRedoButtons();
+}
+
+/** Undo: 1つ前の状態に戻す */
+function appUndo() {
+    queueRestore(CSVHistory.canUndo(appHistory) ? CSVHistory.undo(appHistory) : null);
+}
+
+/** Redo: 1つ後の状態に進む */
+function appRedo() {
+    queueRestore(CSVHistory.canRedo(appHistory) ? CSVHistory.redo(appHistory) : null);
+}
+
+/**
+ * 復元処理をキューに積む。連打しても1件ずつ順番に実行される。
+ */
+function queueRestore(entry) {
+    if (!entry) return;
+    updateUndoRedoButtons();
+    _restoreQueue = _restoreQueue
+        .then(() => restoreHistoryEntry(entry))
+        .catch(e => showError('Undo/Redoに失敗しました', e.stack || e.message));
+}
+
+/**
+ * 履歴エントリの状態を復元する。
+ * 設定が現在と同じならズームだけ適用（軽量パス）、違えば設定全体を復元する。
+ */
+async function restoreHistoryEntry(entry) {
+    _restoringHistory = true;
+    updateUndoRedoButtons();
+    try {
+        if (CSVHistory.settingsKey(collectSettings()) !== entry.key) {
+            // スナップショットに無いCustom RAMを先に削除する
+            // （applyPendingSettingsは「足りないものを追加」しかしないため、
+            //   これがないと「Custom RAM追加のUndo」が効かない）
+            const keep = new Set((entry.settings.customRAMs || []).map(c => c.name));
+            for (const c of [...state.customRAMs]) {
+                if (!keep.has(c.name)) removeCustomRAM(c.id);
+            }
+            // 復元中のすべての再描画が目標ズームで描かれるようrenderChartに注入する
+            // （dispatchActionの後追いだと非同期の再描画に上書きされるため）
+            _pendingZoomRestore = { ...entry.zoom };
+            // entry.settingsはdeep copy済みだが、applySettings側の処理に
+            // 履歴エントリを破壊されないようさらにコピーして渡す
+            await applySettings(JSON.parse(JSON.stringify(entry.settings)));
+        } else {
+            dispatchZoom(entry.zoom); // ズームだけ違う → 軽量パス
         }
+    } finally {
+        // ensureColumnsAndRender等の残処理がsaveSettingsを呼ぶ猶予を1フレーム待ってから解除。
+        // 万一その後に記録されても、pushの重複排除(key一致でskipped)が最終防衛線になる
+        await new Promise(r => requestAnimationFrame(r));
+        _pendingZoomRestore = null;
+        _restoringHistory = false;
+        updateUndoRedoButtons();
     }
-
-    // 現在位置より後ろの履歴を切り捨てる（新しい操作をしたらRedoは消える）
-    state.zoomHistory.length = state.zoomHistoryIdx + 1;
-
-    // 新しい状態を追加
-    state.zoomHistory.push(snap);
-
-    // 最大数を超えたら古い履歴を削除
-    if (state.zoomHistory.length > ZOOM_HISTORY_MAX) {
-        state.zoomHistory.shift();
-    }
-
-    // 現在位置を最新に更新
-    state.zoomHistoryIdx = state.zoomHistory.length - 1;
 }
 
 /**
- * ズーム状態を履歴の指定位置に復元する。
- * dispatchActionでズームを変更し、その際の履歴記録をスキップする。
+ * X軸ズームを全グリッドに適用する。
  */
-function applyZoomFromHistory(idx) {
-    if (idx < 0 || idx >= state.zoomHistory.length) return;
+function dispatchZoom(zoom) {
     if (!state.chart || state.numGrids === 0) return;
-
-    const snap = state.zoomHistory[idx];
-    state.zoomHistoryIdx = idx;
-
-    // Undo/Redoフラグを立てて、dataZoomイベントで履歴に記録されないようにする
-    state.zoomUndoRedoing = true;
     state.chart.dispatchAction({
         type: 'dataZoom',
-        start: snap.start,
-        end: snap.end,
+        start: zoom.start,
+        end: zoom.end,
         xAxisIndex: Array.from({ length: state.numGrids }, (_, i) => i),
     });
-    // フラグ解除（非同期でイベントが来る場合に備えて少し遅延）
-    requestAnimationFrame(() => { state.zoomUndoRedoing = false; });
 }
 
-/** Undo: 1つ前のズーム状態に戻す */
-function zoomUndo() {
-    if (state.zoomHistoryIdx > 0) {
-        applyZoomFromHistory(state.zoomHistoryIdx - 1);
-    }
-}
-
-/** Redo: 1つ後のズーム状態に進む */
-function zoomRedo() {
-    if (state.zoomHistoryIdx < state.zoomHistory.length - 1) {
-        applyZoomFromHistory(state.zoomHistoryIdx + 1);
-    }
+/**
+ * Undo/Redoボタンの有効/無効を更新する（復元中は両方無効）。
+ */
+function updateUndoRedoButtons() {
+    if (dom.undoBtn) dom.undoBtn.disabled = _restoringHistory || !CSVHistory.canUndo(appHistory);
+    if (dom.redoBtn) dom.redoBtn.disabled = _restoringHistory || !CSVHistory.canRedo(appHistory);
 }
 
 // キーボードショートカット（全体）
@@ -4442,15 +4512,16 @@ document.addEventListener('keydown', e => {
         return;
     }
 
-    // Ctrl+Z / Ctrl+Y: ズーム Undo/Redo（従来互換）
-    if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+    // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y: 操作全体のUndo/Redo（ズーム含む統合履歴）
+    if (e.ctrlKey && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault();
-        zoomUndo();
+        // Shift押下時はe.keyが'Z'になる。Ctrl+Shift+Z=Redo（一般的なエイリアス）
+        if (e.shiftKey) appRedo(); else appUndo();
         return;
     }
-    if (e.ctrlKey && e.key === 'y') {
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'y' || e.key === 'Y')) {
         e.preventDefault();
-        zoomRedo();
+        appRedo();
         return;
     }
 
@@ -4837,6 +4908,9 @@ let _saveSettingsTimer = null;
  *   連続発火する操作で指定すると、短時間の連続変更が1つの履歴エントリにまとまる）
  */
 function saveSettings(coalesceKey = null) {
+    // Undo履歴への記録はdebounceせず同期で行う
+    // （debounce後だと「操作直後のCtrl+Z」で最後の操作が履歴に無い事故が起きる）
+    recordHistory(coalesceKey);
     clearTimeout(_saveSettingsTimer);
     _saveSettingsTimer = setTimeout(flushSettingsSave, 500);
 }
@@ -5305,8 +5379,8 @@ async function applyPendingSettings() {
     restoreChartGroupsFromSettings(s, mainFile);
 
     if (timeScaleChanged) {
-        state.zoomHistory = [];
-        state.zoomHistoryIdx = -1;
+        // 時間軸スケールが変わったのでUndo履歴をクリアして起点を取り直す
+        resetHistoryBaseline();
         updateParsePreview(Object.values(state.files).at(-1));
         renderFileList();
         renderColumnList();
