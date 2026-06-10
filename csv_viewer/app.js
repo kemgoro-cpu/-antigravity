@@ -636,11 +636,12 @@ const state = {
     shiftFileId:    null,   // which sub file is the drag target
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
-    customRAMs:     [],     // [{ name, expr, id }]
+    customRAMs:     [],     // [{ name, unit, expr, id }]
     zoomHistory:    [],     // X軸ズーム状態の履歴 [{ start, end }, ...]
     zoomHistoryIdx: -1,     // 現在の履歴位置（-1 = 履歴なし）
     zoomUndoRedoing: false, // Undo/Redo操作中フラグ（履歴の二重記録を防止）
-    mergedGroups:   [],     // [[nameA, nameB], ...] チャンネルマージのペア
+    chartGroups:    [],     // [{ id, channels:[{name,axisId}], axes:[{id,unit,representative}] }]
+    arrangeMode:    false,
     channelAliases: {},     // mainChannelName → [aliasName, ...] 全Subファイル共通の別名対応
     gridRegions:    [],     // [{ name, top, height, unit }] ドラッグ判定用
     mergeDrag:      null,   // { sourceName, ghostEl } マージドラッグ中の状態
@@ -660,34 +661,140 @@ let _pendingSettings = null;
 //   headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding, encodingMode } (cached parse metadata)
 
 // ─────────────────────────────────────────────────────────────
-// チャンネルマージ管理ヘルパー
+// Chart group / multi-axis state
 // ─────────────────────────────────────────────────────────────
 
-/** nameが既にマージペアに含まれているか */
+let _chartGroupCtr = 0;
+let _chartAxisCtr = 0;
+
+function nextChartGroupId() { return `group_${++_chartGroupCtr}`; }
+function nextChartAxisId() { return `axis_${++_chartAxisCtr}`; }
+
+function getMainColumn(name) {
+    return getMainFile()?.columns.find(c => c.name === name) || null;
+}
+
+function createChartAxis(name, unit = '') {
+    return { id: nextChartAxisId(), unit: unit || '', representative: name };
+}
+
+function createSingleChartGroup(name) {
+    const col = getMainColumn(name);
+    const axis = createChartAxis(name, col?.unit || '');
+    return {
+        id: nextChartGroupId(),
+        channels: [{ name, axisId: axis.id }],
+        axes: [axis],
+    };
+}
+
+function getChartGroupById(groupId) {
+    return state.chartGroups.find(g => g.id === groupId) || null;
+}
+
+function getChartGroupForChannel(name) {
+    return state.chartGroups.find(g => g.channels.some(ch => ch.name === name)) || null;
+}
+
 function isMerged(name) {
-    return state.mergedGroups.some(([a, b]) => a === name || b === name);
+    const group = getChartGroupForChannel(name);
+    return !!group && group.channels.length > 1;
 }
 
-/** nameのマージ相手を返す（なければnull） */
-function getMergedPartner(name) {
-    for (const [a, b] of state.mergedGroups) {
-        if (a === name) return b;
-        if (b === name) return a;
+function cleanupChartGroup(group) {
+    if (!group) return;
+    const usedAxisIds = new Set(group.channels.map(ch => ch.axisId));
+    group.axes = group.axes.filter(axis => usedAxisIds.has(axis.id));
+    for (const axis of group.axes) {
+        const assigned = group.channels.filter(ch => ch.axisId === axis.id);
+        if (!assigned.some(ch => ch.name === axis.representative)) {
+            axis.representative = assigned[0]?.name || '';
+        }
+        if (!axis.unit) axis.unit = getMainColumn(axis.representative)?.unit || '';
     }
-    return null;
 }
 
-/** 2つのチャンネルをマージする */
-function addMerge(nameA, nameB) {
-    if (isMerged(nameA) || isMerged(nameB)) return false;
-    if (nameA === nameB) return false;
-    state.mergedGroups.push([nameA, nameB]);
+function addStandaloneChart(name, insertIndex = state.chartGroups.length) {
+    if (!name || getChartGroupForChannel(name)) return;
+    const group = createSingleChartGroup(name);
+    state.chartGroups.splice(Math.max(0, Math.min(insertIndex, state.chartGroups.length)), 0, group);
+}
+
+function removeChannelFromChartGroups(name) {
+    const groupIndex = state.chartGroups.findIndex(g => g.channels.some(ch => ch.name === name));
+    if (groupIndex < 0) return;
+    const group = state.chartGroups[groupIndex];
+    group.channels = group.channels.filter(ch => ch.name !== name);
+    if (!group.channels.length) state.chartGroups.splice(groupIndex, 1);
+    else cleanupChartGroup(group);
+}
+
+function detachChannelToStandalone(groupId, name) {
+    const groupIndex = state.chartGroups.findIndex(g => g.id === groupId);
+    if (groupIndex < 0) return false;
+    const group = state.chartGroups[groupIndex];
+    if (group.channels.length <= 1 || !group.channels.some(ch => ch.name === name)) return false;
+    group.channels = group.channels.filter(ch => ch.name !== name);
+    cleanupChartGroup(group);
+    state.chartGroups.splice(groupIndex + 1, 0, createSingleChartGroup(name));
     return true;
 }
 
-/** nameを含むマージペアを解除する */
-function removeMerge(name) {
-    state.mergedGroups = state.mergedGroups.filter(([a, b]) => a !== name && b !== name);
+function getAxisUnits(group, axisId) {
+    const units = [];
+    for (const ch of group.channels.filter(c => c.axisId === axisId)) {
+        const unit = getMainColumn(ch.name)?.unit?.trim() || '';
+        if (unit && !units.includes(unit)) units.push(unit);
+    }
+    return units;
+}
+
+function getAxisDisplayUnit(group, axisId) {
+    return getAxisUnits(group, axisId).join(' / ');
+}
+
+function addChannelToChartGroup(sourceName, targetGroupId, targetAxisId = null) {
+    const sourceGroup = getChartGroupForChannel(sourceName);
+    const targetGroup = getChartGroupById(targetGroupId);
+    if (!sourceGroup || sourceGroup.channels.length !== 1 || !targetGroup || sourceGroup.id === targetGroup.id) return false;
+
+    const sourceCol = getMainColumn(sourceName);
+    let axisId = targetAxisId;
+    if (!axisId) {
+        const sameUnitAxis = targetGroup.axes.find(axis => {
+            const units = getAxisUnits(targetGroup, axis.id);
+            return sourceCol?.unit && units.length === 1 && units[0] === sourceCol.unit;
+        });
+        axisId = sameUnitAxis?.id || null;
+    }
+    if (!axisId) {
+        const axis = createChartAxis(sourceName, sourceCol?.unit || '');
+        targetGroup.axes.push(axis);
+        axisId = axis.id;
+    }
+    if (!targetGroup.axes.some(axis => axis.id === axisId)) return false;
+
+    targetGroup.channels.push({ name: sourceName, axisId });
+    state.chartGroups = state.chartGroups.filter(g => g.id !== sourceGroup.id);
+    cleanupChartGroup(targetGroup);
+    return true;
+}
+
+function moveChartGroup(fromIndex, toIndex) {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= state.chartGroups.length) return;
+    const [group] = state.chartGroups.splice(fromIndex, 1);
+    const adjusted = fromIndex < toIndex ? toIndex - 1 : toIndex;
+    state.chartGroups.splice(Math.max(0, Math.min(adjusted, state.chartGroups.length)), 0, group);
+}
+
+function syncChartGroupsWithSelection() {
+    const selected = new Set(state.selectedNames);
+    for (const group of state.chartGroups) {
+        group.channels = group.channels.filter(ch => selected.has(ch.name));
+        cleanupChartGroup(group);
+    }
+    state.chartGroups = state.chartGroups.filter(g => g.channels.length);
+    for (const name of selected) addStandaloneChart(name);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -749,6 +856,7 @@ const dom = {
     zoomBtn:    $('zoom-mode-btn'),
     resetBtn:   $('reset-zoom-btn'),
     shiftBtn:   $('shift-mode-btn'),
+    arrangeBtn: $('arrange-mode-btn'),
     hintEl:     $('toolbar-hint'),
     nameRow:    $('name-row-idx'),
     unitRow:    $('unit-row-idx'),
@@ -756,6 +864,7 @@ const dom = {
     parsePreview: $('parse-preview'),
     sampling:   $('sampling-mode'),
     customName: $('custom-ram-name'),
+    customUnit: $('custom-ram-unit'),
     customExpr: $('custom-ram-expr'),
     customAdd:  $('custom-ram-add'),
     customList: $('custom-ram-list'),
@@ -792,9 +901,9 @@ function initChart() {
     // Y軸ラベル領域のホバーカーソル（grab/pointer）
     dom.chartEl.addEventListener('mousemove', e => {
         // ドラッグ中やシフトモード中はスキップ
-        if (state.mergeDrag || state.shiftMode || state.brushMode) return;
-        if (isInYAxisArea(e.clientX) && hitTestGrid(e.clientY)) {
-            const hit = hitTestGrid(e.clientY);
+        if (state.mergeDrag || state.shiftMode || state.brushMode || state.arrangeMode) return;
+        const hit = hitTestGrid(e.clientY);
+        if (hit && isInYAxisArea(e.clientX, hit.region)) {
             dom.chartEl.style.cursor = (hit && hit.region.merged) ? 'pointer' : 'grab';
         } else if (!state.shiftDrag) {
             dom.chartEl.style.cursor = '';
@@ -813,7 +922,7 @@ function setupShiftDrag() {
     let rafId = null;
 
     dom.chartEl.addEventListener('mousedown', e => {
-        if (!state.shiftMode || !state.shiftFileId || e.button !== 0) return;
+        if (!state.shiftMode || state.arrangeMode || !state.shiftFileId || e.button !== 0) return;
         e.preventDefault();
         state.shiftDrag = {
             startClientX: e.clientX,
@@ -873,10 +982,75 @@ function hitTestGrid(clientY) {
 /**
  * X座標がY軸ラベル領域（グリッドの左端）にあるか判定する。
  */
-function isInYAxisArea(clientX) {
+function isInYAxisArea(clientX, region = null) {
     const rect = dom.chartEl.getBoundingClientRect();
     const x = clientX - rect.left;
-    return x >= 0 && x <= L.gridLeft;
+    return x >= 0 && x <= (region?.axisAreaWidth || L.gridLeft);
+}
+
+function showOverlayAxisModal(targetGroup, sourceName) {
+    return new Promise(resolve => {
+        document.getElementById('app-modal-overlay')?.remove();
+        const sourceUnit = getMainColumn(sourceName)?.unit || '';
+        const overlay = document.createElement('div');
+        overlay.id = 'app-modal-overlay';
+        overlay.className = 'app-modal-overlay';
+
+        const modal = document.createElement('div');
+        modal.className = 'app-modal axis-choice-modal';
+        const axisButtons = targetGroup.axes.map(axis => {
+            const unit = getAxisDisplayUnit(targetGroup, axis.id) || 'unitなし';
+            const names = targetGroup.channels.filter(ch => ch.axisId === axis.id).map(ch => ch.name).join(', ');
+            return `<button class="axis-choice-btn" data-axis-id="${esc(axis.id)}">
+                <strong>${esc(unit)}</strong><span>${esc(names)}</span>
+            </button>`;
+        }).join('');
+        modal.innerHTML = `
+            <h3 id="axis-choice-title">Y軸の割り当て</h3>
+            <p><strong>${esc(sourceName)}</strong>${sourceUnit ? ` (${esc(sourceUnit)})` : ''} を重ねます。</p>
+            <div class="axis-choice-list">${axisButtons}</div>
+            <button class="axis-choice-btn new-axis" data-axis-id="__new__">
+                <strong><i class='bx bx-plus'></i> 新しいY軸</strong><span>独立したスケールで表示</span>
+            </button>
+            <div class="modal-actions"><button class="btn-secondary axis-choice-cancel">キャンセル</button></div>`;
+        modal.setAttribute('aria-labelledby', 'axis-choice-title');
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        setupModalA11y(overlay, modal);
+
+        const finish = value => { overlay.remove(); resolve(value); };
+        modal.querySelectorAll('[data-axis-id]').forEach(btn => {
+            btn.addEventListener('click', () => finish(btn.dataset.axisId));
+        });
+        modal.querySelector('.axis-choice-cancel').addEventListener('click', () => finish(null));
+        overlay.addEventListener('click', e => { if (e.target === overlay) finish(null); });
+    });
+}
+
+async function mergeStandaloneIntoGroup(sourceName, targetGroupId) {
+    const sourceGroup = getChartGroupForChannel(sourceName);
+    const targetGroup = getChartGroupById(targetGroupId);
+    if (!sourceGroup || sourceGroup.channels.length !== 1 || !targetGroup) return;
+
+    const sourceUnit = getMainColumn(sourceName)?.unit?.trim() || '';
+    const sameUnitAxis = sourceUnit
+        ? targetGroup.axes.find(axis => {
+            const units = getAxisUnits(targetGroup, axis.id);
+            return units.length === 1 && units[0] === sourceUnit;
+        })
+        : null;
+
+    let axisId = sameUnitAxis?.id || null;
+    if (!axisId) {
+        axisId = await showOverlayAxisModal(targetGroup, sourceName);
+        if (!axisId) return;
+        if (axisId === '__new__') axisId = null;
+    }
+
+    if (addChannelToChartGroup(sourceName, targetGroupId, axisId)) {
+        ensureColumnsAndRender();
+        saveSettings();
+    }
 }
 
 function setupMergeDrag() {
@@ -905,7 +1079,7 @@ function setupMergeDrag() {
         highlightEl.style.display = '';
         highlightEl.style.left = '0px';
         highlightEl.style.top = region.top + 'px';
-        highlightEl.style.width = L.gridLeft + 'px';
+        highlightEl.style.width = (region.axisAreaWidth || L.gridLeft) + 'px';
         highlightEl.style.height = region.height + 'px';
         highlightEl.style.background = valid
             ? 'rgba(99,102,241,0.15)' : 'rgba(239,68,68,0.15)';
@@ -918,13 +1092,14 @@ function setupMergeDrag() {
 
     // --- mousedown: Y軸ラベル領域でドラッグ開始 ---
     dom.chartEl.addEventListener('mousedown', e => {
-        // シフトモードやブラシモード中は無効
-        if (state.shiftMode || state.brushMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
         if (e.button !== 0) return;
-        if (!isInYAxisArea(e.clientX)) return;
 
         const hit = hitTestGrid(e.clientY);
-        if (!hit) return;
+        if (!hit || !isInYAxisArea(e.clientX, hit.region)) return;
+
+        const group = getChartGroupById(hit.region.groupId);
+        if (!group || group.channels.length !== 1) return;
 
         // マージ済みグリッドのドラッグも許可（移動先を変える用途に使える）
         sourceGrid = hit;
@@ -949,10 +1124,8 @@ function setupMergeDrag() {
         const hit = hitTestGrid(e.clientY);
         if (hit && hit.index !== sourceGrid.index) {
             targetGrid = hit;
-            // 同じ単位かどうかで色を変える
-            const valid = hit.region.unit === sourceGrid.region.unit
-                       && !isMerged(hit.region.name)
-                       && !isMerged(sourceGrid.region.name);
+            const sourceGroup = getChartGroupById(sourceGrid.region.groupId);
+            const valid = !!sourceGroup && sourceGroup.channels.length === 1;
             showHighlight(hit.region, valid);
             ghostEl.style.background = valid
                 ? 'rgba(99,102,241,0.9)' : 'rgba(239,68,68,0.9)';
@@ -969,16 +1142,7 @@ function setupMergeDrag() {
 
         if (ghostEl && targetGrid) {
             const srcName = sourceGrid.region.name;
-            const tgtName = targetGrid.region.name;
-
-            if (sourceGrid.region.unit === targetGrid.region.unit
-                && !isMerged(srcName) && !isMerged(tgtName)) {
-                // マージ実行
-                addMerge(tgtName, srcName);
-                ensureColumnsAndRender();
-            } else {
-                showError('マージできません', '同じ単位で、まだマージされていないチャンネル同士のみマージ可能です。');
-            }
+            mergeStandaloneIntoGroup(srcName, targetGrid.region.groupId);
         }
 
         // クリーンアップ
@@ -991,18 +1155,79 @@ function setupMergeDrag() {
 
     // --- dblclick: マージ解除 ---
     dom.chartEl.addEventListener('dblclick', e => {
-        if (state.shiftMode || state.brushMode) return;
-        if (!isInYAxisArea(e.clientX)) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
 
         const hit = hitTestGrid(e.clientY);
-        if (!hit) return;
+        if (!hit || !isInYAxisArea(e.clientX, hit.region)) return;
 
-        const name = hit.region.name;
-        if (isMerged(name)) {
-            removeMerge(name);
-            ensureColumnsAndRender();
-        }
+        const group = getChartGroupById(hit.region.groupId);
+        if (group?.channels.length > 1) showChartGroupModal(group.id);
     });
+}
+
+function showChartGroupModal(groupId) {
+    const group = getChartGroupById(groupId);
+    if (!group) return;
+    document.getElementById('app-modal-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'app-modal-overlay';
+    overlay.className = 'app-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'app-modal chart-group-modal';
+    modal.setAttribute('aria-labelledby', 'chart-group-title');
+
+    const axisOptions = group.axes.map(axis => {
+        const unit = getAxisDisplayUnit(group, axis.id) || 'unitなし';
+        return `<option value="${esc(axis.id)}">${esc(unit)} / ${esc(axis.representative)}</option>`;
+    }).join('');
+    const rows = group.channels.map(ch => `
+        <div class="chart-group-row" data-channel="${esc(ch.name)}">
+            <span class="chart-group-channel">${esc(ch.name)}</span>
+            <select class="chart-group-axis-select">${axisOptions}<option value="__new__">+ 新しいY軸</option></select>
+            <button class="btn-secondary btn-icon chart-group-detach" title="独立チャートへ分離"><i class='bx bx-unlink'></i></button>
+        </div>`).join('');
+    modal.innerHTML = `
+        <h3 id="chart-group-title">Overlay Settings</h3>
+        <div class="chart-group-rows">${rows}</div>
+        <div class="modal-actions"><button class="btn-primary chart-group-done">完了</button></div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
+
+    modal.querySelectorAll('.chart-group-row').forEach(row => {
+        const name = row.dataset.channel;
+        const assignment = group.channels.find(ch => ch.name === name);
+        const select = row.querySelector('.chart-group-axis-select');
+        select.value = assignment.axisId;
+        select.addEventListener('change', () => {
+            if (select.value === '__new__') {
+                const axis = createChartAxis(name, getMainColumn(name)?.unit || '');
+                group.axes.push(axis);
+                assignment.axisId = axis.id;
+                overlay.remove();
+                cleanupChartGroup(group);
+                renderChart();
+                saveSettings();
+                showChartGroupModal(group.id);
+                return;
+            }
+            assignment.axisId = select.value;
+            cleanupChartGroup(group);
+            renderChart();
+            saveSettings();
+            overlay.remove();
+            showChartGroupModal(group.id);
+        });
+        row.querySelector('.chart-group-detach').addEventListener('click', () => {
+            if (detachChannelToStandalone(group.id, name)) {
+                overlay.remove();
+                renderChart();
+                saveSettings();
+            }
+        });
+    });
+    modal.querySelector('.chart-group-done').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1329,7 +1554,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     timeChunks.push(t * timeScaleInfo.scale);
                 }
             },
-            complete: function() {
+            complete: async function() {
                 if (parseJob?.cancelled) return;
                 try {
                     console.log(`[CSV Viewer] Time data loaded: ${timeChunks.length} points for ${fileName}`);
@@ -1370,7 +1595,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     if (role === 'sub' && !state.shiftFileId) state.shiftFileId = fileId;
 
                     // 保留中の設定があればファイル読込後に適用する
-                    applyPendingSettings();
+                    await applyPendingSettings();
 
                     // 既存のCustom RAMがあれば新ファイルにも計算・追加する
                     if (state.customRAMs.length > 0) {
@@ -1808,10 +2033,11 @@ async function setMainFile(newMainId) {
     state.selectedNames = new Set(
         [...state.selectedNames].filter(name => newColNames.has(name))
     );
-    // マージグループも両方のチャンネルが新Mainに存在するペアだけ残す
-    state.mergedGroups = state.mergedGroups.filter(
-        ([a, b]) => newColNames.has(a) && newColNames.has(b)
-    );
+    state.chartGroups.forEach(group => {
+        group.channels = group.channels.filter(ch => newColNames.has(ch.name));
+        cleanupChartGroup(group);
+    });
+    state.chartGroups = state.chartGroups.filter(group => group.channels.length);
     pruneChannelAliasesForMain(newMain);
     autoNormalizeTimeScales();
     await recomputeCustomRAMs();
@@ -1830,7 +2056,7 @@ function removeFile(fileId) {
 
     if (wasMain) {
         state.selectedNames = new Set();
-        state.mergedGroups  = [];
+        state.chartGroups   = [];
         state.channelAliases = {};
         const remaining = Object.keys(state.files);
         if (remaining.length) state.files[remaining[0]].role = 'main';
@@ -1847,7 +2073,7 @@ dom.clearBtn.addEventListener('click', () => {
     state.parseJobs.clear();
     state.files         = {};
     state.selectedNames = new Set();
-    state.mergedGroups  = [];
+    state.chartGroups   = [];
     state.channelAliases = {};
     state.bitChannels   = new Set();
     _bitManualOff.clear();
@@ -1859,6 +2085,7 @@ dom.clearBtn.addEventListener('click', () => {
     state.zoomHistoryIdx = -1;
     _pendingSettings    = null; // 保留設定もクリア
     if (state.shiftMode) exitShiftMode();
+    if (state.arrangeMode) exitArrangeMode();
     if (dom.parsePreview) dom.parsePreview.classList.add('hidden');
     renderParseJobs();
     updateUI();
@@ -1887,6 +2114,10 @@ function updateUI() {
     const hasSub = getSubFileIds().length > 0;
     if (dom.shiftBtn) dom.shiftBtn.disabled = !hasSub;
     if (!hasSub && state.shiftMode) exitShiftMode();
+
+    const canArrange = state.chartGroups.length > 1;
+    if (dom.arrangeBtn) dom.arrangeBtn.disabled = !canArrange;
+    if (!canArrange && state.arrangeMode) exitArrangeMode();
 
     // 状態が変わるたびにlocalStorageに保存
     saveSettings();
@@ -2217,11 +2448,12 @@ function computeCustomExpr(expr, fileRecord) {
     return evaluateAST(ast, getArray, td, len, getCrossRef);
 }
 
-async function addCustomRAM(name, expr) {
+async function addCustomRAM(name, expr, unit = '') {
     const mainFile = getMainFile();
     if (!mainFile || !name.trim() || !expr.trim()) return;
 
     name = name.trim();
+    unit = String(unit || '').trim();
     // Prefix with @ if not already starting with a special character
     if (!/^[@#$%]/.test(name)) name = '@' + name;
     // Prevent duplicate names
@@ -2272,14 +2504,15 @@ async function addCustomRAM(name, expr) {
     for (const [fid, f] of Object.entries(state.files)) {
         const colId = (f === mainFile) ? id : `${id}_${fid}`;
         const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-        const colDef = { id: colId, name, unit: '', idx: -1, color, isCustom: true, isCrossFile };
+        const colDef = { id: colId, name, unit, idx: -1, color, isCustom: true, isCrossFile };
         f.columns.unshift(colDef);
         const vals = (f === mainFile) ? mainVals : computeCustomExpr(expr, f);
         f.colData[colId] = vals;
     }
 
-    state.customRAMs.push({ name, expr, id });
+    state.customRAMs.push({ name, unit, expr, id });
     state.selectedNames.add(name);
+    addStandaloneChart(name);
 
     renderCustomRAMList();
     renderColumnList();
@@ -2305,7 +2538,7 @@ function removeCustomRAM(id) {
         }
     }
     state.selectedNames.delete(name);
-    removeMerge(name);
+    removeChannelFromChartGroups(name);
 
     renderCustomRAMList();
     renderColumnList();
@@ -2356,7 +2589,7 @@ async function recomputeCustomRAMs() {
         for (const [fid, f] of Object.entries(state.files)) {
             const colId = (f.role === 'main') ? cr.id : `${cr.id}_${fid}`;
             const color = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
-            const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true, isCrossFile: isCross };
+            const colDef = { id: colId, name: cr.name, unit: cr.unit || '', idx: -1, color, isCustom: true, isCrossFile: isCross };
             f.columns.unshift(colDef);
             f.colData[colId] = computeCustomExpr(cr.expr, f);
         }
@@ -2387,7 +2620,7 @@ async function addCustomRAMsToFile(fileId) {
         const colId  = (f.role === 'main') ? cr.id : `${cr.id}_${fileId}`;
         const color  = SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length];
 
-        const colDef = { id: colId, name: cr.name, unit: '', idx: -1, color, isCustom: true, isCrossFile: isCross };
+        const colDef = { id: colId, name: cr.name, unit: cr.unit || '', idx: -1, color, isCustom: true, isCrossFile: isCross };
         f.columns.unshift(colDef);
         f.colData[colId] = computeCustomExpr(cr.expr, f);
     }
@@ -2399,18 +2632,64 @@ function renderCustomRAMList() {
         const li = document.createElement('li');
         li.className = 'custom-ram-item';
         li.innerHTML = `<span class="cr-name">${esc(cr.name)}</span>`
+            + `<span class="cr-unit">${esc(cr.unit || 'unitなし')}</span>`
             + `<span class="cr-expr" title="${esc(cr.expr)}">${esc(cr.expr)}</span>`
+            + `<i class='bx bx-edit-alt cr-edit' data-crid="${esc(cr.id)}" title="単位を編集"></i>`
             + `<i class='bx bx-x cr-del' data-crid="${esc(cr.id)}" title="Remove"></i>`;
         dom.customList.appendChild(li);
     }
     dom.customList.querySelectorAll('.cr-del').forEach(el => {
         el.addEventListener('click', () => removeCustomRAM(el.dataset.crid));
     });
+    dom.customList.querySelectorAll('.cr-edit').forEach(el => {
+        el.addEventListener('click', () => showCustomRAMUnitModal(el.dataset.crid));
+    });
+}
+
+function showCustomRAMUnitModal(id) {
+    const cr = state.customRAMs.find(item => item.id === id);
+    if (!cr) return;
+    document.getElementById('app-modal-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'app-modal-overlay';
+    overlay.className = 'app-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'app-modal custom-unit-modal';
+    modal.setAttribute('aria-labelledby', 'custom-unit-title');
+    modal.innerHTML = `
+        <h3 id="custom-unit-title">Custom RAM Unit</h3>
+        <p>${esc(cr.name)}</p>
+        <input type="text" class="custom-ram-input custom-unit-edit-input" value="${esc(cr.unit || '')}" placeholder="Unit (optional)">
+        <div class="modal-actions">
+            <button class="btn-secondary custom-unit-cancel">キャンセル</button>
+            <button class="btn-primary custom-unit-save">保存</button>
+        </div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
+    const input = modal.querySelector('.custom-unit-edit-input');
+    input.focus();
+    const close = () => overlay.remove();
+    modal.querySelector('.custom-unit-cancel').addEventListener('click', close);
+    modal.querySelector('.custom-unit-save').addEventListener('click', () => {
+        cr.unit = input.value.trim();
+        for (const file of Object.values(state.files)) {
+            const col = file.columns.find(c => c.isCustom && c.name === cr.name);
+            if (col) col.unit = cr.unit;
+        }
+        renderCustomRAMList();
+        renderColumnList();
+        renderChart();
+        saveSettings();
+        close();
+    });
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 dom.customAdd.addEventListener('click', () => {
-    addCustomRAM(dom.customName.value, dom.customExpr.value);
+    addCustomRAM(dom.customName.value, dom.customExpr.value, dom.customUnit.value);
     dom.customName.value = '';
+    dom.customUnit.value = '';
     dom.customExpr.value = '';
     // バリデーション表示をクリア
     dom.customValidation.textContent = '';
@@ -2893,18 +3172,25 @@ function renderColumnList() {
         item.appendChild(topRow);
 
         if (on) {
+            const group = getChartGroupForChannel(col.name);
+            const assignment = group?.channels.find(ch => ch.name === col.name);
+            const axis = group?.axes.find(a => a.id === assignment?.axisId);
+            const representative = axis?.representative || col.name;
+            const representativeRange = state.yRanges[representative] ?? { min: '', max: '' };
             const yr = document.createElement('div');
             yr.className = 'col-yrange';
             yr.addEventListener('click', e => e.stopPropagation());
-            yr.innerHTML = `
+            yr.innerHTML = representative !== col.name
+                ? `<span class="col-yrange-shared">Y range: ${esc(representative)} と共有</span>`
+                : `
                 <span class="col-yrange-label">Y</span>
                 <input type="number" class="yrange-input" placeholder="min"
-                    value="${esc(range.min)}"
+                    value="${esc(representativeRange.min)}"
                     data-range-name="${esc(col.name)}" data-range-type="min"
                     title="Y-axis minimum">
                 <span class="yrange-sep">~</span>
                 <input type="number" class="yrange-input" placeholder="max"
-                    value="${esc(range.max)}"
+                    value="${esc(representativeRange.max)}"
                     data-range-name="${esc(col.name)}" data-range-type="max"
                     title="Y-axis maximum">
             `;
@@ -2925,11 +3211,12 @@ function renderColumnList() {
         topRow.addEventListener('click', () => {
             if (on) {
                 state.selectedNames.delete(col.name);
-                removeMerge(col.name);
+                removeChannelFromChartGroups(col.name);
                 renderColumnList();
                 renderChart();
             } else {
                 state.selectedNames.add(col.name);
+                addStandaloneChart(col.name);
                 if (!state.yRanges[col.name]) state.yRanges[col.name] = { min: '', max: '' };
                 renderColumnList();
                 ensureColumnsAndRender();
@@ -3287,38 +3574,31 @@ function getActiveGroups() {
     const mainFile = getMainFile();
     if (!mainFile || !state.selectedNames.size) return { groups: new Map(), order: [] };
 
-    // マージペアのセカンダリ（2番目）を特定 → 独立グリッドを作らない
-    const mergedSecondaries = new Set();
-    const mergeMap = new Map(); // primary → secondary
-    for (const [a, b] of state.mergedGroups) {
-        if (state.selectedNames.has(a) && state.selectedNames.has(b)) {
-            mergedSecondaries.add(b);
-            mergeMap.set(a, b);
-        }
-    }
+    syncChartGroupsWithSelection();
 
     const groups = new Map();
     const order  = [];
 
-    for (const ramName of state.selectedNames) {
-        // セカンダリはスキップ（プライマリ側で処理される）
-        if (mergedSecondaries.has(ramName)) continue;
+    for (const chartGroup of state.chartGroups) {
+        const channelNames = chartGroup.channels.map(ch => ch.name).filter(name => state.selectedNames.has(name));
+        if (!channelNames.length) continue;
 
-        const mc = mainFile.columns.find(c => c.name === ramName);
-        if (!mc) continue;
-
-        // このグリッドに含まれるチャンネル名一覧
-        const partner = mergeMap.get(ramName);
-        const channelNames = partner ? [ramName, partner] : [ramName];
-
-        order.push(ramName);
-        const grp = { unit: mc.unit, series: [], mergedNames: channelNames };
-        groups.set(ramName, grp);
+        order.push(chartGroup.id);
+        const grp = {
+            id: chartGroup.id,
+            axes: chartGroup.axes.map(axis => ({ ...axis })),
+            channels: chartGroup.channels.map(ch => ({ ...ch })),
+            series: [],
+            mergedNames: channelNames,
+        };
+        groups.set(chartGroup.id, grp);
 
         // 各チャンネルについてメイン＋サブのシリーズを構築
         for (const chName of channelNames) {
             const col = mainFile.columns.find(c => c.name === chName);
             if (!col) continue;
+            const assignment = chartGroup.channels.find(ch => ch.name === chName);
+            if (!assignment) continue;
 
             // ── Main series (solid line) ───────────────────────
             const mtd  = mainFile.timeData;
@@ -3339,6 +3619,8 @@ function getActiveGroups() {
                 color:    mainColor,
                 dash:     false,
                 data:     mPts,
+                channelName: chName,
+                axisId: assignment.axisId,
             });
 
             // ── Sub series (dashed lines, time-shifted) ────────
@@ -3366,6 +3648,8 @@ function getActiveGroups() {
                     color: subColor,
                     dash:  true,
                     data:  sPts,
+                    channelName: chName,
+                    axisId: assignment.axisId,
                 });
             }
         }
@@ -3393,6 +3677,7 @@ function renderChart() {
 
     if (n === 0) {
         state.chart.clear();
+        removeArrangeOverlay();
         dom.overlay.classList.remove('hidden');
         dom.resetBtn.disabled = true;
         dom.exportPng.disabled = true;
@@ -3442,7 +3727,28 @@ function renderChart() {
     }
     if (!isFinite(globalXMin)) { globalXMin = 0; globalXMax = 1; }
 
-    const xSliderRight = L.gridRight + L.yZoomW + L.yZoomRight + 4;
+    const AXIS_GAP = 58;
+    const ZOOM_GAP = 12;
+    const groupLayouts = order.map(groupId => {
+        const axisCount = Math.max(groups.get(groupId).axes.length, 1);
+        const leftCount = Math.ceil(axisCount / 2);
+        const rightCount = Math.floor(axisCount / 2);
+        return {
+            left: L.gridLeft + Math.max(0, leftCount - 1) * AXIS_GAP,
+            right: Math.max(L.gridRight, 68) + Math.max(0, rightCount - 1) * AXIS_GAP + axisCount * ZOOM_GAP,
+            axisCount,
+        };
+    });
+    const xSliderLeft = Math.max(...groupLayouts.map(layout => layout.left));
+    const xSliderRight = Math.max(...groupLayouts.map(layout => layout.right));
+    const narrowPlotWidth = state.chart.getWidth() - xSliderLeft - xSliderRight;
+    const warningKey = narrowPlotWidth < 260 ? `${Math.max(...groupLayouts.map(l => l.axisCount))}:${Math.round(narrowPlotWidth)}` : '';
+    if (warningKey && state.axisLayoutWarningKey !== warningKey) {
+        state.axisLayoutWarningKey = warningKey;
+        showWarning('Y軸が多いため描画領域が狭くなっています', 'Overlay Settings で軸を共有すると表示幅を広げられます。');
+    } else if (!warningKey) {
+        state.axisLayoutWarningKey = '';
+    }
 
     // X-axis slider (bottom, all grids linked)
     const xStart = savedXZoom ? savedXZoom.start : 0;
@@ -3452,7 +3758,7 @@ function renderChart() {
         xAxisIndex: order.map((_, i) => i),
         start: xStart, end: xEnd,
         bottom: 8, height: 28,
-        left: L.gridLeft, right: xSliderRight,
+        left: xSliderLeft, right: xSliderRight,
         borderColor: T.border,
         backgroundColor: 'rgba(255,255,255,0.03)',
         fillerColor: 'rgba(99,102,241,0.18)',
@@ -3470,29 +3776,23 @@ function renderChart() {
         xAxisIndex: order.map((_, i) => i),
         start: xStart, end: xEnd,
         zoomOnMouseWheel:  true,
-        moveOnMouseMove:   !state.shiftMode,
+        moveOnMouseMove:   !state.shiftMode && !state.arrangeMode,
         moveOnMouseWheel:  false,
     });
 
-    let _cumulativeTop = topPx; // グリッドの累積top位置
-    order.forEach((ramName, i) => {
-        const grp    = groups.get(ramName);
+    const yAxisIndexByGroup = new Map();
+    let _cumulativeTop = topPx;
+    order.forEach((groupId, i) => {
+        const grp    = groups.get(groupId);
         const gridH  = gridHeights[i];
         const topPxI = _cumulativeTop;
         _cumulativeTop += gridH + gapPx;
+        const layout = groupLayouts[i];
 
-        // Bitチャンネル判定（グリッド内の全チャンネルがBitか）
         const isBitGrid = grp.mergedNames.every(nm => state.bitChannels.has(nm));
 
-        // Parse Y-range settings for this channel
-        const rangeSpec  = state.yRanges[ramName] ?? {};
-        const yMinParsed = isBitGrid ? -0.2 : parseFloat(rangeSpec.min);
-        const yMaxParsed = isBitGrid ? 1.2  : parseFloat(rangeSpec.max);
-        const hasYMin    = !isNaN(yMinParsed);
-        const hasYMax    = !isNaN(yMaxParsed);
-
         grids.push({
-            left: L.gridLeft, right: L.gridRight,
+            left: layout.left, right: layout.right,
             top: pct(topPxI), height: pct(gridH),
             containLabel: false,
         });
@@ -3511,11 +3811,6 @@ function renderChart() {
             min: globalXMin, max: globalXMax,
         });
 
-        // マージされている場合は "A / B (unit)" 形式で表示
-        const yLabelName = grp.mergedNames.length > 1
-            ? grp.mergedNames.join(' / ')
-            : ramName;
-        const yLabel = grp.unit ? `${yLabelName}  (${grp.unit})` : yLabelName;
         const yValFmt = v => {
             if (v === 0) return '0';
             const a = Math.abs(v);
@@ -3525,43 +3820,70 @@ function renderChart() {
             if (a >= 0.01) return v.toPrecision(2);
             return v.toExponential(1);
         };
-        yAxes.push({
-            gridIndex: i,
-            type: 'value',
-            name: yLabel,
-            nameLocation: 'middle',
-            nameGap: 50,
-            nameTextStyle: { color: T.dim, fontSize: 10, fontWeight: 500 },
-            min: hasYMin ? yMinParsed : undefined,
-            max: hasYMax ? yMaxParsed : undefined,
-            scale: !hasYMin && !hasYMax,
-            axisLabel: {
-                color: T.dim, fontSize: 10, width: 44, overflow: 'truncate',
-                formatter: yValFmt,
-            },
-            axisPointer: { show: false },
-            axisTick:  { lineStyle: { color: T.axis } },
-            axisLine:  { show: true, lineStyle: { color: T.axis } },
-            splitLine: { show: true, lineStyle: { color: T.grid } },
-        });
+        const axisIndexMap = new Map();
+        const axisSpecs = new Map();
+        grp.axes.forEach((axis, axisOrder) => {
+            const assignedNames = grp.channels.filter(ch => ch.axisId === axis.id).map(ch => ch.name);
+            if (!assignedNames.length) return;
+            const representative = assignedNames.includes(axis.representative) ? axis.representative : assignedNames[0];
+            const rangeSpec = state.yRanges[representative] ?? {};
+            const axisIsBit = assignedNames.every(name => state.bitChannels.has(name));
+            const yMinParsed = axisIsBit ? -0.2 : parseFloat(rangeSpec.min);
+            const yMaxParsed = axisIsBit ? 1.2 : parseFloat(rangeSpec.max);
+            const hasYMin = !isNaN(yMinParsed);
+            const hasYMax = !isNaN(yMaxParsed);
+            const position = axisOrder % 2 === 0 ? 'left' : 'right';
+            const offset = Math.floor(axisOrder / 2) * AXIS_GAP;
+            const units = getAxisDisplayUnit(getChartGroupById(groupId), axis.id);
+            const yLabelName = assignedNames.join(' / ');
+            const yLabel = units ? `${yLabelName}  (${units})` : yLabelName;
+            const yAxisIndex = yAxes.length;
+            axisIndexMap.set(axis.id, yAxisIndex);
+            axisSpecs.set(axis.id, { representative, yMinParsed, yMaxParsed, hasYMin, hasYMax });
 
-        // Per-grid Y-axis zoom slider (right side)
-        dataZooms.push({
-            type: 'slider', yAxisIndex: [i],
-            start: 0, end: 100,
-            right: L.yZoomRight, top: pct(topPxI),
-            height: pct(gridH), width: L.yZoomW,
-            borderColor: 'transparent',
-            backgroundColor: 'rgba(255,255,255,0.04)',
-            fillerColor: 'rgba(255,255,255,0.1)',
-            handleStyle: { color: 'rgba(255,255,255,0.3)', borderColor: 'rgba(255,255,255,0.2)' },
-            showDetail: false, showDataShadow: false,
-            textStyle: { color: 'transparent', fontSize: 0 },
-        });
+            yAxes.push({
+                gridIndex: i,
+                type: 'value',
+                position,
+                offset,
+                name: yLabel,
+                nameLocation: 'middle',
+                nameGap: 50,
+                nameTextStyle: { color: T.dim, fontSize: 10, fontWeight: 500 },
+                min: hasYMin ? yMinParsed : undefined,
+                max: hasYMax ? yMaxParsed : undefined,
+                scale: !hasYMin && !hasYMax,
+                axisLabel: { color: T.dim, fontSize: 10, width: 44, overflow: 'truncate', formatter: yValFmt },
+                axisPointer: { show: false },
+                axisTick: { lineStyle: { color: T.axis } },
+                axisLine: { show: true, lineStyle: { color: T.axis } },
+                splitLine: { show: axisOrder === 0, lineStyle: { color: T.grid } },
+            });
 
-        grp.series.forEach((s, si) => {
-            // Range-over shading (markArea) on the first series of each grid only
-            const markArea = (si === 0 && (hasYMin || hasYMax)) ? {
+            dataZooms.push({
+                type: 'slider', yAxisIndex: [yAxisIndex],
+                start: 0, end: 100,
+                right: L.yZoomRight + axisOrder * ZOOM_GAP, top: pct(topPxI),
+                height: pct(gridH), width: 9,
+                borderColor: 'transparent',
+                backgroundColor: 'rgba(255,255,255,0.04)',
+                fillerColor: 'rgba(255,255,255,0.1)',
+                handleStyle: { color: 'rgba(255,255,255,0.3)', borderColor: 'rgba(255,255,255,0.2)' },
+                showDetail: false, showDataShadow: false,
+                textStyle: { color: 'transparent', fontSize: 0 },
+            });
+        });
+        yAxisIndexByGroup.set(groupId, axisIndexMap);
+
+        const firstSeriesByAxis = new Set();
+        grp.series.forEach(s => {
+            const yAxisIndex = axisIndexMap.get(s.axisId);
+            if (yAxisIndex === undefined) return;
+            const axisSpec = axisSpecs.get(s.axisId);
+            const isFirstForAxis = !firstSeriesByAxis.has(s.axisId);
+            firstSeriesByAxis.add(s.axisId);
+            const { yMinParsed, yMaxParsed, hasYMin, hasYMax } = axisSpec;
+            const markArea = (isFirstForAxis && (hasYMin || hasYMax)) ? {
                 silent: true,
                 data: [
                     ...(hasYMax ? [[{ yAxis: yMaxParsed }, { yAxis: yMaxParsed * 100 + 1e9 }]] : []),
@@ -3570,8 +3892,7 @@ function renderChart() {
                 itemStyle: { color: 'rgba(255,80,50,0.07)' },
             } : undefined;
 
-            // Range-limit markLines (on first series only)
-            const markLine = (si === 0 && (hasYMin || hasYMax)) ? {
+            const markLine = (isFirstForAxis && (hasYMin || hasYMax)) ? {
                 silent: true,
                 symbol: 'none',
                 data: [
@@ -3585,7 +3906,7 @@ function renderChart() {
                 name:       s.label,
                 type:       'line',
                 xAxisIndex: i,
-                yAxisIndex: i,
+                yAxisIndex,
                 data:       s.data,
                 showSymbol: false,
                 sampling:   dom.sampling.value || false,
@@ -3655,6 +3976,7 @@ function renderChart() {
         dataZoom: dataZooms,
         series,
     }, { notMerge: true });
+    state.yAxisIndexByGroup = yAxisIndexByGroup;
 
     // 初回描画時にズーム初期状態を履歴の起点として記録する
     if (state.zoomHistory.length === 0) {
@@ -3665,18 +3987,76 @@ function renderChart() {
     // ドラッグマージ判定用にグリッド領域情報を保存
     // ドラッグマージ判定用にグリッド領域情報を保存（累積topで計算）
     let _regionTop = topPx;
-    state.gridRegions = order.map((name, i) => {
+    state.gridRegions = order.map((groupId, i) => {
         const h = gridHeights[i];
+        const group = groups.get(groupId);
+        const chartGroup = getChartGroupById(groupId);
         const region = {
-            name,
+            name: group.mergedNames[0],
+            groupId,
             top:    _regionTop,
             height: h,
-            unit:   groups.get(name).unit,
-            merged: (groups.get(name).mergedNames?.length ?? 1) > 1,
+            axisAreaWidth: groupLayouts[i].left,
+            merged: (group.mergedNames?.length ?? 1) > 1,
+            label: group.mergedNames.join(' / '),
+            axisCount: chartGroup?.axes.length || 1,
         };
         _regionTop += h + gapPx;
         return region;
     });
+    updateArrangeOverlay();
+}
+
+function removeArrangeOverlay() {
+    document.getElementById('chart-arrange-overlay')?.remove();
+}
+
+function updateArrangeOverlay() {
+    removeArrangeOverlay();
+    if (!state.arrangeMode || state.gridRegions.length < 2) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'chart-arrange-overlay';
+    overlay.className = 'chart-arrange-overlay';
+    let dragIndex = -1;
+    let dropIndex = -1;
+
+    state.gridRegions.forEach((region, index) => {
+        const panel = document.createElement('div');
+        panel.className = 'chart-arrange-panel';
+        panel.draggable = true;
+        panel.style.top = `${region.top}px`;
+        panel.style.height = `${region.height}px`;
+        panel.innerHTML = `<div class="chart-arrange-handle"><i class='bx bx-menu'></i><span>${esc(region.label)}</span></div>`;
+        panel.addEventListener('dragstart', e => {
+            dragIndex = index;
+            panel.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(index));
+        });
+        panel.addEventListener('dragend', () => {
+            panel.classList.remove('dragging');
+            overlay.querySelectorAll('.drop-before,.drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
+        });
+        panel.addEventListener('dragover', e => {
+            e.preventDefault();
+            const rect = panel.getBoundingClientRect();
+            const after = e.clientY > rect.top + rect.height / 2;
+            dropIndex = index + (after ? 1 : 0);
+            overlay.querySelectorAll('.drop-before,.drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
+            panel.classList.add(after ? 'drop-after' : 'drop-before');
+        });
+        panel.addEventListener('drop', e => {
+            e.preventDefault();
+            if (dragIndex >= 0 && dropIndex >= 0) {
+                moveChartGroup(dragIndex, dropIndex);
+                renderChart();
+                saveSettings();
+            }
+        });
+        overlay.appendChild(panel);
+    });
+    dom.chartEl.appendChild(overlay);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3735,12 +4115,15 @@ function updatePerGridLabels() {
 
         // グリッド内の全チャンネル（マージ相手含む）について値を取得
         for (const chName of grp.mergedNames) {
+            const assignment = grp.channels.find(ch => ch.name === chName);
+            const yAxisIndex = state.yAxisIndexByGroup?.get(grp.id)?.get(assignment?.axisId);
+            if (yAxisIndex === undefined) continue;
             // Main file
             const mc = mainFile.columns.find(c => c.name === chName);
             if (mc && mainFile.colData[mc.id]) {
                 const val = interpolate(mainFile.timeData, mainFile.colData[mc.id], xVal);
                 if (!isNaN(val)) {
-                    entries.push({ color: mc.color, valStr: fmtVal(val), fileName: mainFile.shortName, val });
+                    entries.push({ color: mc.color, valStr: fmtVal(val), fileName: mainFile.shortName, val, yAxisIndex });
                 }
             }
 
@@ -3752,7 +4135,7 @@ function updatePerGridLabels() {
                 const subT = xVal - (sf.offset || 0);
                 const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
                 if (!isNaN(val)) {
-                    entries.push({ color: sc.color, valStr: fmtVal(val), fileName: sf.shortName, val });
+                    entries.push({ color: sc.color, valStr: fmtVal(val), fileName: sf.shortName, val, yAxisIndex });
                 }
             }
         }
@@ -3762,7 +4145,7 @@ function updatePerGridLabels() {
         // Position: use average y of all entries for this grid
         let yPxSum = 0, yCount = 0;
         for (const e of entries) {
-            const yPx = state.chart.convertToPixel({ yAxisIndex: gi }, e.val);
+            const yPx = state.chart.convertToPixel({ yAxisIndex: e.yAxisIndex }, e.val);
             if (yPx != null && !isNaN(yPx)) { yPxSum += yPx; yCount++; }
         }
         const xPx = state.chart.convertToPixel({ xAxisIndex: gi }, xVal);
@@ -3829,6 +4212,7 @@ function toggleBoxZoom() { state.brushMode ? exitBoxZoom() : enterBoxZoom(); }
 function enterBoxZoom() {
     if (!state.chart) return;
     if (state.shiftMode) exitShiftMode();
+    if (state.arrangeMode) exitArrangeMode();
     state.brushMode = true;
     dom.zoomBtn.classList.add('btn-active');
     dom.zoomBtn.innerHTML = `<i class='bx bx-x'></i> Cancel Zoom`;
@@ -4004,10 +4388,11 @@ document.addEventListener('keydown', e => {
         return;
     }
 
-    // Esc: モード離脱（Box Zoom / Time Shift）
+    // Esc: モード離脱
     if (e.key === 'Escape') {
         if (state.brushMode) { exitBoxZoom(); return; }
         if (state.shiftMode) { exitShiftMode(); return; }
+        if (state.arrangeMode) { exitArrangeMode(); return; }
     }
 
     // 単打キー: B / T / R（修飾キーなしのときだけ）
@@ -4039,7 +4424,7 @@ document.addEventListener('keydown', e => {
 function showShortcutsModal() {
     const rows = [
         ['?',              'このショートカット一覧を表示'],
-        ['Esc',            'Box Zoom / Time Shift モードを抜ける'],
+        ['Esc',            'Box Zoom / Time Shift / Arrange モードを抜ける'],
         ['B',              'Box Zoom モードを切り替え'],
         ['T',              'Time Shift モードを切り替え（Sub ファイルが必要）'],
         ['R',              'ズームをリセット（全範囲表示）'],
@@ -4092,12 +4477,14 @@ dom.sampling.addEventListener('change', () => { renderChart(); saveSettings(); }
 dom.encoding?.addEventListener('change', saveSettings);
 
 if (dom.shiftBtn) dom.shiftBtn.addEventListener('click', toggleShiftMode);
+if (dom.arrangeBtn) dom.arrangeBtn.addEventListener('click', toggleArrangeMode);
 
 function toggleShiftMode() { state.shiftMode ? exitShiftMode() : enterShiftMode(); }
 
 function enterShiftMode() {
     if (!getSubFileIds().length) return;
     if (state.brushMode) exitBoxZoom();
+    if (state.arrangeMode) exitArrangeMode();
 
     // Default shift target = first sub file
     if (!state.shiftFileId || !state.files[state.shiftFileId] || state.files[state.shiftFileId].role !== 'sub') {
@@ -4123,6 +4510,30 @@ function exitShiftMode() {
     dom.chartEl.style.cursor = '';
 
     renderFileList();
+    renderChart();
+}
+
+function toggleArrangeMode() {
+    state.arrangeMode ? exitArrangeMode() : enterArrangeMode();
+}
+
+function enterArrangeMode() {
+    if (state.chartGroups.length < 2) return;
+    if (state.brushMode) exitBoxZoom();
+    if (state.shiftMode) exitShiftMode();
+    state.arrangeMode = true;
+    dom.arrangeBtn.classList.add('btn-active');
+    dom.arrangeBtn.innerHTML = `<i class='bx bx-x'></i> Exit Arrange`;
+    dom.hintEl.textContent = 'Drag chart panels up or down to reorder';
+    renderChart();
+}
+
+function exitArrangeMode() {
+    state.arrangeMode = false;
+    dom.arrangeBtn.classList.remove('btn-active');
+    dom.arrangeBtn.innerHTML = `<i class='bx bx-sort-alt-2'></i> Arrange`;
+    dom.hintEl.textContent = '';
+    removeArrangeOverlay();
     renderChart();
 }
 
@@ -4322,6 +4733,14 @@ dom.copyChart.addEventListener('click', copyChartToClipboard);
 const STORAGE_KEY = 'csvViewer_settings';
 const PRESETS_STORAGE_KEY = 'csvViewer_presets';
 
+function serializeChartGroups() {
+    return state.chartGroups.map(group => ({
+        id: group.id,
+        channels: group.channels.map(ch => ({ name: ch.name, axisId: ch.axisId })),
+        axes: group.axes.map(axis => ({ id: axis.id, unit: axis.unit || '', representative: axis.representative })),
+    }));
+}
+
 /**
  * 現在の設定をlocalStorageに保存する。
  * ファイルデータ本体は保存しない（名前・role・offsetだけ）。
@@ -4330,6 +4749,7 @@ function saveSettings() {
     try {
         const sidebar = document.querySelector('.sidebar');
         const settings = {
+            _version: 2,
             // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
             fileInfos: Object.values(state.files).map(f => ({
                 name: f.name,
@@ -4339,9 +4759,8 @@ function saveSettings() {
             // 選択中のチャンネル名
             selectedNames: [...state.selectedNames],
             // Custom RAM式
-            customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
-            // チャンネルマージ設定
-            mergedGroups: state.mergedGroups,
+            customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
+            chartGroups: serializeChartGroups(),
             channelAliases: state.channelAliases,
             // Bit手動Offリスト
             bitManualOff: [..._bitManualOff],
@@ -4387,15 +4806,15 @@ function buildSettingsForExport() {
     const sidebar = document.querySelector('.sidebar');
     return {
         _format: 'CSV Viewer Settings',
-        _version: 1,
+        _version: 2,
         fileInfos: Object.values(state.files).map(f => ({
             name: f.name,
             role: f.role,
             offset: f.offset,
         })),
         selectedNames: [...state.selectedNames],
-        customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
-        mergedGroups: state.mergedGroups,
+        customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
+        chartGroups: serializeChartGroups(),
         channelAliases: state.channelAliases,
         bitManualOff: [..._bitManualOff],
         nameRowIdx: dom.nameRow.value,
@@ -4410,10 +4829,10 @@ function buildSettingsForExport() {
 function buildPresetSettings() {
     return {
         _format: 'CSV Viewer Preset',
-        _version: 1,
+        _version: 2,
         selectedNames: [...state.selectedNames],
-        customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
-        mergedGroups: state.mergedGroups,
+        customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
+        chartGroups: serializeChartGroups(),
         channelAliases: state.channelAliases,
         bitManualOff: [..._bitManualOff],
         nameRowIdx: dom.nameRow.value,
@@ -4580,8 +4999,7 @@ function applySettings(s) {
     _pendingSettings = s;
 
     if (getMainFile()) {
-        applyPendingSettings();
-        updateUI();
+        applyPendingSettings().then(updateUI);
     } else {
         // ファイル読込前の状態を表示
         showPendingFiles(s.fileInfos || []);
@@ -4592,7 +5010,64 @@ function applySettings(s) {
  * ファイルが新たに読み込まれたとき、保留中の設定を適用する。
  * parseCSV完了後（updateUI前）に呼ばれる。
  */
-function applyPendingSettings() {
+function restoreChartGroupsFromSettings(s, mainFile) {
+    const available = new Set(mainFile.columns.map(c => c.name));
+    state.chartGroups = [];
+
+    if (Array.isArray(s.chartGroups) && s.chartGroups.length) {
+        for (const savedGroup of s.chartGroups) {
+            const savedChannels = (savedGroup.channels || []).filter(ch => available.has(ch.name));
+            if (!savedChannels.length) continue;
+            const axisIdMap = new Map();
+            const axes = [];
+            for (const savedAxis of savedGroup.axes || []) {
+                const assigned = savedChannels.filter(ch => ch.axisId === savedAxis.id);
+                if (!assigned.length) continue;
+                const axis = createChartAxis(
+                    available.has(savedAxis.representative) ? savedAxis.representative : assigned[0].name,
+                    savedAxis.unit || ''
+                );
+                axisIdMap.set(savedAxis.id, axis.id);
+                axes.push(axis);
+            }
+            const fallbackAxis = axes[0] || createChartAxis(savedChannels[0].name, getMainColumn(savedChannels[0].name)?.unit || '');
+            if (!axes.length) axes.push(fallbackAxis);
+            state.chartGroups.push({
+                id: nextChartGroupId(),
+                axes,
+                channels: savedChannels.map(ch => ({ name: ch.name, axisId: axisIdMap.get(ch.axisId) || fallbackAxis.id })),
+            });
+        }
+        syncChartGroupsWithSelection();
+        return;
+    }
+
+    const mergedPartner = new Map();
+    for (const pair of s.mergedGroups || []) {
+        if (!Array.isArray(pair) || pair.length < 2) continue;
+        mergedPartner.set(pair[0], pair[1]);
+        mergedPartner.set(pair[1], pair[0]);
+    }
+    const handled = new Set();
+    for (const name of state.selectedNames) {
+        if (handled.has(name) || !available.has(name)) continue;
+        const partner = mergedPartner.get(name);
+        if (partner && state.selectedNames.has(partner) && available.has(partner)) {
+            const axis = createChartAxis(name, getMainColumn(name)?.unit || '');
+            state.chartGroups.push({
+                id: nextChartGroupId(),
+                axes: [axis],
+                channels: [{ name, axisId: axis.id }, { name: partner, axisId: axis.id }],
+            });
+            handled.add(partner);
+        } else {
+            addStandaloneChart(name);
+        }
+        handled.add(name);
+    }
+}
+
+async function applyPendingSettings() {
     const s = _pendingSettings;
     if (!s) return;
 
@@ -4606,18 +5081,6 @@ function applyPendingSettings() {
             if (saved && saved.offset) {
                 f.offset = saved.offset;
             }
-        }
-    }
-
-    // チャンネルマージを復元
-    if (s.mergedGroups && s.mergedGroups.length) {
-        // 既存のマージをクリアして復元
-        state.mergedGroups = [];
-        for (const [a, b] of s.mergedGroups) {
-            // 両方のチャンネルがmainFileに存在するか確認
-            const hasA = mainFile.columns.some(c => c.name === a);
-            const hasB = mainFile.columns.some(c => c.name === b);
-            if (hasA && hasB) addMerge(a, b);
         }
     }
 
@@ -4636,21 +5099,23 @@ function applyPendingSettings() {
     // Custom RAMを復元（まだ追加されていないもののみ）
     if (s.customRAMs && s.customRAMs.length) {
         const existingNames = new Set(state.customRAMs.map(c => c.name));
-        for (const { name, expr } of s.customRAMs) {
+        for (const { name, unit = '', expr } of s.customRAMs) {
             if (!existingNames.has(name)) {
-                // addCustomRAMはawaitが必要だが、ここでは順番に追加していく
-                addCustomRAM(name, expr);
+                await addCustomRAM(name, expr, unit);
+                existingNames.add(name);
             }
         }
     }
 
     // 選択チャンネルを復元
+    state.selectedNames = new Set();
     if (s.selectedNames && s.selectedNames.length) {
         const available = new Set(mainFile.columns.map(c => c.name));
         for (const name of s.selectedNames) {
             if (available.has(name)) state.selectedNames.add(name);
         }
     }
+    restoreChartGroupsFromSettings(s, mainFile);
 
     // 設定適用済みなのでクリア
     _pendingSettings = null;

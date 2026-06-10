@@ -73,6 +73,7 @@
                     </h3>
                     <div class="custom-ram-form">
                         <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input">
+                        <input type="text" id="custom-ram-unit" placeholder="Unit (optional)" class="custom-ram-input">
                         <div style="position:relative;flex:1;">
                             <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off">
                             <ul id="custom-ram-suggest" class="custom-ram-suggest"></ul>
@@ -118,6 +119,9 @@
                     <div class="toolbar-sep"></div>
                     <button id="shift-mode-btn" class="btn-secondary" disabled title="Drag chart to shift sub file timeline (T)">
                         <i class='bx bx-transfer-alt' aria-hidden="true"></i> Time Shift
+                    </button>
+                    <button id="arrange-mode-btn" class="btn-secondary" disabled title="Reorder chart panels">
+                        <i class='bx bx-sort-alt-2' aria-hidden="true"></i> Arrange
                     </button>
                     <div class="toolbar-sep"></div>
                     <label class="sampling-label" title="Data sampling mode">
