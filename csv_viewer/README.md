@@ -12,6 +12,7 @@ csv_viewer/
 ├─ app.js              … メインロジック
 ├─ parser-utils.js     … CSVパース・文字コード判定（Nodeテスト可能な純粋関数）
 ├─ settings-utils.js   … 設定のバージョンチェック・マイグレーション（同上）
+├─ history-utils.js    … Undo/Redo統合履歴のロジック（同上）
 ├─ styles.css
 ├─ tests/              … Nodeで実行する単体テスト
 └─ lib/                … 同梱ライブラリ（ECharts, PapaParse等）
@@ -78,6 +79,7 @@ Settings の Encoding で読み込み文字コードを指定できます。
 - PNG 保存、クリップボードコピー
 - 設定の JSON エクスポート / インポート
 - Settings セクションで設定プリセットを保存 / 適用 / 削除
+- Undo / Redo（Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z、ツールバーボタン）。ズーム・チャンネル選択・マージ・Custom RAM・色変更などの操作を時系列順に戻せる。ファイル追加 / 削除 / Clear All / Time 単位変更の時点で履歴はリセットされる
 - Channel Map で、名前が違うSub側チャンネルをMainチャンネルへ対応付け
 
 ## Custom RAM
@@ -128,6 +130,7 @@ Main と Sub で同じ物理値なのにチャンネル名が違う場合、Chan
 ```bash
 rtk node tests/parser-utils.test.js
 rtk node tests/settings-utils.test.js
+rtk node tests/history-utils.test.js
 ```
 
 構文チェック:
@@ -136,6 +139,7 @@ rtk node tests/settings-utils.test.js
 rtk node --check app.js
 rtk node --check parser-utils.js
 rtk node --check settings-utils.js
+rtk node --check history-utils.js
 ```
 
 設定の保存形式（`_version`）を変更するときは、`settings-utils.js` の

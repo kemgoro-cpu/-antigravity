@@ -3,6 +3,67 @@
 開発を引き継ぐ人（人間・AIエージェント問わず）向けの正確な変更記録。
 コミット単位の詳細は `git log` も参照のこと。
 
+## 2026-06-11 (2): アプリ全体のUndo/Redo機能（Claude Code実施）
+
+Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z とツールバーボタンで、ズーム・チャンネル選択・
+マージ・Custom RAM・色変更など**全操作を1本の統合履歴**でUndo/Redoできるようにした。
+旧来の「Box Zoom限定のCtrl+Z/Y」（`state.zoomHistory`機構）は新機構に完全包含されるため削除。
+
+### 新規ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `history-utils.js` | 履歴の積み方・辿り方の純粋関数（UMD、グローバル名 `CSVHistory`）。重複排除 / Redo切り捨て / coalesce（連続操作の統合）/ 上限50件。エントリは「正規化済み設定スナップショット+X軸ズーム範囲」 |
+| `tests/history-utils.test.js` | 9ケースのNodeテスト |
+
+### 仕組み（重要な設計判断）
+
+- **記録**: `saveSettings()` 冒頭で `recordHistory()` を同期実行。ユーザー操作の確定点は
+  すべて `saveSettings()` を通るため、**操作側のコードを変えずに全操作が自動記録される**。
+  記録はdebounceしない（debounce後だと「操作直後のCtrl+Z」で最後の操作が履歴に無い事故が起きる）。
+- **スナップショット**: `collectSettings()`（localStorage保存と同じ単一情報源）を
+  `CSVHistory.makeEntry` がdeep copyして保持。`sidebarWidth` は履歴比較から除外
+  （サイドバーのリサイズはUndo対象にしない）。
+- **復元**: `restoreHistoryEntry()` が `applySettings()` を再利用。設定が現在と同一なら
+  ズームだけ適用する軽量パス。**スナップショットに無いCustom RAMは復元前に
+  `removeCustomRAM` で削除**する（`applyPendingSettings` は追加しかしないため）。
+- **ズーム復元**: `_pendingZoomRestore` を `renderChart` の `savedXZoom` に注入。
+  dispatchActionの後追いではなく、復元中の全再描画が目標ズームで描かれる（レース無し）。
+- **再記録防止**: 復元中は `_restoringHistory` フラグで記録を抑制。解除はrAF 1フレーム後。
+  万一漏れても `push` の重複排除（key一致でskipped）が最終防衛線。
+- **直列化**: Ctrl+Z連打は `_restoreQueue`（Promiseチェーン）で1件ずつ実行。
+- **coalesce**: カラーピッカーの `input` 連続発火は `saveSettings('fileColor:'+fid)` で
+  1秒以内の連続変更を1エントリに統合。
+
+### 履歴がクリアされる操作（仕様上の制約）
+
+ファイル追加 / ファイル削除 / Clear All / Time単位の手動変更。
+CSVの数値データ本体はスナップショットに含まれず復元不可能なため、ファイル構成が
+変わった時点で履歴を捨てて現在状態を新しい起点にする。履歴はlocalStorageに保存しない
+（セッション限定。リロードで消える）。
+
+### 守るべき制約（今後の開発向け）
+
+- **状態を変える操作を追加したら必ず `saveSettings()` を呼ぶこと**（永続化とUndo記録の両方を担う）
+- 設定項目の追加は `collectSettings()` に対して行うこと（履歴とlocalStorageの単一情報源）
+- 「見た目だけ」の設定を追加した場合は `history-utils.js` の `VISUAL_ONLY_KEYS` にも追加
+- Reset View（`resetZoom`）は履歴に記録される（Undoで戻れる）。ホイール/スライダーの
+  ズームは従来どおり記録しない（スパム防止）
+
+### 【バグ修正】Custom RAMの永続化漏れ
+
+`addCustomRAM` / `removeCustomRAM` が `saveSettings()` を呼んでおらず、RAMの追加/削除が
+リロードで失われていた（直後に別の操作をした場合だけ偶然保存されていた）。
+両関数の末尾に `saveSettings()` を追加。これによりUndo履歴にも正しく記録される。
+
+### 検証済み事項（2026-06-11時点）
+
+- Nodeテスト3本合格、コンソールエラーなし
+- ブラウザ実機: 選択/ズーム/Custom RAM追加のUndo/Redo（種類をまたいだ逆順復帰）、
+  Ctrl+Shift+ZのRedo、Ctrl+Z×10連打の整合性、Undo後のリロード整合（localStorage）、
+  Clear All/ファイル追加での履歴クリア、ボタンの有効/無効表示、
+  RedoでのCustom RAM再計算（11,801点）
+
 ## 2026-06-11: 堅牢性・パフォーマンス・プロジェクト整備（Claude Code実施）
 
 改善調査に基づく6コミット（`893e2e3`〜`a82f82c`）。
