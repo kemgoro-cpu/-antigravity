@@ -3734,7 +3734,9 @@ function renderChart() {
         savedXZoom = { start: curOpt.dataZoom[0].start, end: curOpt.dataZoom[0].end };
     }
 
-    const { groups, order } = getActiveGroups();
+    const active = getActiveGroups();
+    _lastRenderedGroups = active; // ホバー時のラベル更新用スナップショット
+    const { groups, order } = active;
     const n = order.length;
 
     if (n === 0) {
@@ -4142,6 +4144,13 @@ let _labelEls = []; // reusable label element pool
 // Stored by tooltip formatter, consumed by updatePerGridLabels
 let _lastTooltipParams = null;
 
+// renderChartが構築した { groups, order } のスナップショット。
+// updatePerGridLabelsはマウス移動のたびに呼ばれるため、そこでgetActiveGroups()を
+// 呼び直すと全シリーズ×全ポイントの配列再構築が毎mousemoveで走ってしまう。
+// renderChartは状態変更のたびに必ず呼ばれるので、このスナップショットを参照すれば
+// キャッシュ無効化ロジックなしで常に描画内容と一致したデータが得られる。
+let _lastRenderedGroups = null;
+
 function fmtVal(v) {
     const a = Math.abs(v);
     if (a >= 1e4)   return v.toFixed(0);
@@ -4166,8 +4175,10 @@ function updatePerGridLabels() {
     if (!mainFile) return;
 
     // Build one label per grid, with values from ALL channels and files
-    // getActiveGroups() のorder（マージ済み）を使うことでグリッドとインデックスが一致する
-    const { groups: activeGroups, order: activeOrder } = getActiveGroups();
+    // renderChartが保存したスナップショットのorder（マージ済み）を使うことで
+    // グリッドとインデックスが一致し、かつ毎mousemoveの全データ再構築を避けられる
+    const { groups: activeGroups, order: activeOrder } =
+        _lastRenderedGroups || { groups: new Map(), order: [] };
     const gridLabels = [];
 
     activeOrder.forEach((ramName, gi) => {
