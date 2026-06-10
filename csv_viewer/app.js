@@ -1598,11 +1598,15 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     await applyPendingSettings();
 
                     // 既存のCustom RAMがあれば新ファイルにも計算・追加する
+                    // .catchを.thenの前に置くことで、計算に失敗してもUI更新と保存は必ず行う
+                    // （asyncコールバック内のPromise拒否は外側のtry/catchでは捕捉されないため）
                     if (state.customRAMs.length > 0) {
-                        addCustomRAMsToFile(fileId).then(() => {
-                            updateUI();
-                            saveSettings();
-                        });
+                        addCustomRAMsToFile(fileId)
+                            .catch(e => showError(`Custom RAMの計算に失敗: ${fileName}`, e.stack || e.message))
+                            .then(() => {
+                                updateUI();
+                                saveSettings();
+                            });
                     } else {
                         updateUI();
                         saveSettings();
@@ -1646,7 +1650,8 @@ function loadColumnsForFile(fileId, colNames) {
     }
 
     // If there's already a parse in progress for this file, chain after it
-    const prev = _parseQueue.get(fileId) || Promise.resolve();
+    // 前のジョブが失敗していても後続の読み込みが止まらないよう、拒否は握りつぶしてチェーンを継続する
+    const prev = (_parseQueue.get(fileId) || Promise.resolve()).catch(() => {});
     const queueJob = prev.then(async () => {
         // Re-check which columns still need loading (previous parse may have loaded some)
         const stillNeeded = colsToLoad.filter(col => !f.colData[col.id]);
@@ -1734,9 +1739,12 @@ function loadColumnsForFile(fileId, colNames) {
     });
 
     // Clean up queue entry when done
-    const cleanup = queueJob.then(() => {
-        if (_parseQueue.get(fileId) === cleanup) _parseQueue.delete(fileId);
-    });
+    // ジョブが失敗してもMapから必ず削除する（拒否済みPromiseが残ると以降の読み込みが永久に失敗するため）
+    const cleanup = queueJob
+        .catch(e => showError(`Column load failed: ${f.name}`, e.stack || e.message))
+        .then(() => {
+            if (_parseQueue.get(fileId) === cleanup) _parseQueue.delete(fileId);
+        });
     _parseQueue.set(fileId, cleanup);
 
     return cleanup;
@@ -2276,6 +2284,21 @@ function renderFileList() {
             showDebugModal(el.dataset.fid);
         });
     });
+
+    // Manual Time unit override
+    // 注意: このリスナー登録はrenderFileList内で行うこと。
+    // renderCustomRAMList内に置くと、ファイルリストのselect要素は作り直されないまま
+    // Custom RAM操作のたびにリスナーが累積し、単位切替時に再計算が複数回走るバグになる
+    dom.fileList.querySelectorAll('.time-unit-select').forEach(select => {
+        select.addEventListener('change', async () => {
+            select.disabled = true;
+            try {
+                await setManualTimeUnit(select.dataset.timeUnitId, select.value);
+            } finally {
+                if (select.isConnected) select.disabled = false;
+            }
+        });
+    });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2676,17 +2699,6 @@ function renderCustomRAMList() {
         el.addEventListener('click', () => removeCustomRAM(el.dataset.crid));
     });
 
-    // Manual Time unit override
-    dom.fileList.querySelectorAll('.time-unit-select').forEach(select => {
-        select.addEventListener('change', async () => {
-            select.disabled = true;
-            try {
-                await setManualTimeUnit(select.dataset.timeUnitId, select.value);
-            } finally {
-                if (select.isConnected) select.disabled = false;
-            }
-        });
-    });
     dom.customList.querySelectorAll('.cr-edit').forEach(el => {
         el.addEventListener('click', () => showCustomRAMUnitModal(el.dataset.crid));
     });
@@ -5064,7 +5076,8 @@ function applySettings(s) {
     _pendingSettings = s;
 
     if (getMainFile()) {
-        applyPendingSettings().then(updateUI);
+        applyPendingSettings().then(updateUI)
+            .catch(e => showError('保存済み設定の適用に失敗しました', e.stack || e.message));
     } else {
         // ファイル読込前の状態を表示
         showPendingFiles(s.fileInfos || []);
