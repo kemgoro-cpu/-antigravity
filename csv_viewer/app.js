@@ -5041,8 +5041,17 @@ function importSettings() {
  * ファイルがまだ読み込まれていない場合は、pendingSettingsとして保持する。
  * @param {object} s - 設定オブジェクト
  */
-function applySettings(s) {
-    if (!s) return;
+function applySettings(rawSettings) {
+    // バージョンチェック+マイグレーション(settings-utils.js)。
+    // 起動時復元・インポート・プリセット適用の全経路がここを通るので、検証はこの1箇所で済む
+    const result = CSVSettings.migrateSettings(rawSettings);
+    if (!result.ok) {
+        if (result.reason === 'newer') {
+            showWarning('設定データが新しいバージョンの形式のため読み込みをスキップしました');
+        }
+        return;
+    }
+    const s = result.settings;
 
     // パース設定を復元
     if (s.nameRowIdx) dom.nameRow.value = s.nameRowIdx;
