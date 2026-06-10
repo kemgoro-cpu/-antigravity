@@ -1,0 +1,6 @@
+# 実測データ(個人の測定ファイル。リポジトリには含めない)
+# ルート直下のCSVのみ対象。csv_viewer/ 配下の意図的なサンプルは追跡する
+/*.csv
+
+# Claude Codeのローカル設定(個人環境依存)
+.claude/settings.local.json

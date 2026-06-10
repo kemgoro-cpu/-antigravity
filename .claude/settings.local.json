@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(/usr/bin/echo hello:*)",
-      "Bash(printf:*)"
-    ]
-  }
-}
