@@ -1864,7 +1864,7 @@ function getRawTimeSpan(fileRecord) {
 
 function isExplicitTimeScale(fileRecord) {
     const source = fileRecord?.headerInfo?.timeScaleSource;
-    return source === 'unit' || source === 'header';
+    return source === 'unit' || source === 'header' || source === 'manual';
 }
 
 function applyTimeScale(fileRecord, scale, source, unit, note) {
@@ -1991,11 +1991,33 @@ function getTimeScaleLabel(fileRecord) {
         ? 'unit'
         : source === 'header'
             ? 'header'
-            : 'auto';
+            : source === 'manual'
+                ? 'manual'
+                : 'auto';
 
     if (unit) return `${unit} -> s (${sourceLabel})`;
     if (scale !== 1) return `x${scale} -> s (${sourceLabel})`;
     return `s (${sourceLabel})`;
+}
+
+async function setManualTimeUnit(fileId, unit) {
+    const fileRecord = state.files[fileId];
+    if (!fileRecord || !['s', 'ms'].includes(unit)) return;
+
+    const scale = unit === 'ms' ? 0.001 : 1;
+    const changed = applyTimeScale(fileRecord, scale, 'manual', unit, 'user override');
+    if (!changed) return;
+
+    state.zoomHistory = [];
+    state.zoomHistoryIdx = -1;
+    updateParsePreview(fileRecord);
+
+    if (state.customRAMs.length) await recomputeCustomRAMs();
+    renderFileList();
+    renderColumnList();
+    renderChart();
+    saveSettings();
+    showExportToast('Time単位を変更しました', `${fileRecord.shortName}: ${unit} → 秒基準`);
 }
 
 function updateParsePreview(fileRecord) {
@@ -2137,6 +2159,17 @@ function renderFileList() {
         const isShiftTgt = state.shiftMode && fid === state.shiftFileId;
         const li        = document.createElement('li');
         li.className    = `file-item${isShiftTgt ? ' shift-target' : ''}`;
+        const effectiveTimeUnit = f.headerInfo?.timeScaleUnit === 'ms' ? 'ms' : 's';
+        const timeUnitRow = `
+            <div class="file-time-unit-row">
+                <span class="time-unit-label">Time</span>
+                <select class="time-unit-select" data-time-unit-id="${fid}"
+                    title="このファイルのTime列の元単位を指定">
+                    <option value="s"${effectiveTimeUnit === 's' ? ' selected' : ''}>s</option>
+                    <option value="ms"${effectiveTimeUnit === 'ms' ? ' selected' : ''}>ms</option>
+                </select>
+                <span class="time-unit-source">${f.headerInfo?.timeScaleSource === 'manual' ? 'Manual' : 'Auto'}</span>
+            </div>`;
 
         const offsetRow = isMain ? '' : `
             <div class="file-offset-row">
@@ -2173,6 +2206,7 @@ function renderFileList() {
                 <i class='bx bx-bug debug-file' data-fid="${fid}" title="Debug: パース結果を確認"></i>
                 <i class='bx bx-x remove-file' data-fid="${fid}" title="Remove"></i>
             </div>
+            ${timeUnitRow}
             ${offsetRow}
         `;
 
@@ -2640,6 +2674,18 @@ function renderCustomRAMList() {
     }
     dom.customList.querySelectorAll('.cr-del').forEach(el => {
         el.addEventListener('click', () => removeCustomRAM(el.dataset.crid));
+    });
+
+    // Manual Time unit override
+    dom.fileList.querySelectorAll('.time-unit-select').forEach(select => {
+        select.addEventListener('change', async () => {
+            select.disabled = true;
+            try {
+                await setManualTimeUnit(select.dataset.timeUnitId, select.value);
+            } finally {
+                if (select.isConnected) select.disabled = false;
+            }
+        });
     });
     dom.customList.querySelectorAll('.cr-edit').forEach(el => {
         el.addEventListener('click', () => showCustomRAMUnitModal(el.dataset.crid));
@@ -4741,6 +4787,16 @@ function serializeChartGroups() {
     }));
 }
 
+function serializeTimeUnitOverrides() {
+    const overrides = {};
+    for (const file of Object.values(state.files)) {
+        if (file.headerInfo?.timeScaleSource === 'manual') {
+            overrides[file.name] = file.headerInfo.timeScaleUnit === 'ms' ? 'ms' : 's';
+        }
+    }
+    return overrides;
+}
+
 /**
  * 現在の設定をlocalStorageに保存する。
  * ファイルデータ本体は保存しない（名前・role・offsetだけ）。
@@ -4749,18 +4805,22 @@ function saveSettings() {
     try {
         const sidebar = document.querySelector('.sidebar');
         const settings = {
-            _version: 2,
+            _version: 3,
             // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
             fileInfos: Object.values(state.files).map(f => ({
                 name: f.name,
                 role: f.role,
                 offset: f.offset,
+                timeUnitOverride: f.headerInfo?.timeScaleSource === 'manual'
+                    ? (f.headerInfo.timeScaleUnit === 'ms' ? 'ms' : 's')
+                    : null,
             })),
             // 選択中のチャンネル名
             selectedNames: [...state.selectedNames],
             // Custom RAM式
             customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
             chartGroups: serializeChartGroups(),
+            timeUnitOverrides: serializeTimeUnitOverrides(),
             channelAliases: state.channelAliases,
             // Bit手動Offリスト
             bitManualOff: [..._bitManualOff],
@@ -4806,15 +4866,19 @@ function buildSettingsForExport() {
     const sidebar = document.querySelector('.sidebar');
     return {
         _format: 'CSV Viewer Settings',
-        _version: 2,
+        _version: 3,
         fileInfos: Object.values(state.files).map(f => ({
             name: f.name,
             role: f.role,
             offset: f.offset,
+            timeUnitOverride: f.headerInfo?.timeScaleSource === 'manual'
+                ? (f.headerInfo.timeScaleUnit === 'ms' ? 'ms' : 's')
+                : null,
         })),
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
         chartGroups: serializeChartGroups(),
+        timeUnitOverrides: serializeTimeUnitOverrides(),
         channelAliases: state.channelAliases,
         bitManualOff: [..._bitManualOff],
         nameRowIdx: dom.nameRow.value,
@@ -4829,10 +4893,11 @@ function buildSettingsForExport() {
 function buildPresetSettings() {
     return {
         _format: 'CSV Viewer Preset',
-        _version: 2,
+        _version: 3,
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
         chartGroups: serializeChartGroups(),
+        timeUnitOverrides: serializeTimeUnitOverrides(),
         channelAliases: state.channelAliases,
         bitManualOff: [..._bitManualOff],
         nameRowIdx: dom.nameRow.value,
@@ -5074,13 +5139,37 @@ async function applyPendingSettings() {
     const mainFile = getMainFile();
     if (!mainFile) return;
 
-    // オフセットを復元（ファイル名で照合）
+    let timeScaleChanged = false;
+
+    // オフセットと手動Time単位を復元（ファイル名で照合）
     if (s.fileInfos) {
         for (const [fid, f] of Object.entries(state.files)) {
             const saved = s.fileInfos.find(fi => fi.name === f.name);
-            if (saved && saved.offset) {
+            if (saved && saved.offset !== undefined) {
                 f.offset = saved.offset;
             }
+            const override = saved?.timeUnitOverride || s.timeUnitOverrides?.[f.name];
+            if (override === 's' || override === 'ms') {
+                timeScaleChanged = applyTimeScale(
+                    f,
+                    override === 'ms' ? 0.001 : 1,
+                    'manual',
+                    override,
+                    'user override'
+                ) || timeScaleChanged;
+            }
+        }
+    } else if (s.timeUnitOverrides) {
+        for (const f of Object.values(state.files)) {
+            const override = s.timeUnitOverrides[f.name];
+            if (override !== 's' && override !== 'ms') continue;
+            timeScaleChanged = applyTimeScale(
+                f,
+                override === 'ms' ? 0.001 : 1,
+                'manual',
+                override,
+                'user override'
+            ) || timeScaleChanged;
         }
     }
 
@@ -5106,6 +5195,7 @@ async function applyPendingSettings() {
             }
         }
     }
+    if (timeScaleChanged && state.customRAMs.length) await recomputeCustomRAMs();
 
     // 選択チャンネルを復元
     state.selectedNames = new Set();
@@ -5116,6 +5206,15 @@ async function applyPendingSettings() {
         }
     }
     restoreChartGroupsFromSettings(s, mainFile);
+
+    if (timeScaleChanged) {
+        state.zoomHistory = [];
+        state.zoomHistoryIdx = -1;
+        updateParsePreview(Object.values(state.files).at(-1));
+        renderFileList();
+        renderColumnList();
+        renderChart();
+    }
 
     // 設定適用済みなのでクリア
     _pendingSettings = null;

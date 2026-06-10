@@ -342,6 +342,38 @@ body {
 }
 
 /* Sub file offset row */
+.file-time-unit-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px 5px 34px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.time-unit-label,
+.time-unit-source {
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+.time-unit-select {
+    width: 58px;
+    height: 23px;
+    padding: 2px 5px;
+    color: var(--text-primary);
+    background: var(--bg-main);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.7rem;
+}
+
+.time-unit-source {
+    margin-left: auto;
+    color: #86efac;
+}
+
 .file-offset-row {
     display: flex;
     align-items: center;
