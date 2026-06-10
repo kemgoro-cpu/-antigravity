@@ -2121,6 +2121,10 @@ dom.clearBtn.addEventListener('click', () => {
     updateUI();
     // localStorageの保存データもクリア
     try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    // 上のupdateUI()がsaveSettings()で保存を予約しているため、
+    // キャンセルしないと500ms後に空設定が書き戻されてしまう
+    clearTimeout(_saveSettingsTimer);
+    _saveSettingsTimer = null;
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -4809,11 +4813,43 @@ function serializeTimeUnitOverrides() {
     return overrides;
 }
 
+// 保存失敗トーストの多重表示防止フラグ（成功したらリセットする）
+let _storageWarnShown = false;
+// saveSettingsのdebounce用タイマーID（nullなら保留中の保存なし）
+let _saveSettingsTimer = null;
+
+/**
+ * 設定保存を予約する（500msのdebounce）。
+ * 約18箇所から呼ばれるため、連続操作のたびにJSON.stringifyを即時実行しないようまとめる。
+ * 実際の書き込みは saveSettingsNow が行う。
+ */
+function saveSettings() {
+    clearTimeout(_saveSettingsTimer);
+    _saveSettingsTimer = setTimeout(flushSettingsSave, 500);
+}
+
+/**
+ * 保留中の保存があれば即時実行する（ページ離脱時の保存漏れ防止）。
+ */
+function flushSettingsSave() {
+    if (_saveSettingsTimer === null) return; // 保留なし
+    clearTimeout(_saveSettingsTimer);
+    _saveSettingsTimer = null;
+    saveSettingsNow();
+}
+
+// beforeunload単独ではタブ切替やモバイルのプロセス破棄で発火しないため、
+// pagehide + visibilitychange の両方でflushする
+window.addEventListener('pagehide', flushSettingsSave);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSettingsSave();
+});
+
 /**
  * 現在の設定をlocalStorageに保存する。
  * ファイルデータ本体は保存しない（名前・role・offsetだけ）。
  */
-function saveSettings() {
+function saveSettingsNow() {
     try {
         const sidebar = document.querySelector('.sidebar');
         const settings = {
@@ -4851,8 +4887,16 @@ function saveSettings() {
             fileColors: state.fileColors,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        _storageWarnShown = false; // 保存に成功したら次回失敗時に再度通知できるようにする
     } catch (e) {
         console.warn('[CSV Viewer] Failed to save settings:', e);
+        // 容量超過などで保存できない場合、ユーザーが「保存されているつもり」のまま
+        // 設定を失わないようトーストで通知する（連続保存でスパムにならないよう1回だけ）
+        if (!_storageWarnShown) {
+            _storageWarnShown = true;
+            showWarning('設定を保存できませんでした',
+                'ブラウザの保存領域(localStorage)に書き込めません。容量超過の可能性があります。\n' + (e.message || String(e)));
+        }
     }
 }
 
@@ -4933,7 +4977,13 @@ function loadPresets() {
 }
 
 function savePresets(presets) {
-    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+    try {
+        localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+    } catch (e) {
+        // 容量超過時に例外がそのまま飛ぶと「Unhandled error」トーストになり原因が分かりにくい
+        showError('プリセットを保存できませんでした',
+            'ブラウザの保存領域(localStorage)に書き込めません。容量超過の可能性があります。\n' + (e.message || String(e)));
+    }
 }
 
 function renderPresetSelect() {
