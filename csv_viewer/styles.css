@@ -728,6 +728,118 @@ input[type="text"]:focus {
 .col-item:hover .col-insert-btn { display: inline; }
 .col-insert-btn:hover { color: var(--accent); opacity: 1; }
 
+.col-map-btn {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    padding: 0 2px;
+    opacity: 0.65;
+}
+.col-map-btn:hover,
+.col-map-btn.active {
+    color: #86efac;
+    opacity: 1;
+}
+
+.alias-main {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 9px 10px;
+    margin-bottom: 14px;
+}
+.alias-main-label,
+.alias-section-title {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.alias-main-name {
+    font-family: 'Roboto Mono', monospace;
+    color: var(--text-primary);
+    font-size: 0.86rem;
+}
+.alias-main-name span { color: var(--text-secondary); }
+.alias-section { margin-bottom: 14px; }
+.alias-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.alias-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid rgba(16,185,129,0.28);
+    background: rgba(16,185,129,0.12);
+    color: #86efac;
+    border-radius: 999px;
+    padding: 3px 7px;
+    font-size: 0.72rem;
+    font-family: 'Roboto Mono', monospace;
+}
+.alias-chip button {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+.alias-empty {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    padding: 6px 0;
+}
+.alias-filter-input {
+    width: 100%;
+    margin-bottom: 8px;
+}
+.alias-candidate-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+.alias-candidate {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 9px;
+    text-align: left;
+    font-family: inherit;
+}
+.alias-candidate:hover {
+    border-color: rgba(99,102,241,0.45);
+    background: rgba(99,102,241,0.1);
+}
+.alias-candidate-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.alias-candidate-meta {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    font-size: 0.68rem;
+    font-family: 'Roboto Mono', monospace;
+}
+.alias-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .btn-secondary {
     background: transparent;
     color: var(--text-primary);

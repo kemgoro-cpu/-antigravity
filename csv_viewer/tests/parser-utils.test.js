@@ -58,11 +58,26 @@ function testToNumber() {
     assert.ok(Number.isNaN(CSVUtils.toNumber('abc')));
 }
 
+function testChannelNameHelpers() {
+    assert.equal(CSVUtils.normalizeChannelName(' Vehicle_Speed (km/h) '), 'vehiclespeedkmh');
+    assert.equal(CSVUtils.getStringSimilarity('Vehicle Speed', 'vehicle_speed'), 1);
+    assert.ok(
+        CSVUtils.scoreAliasCandidate(
+            { name: 'Vehicle Speed', unit: 'km/h' },
+            { name: 'vehicle_speed', unit: 'km/h' }
+        ) > CSVUtils.scoreAliasCandidate(
+            { name: 'Vehicle Speed', unit: 'km/h' },
+            { name: 'Battery Voltage', unit: 'V' }
+        )
+    );
+}
+
 testShiftJisDetection();
 testUtf8Detection();
 testBomDetection();
 testHeaderRows();
 testTrnConversion();
 testToNumber();
+testChannelNameHelpers();
 
 console.log('parser-utils tests passed');

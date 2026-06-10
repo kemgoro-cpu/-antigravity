@@ -83,12 +83,47 @@
         return isNaN(n) ? NaN : n;
     }
 
+    function normalizeChannelName(name) {
+        return String(name || '')
+            .normalize('NFKC')
+            .toLowerCase()
+            .replace(/[\s_\-()[\]{}<>|/\\:;,.]+/g, '')
+            .trim();
+    }
+
+    function getStringSimilarity(a, b) {
+        const na = normalizeChannelName(a);
+        const nb = normalizeChannelName(b);
+        if (!na || !nb) return 0;
+        if (na === nb) return 1;
+        if (na.includes(nb) || nb.includes(na)) return 0.78;
+
+        const aTokens = new Set(na.match(/[a-z]+|\d+|[\u3040-\u30ff\u3400-\u9fff]+/g) || [na]);
+        const bTokens = new Set(nb.match(/[a-z]+|\d+|[\u3040-\u30ff\u3400-\u9fff]+/g) || [nb]);
+        let overlap = 0;
+        for (const token of aTokens) if (bTokens.has(token)) overlap++;
+        const union = new Set([...aTokens, ...bTokens]).size;
+        return union ? overlap / union : 0;
+    }
+
+    function scoreAliasCandidate(mainCol, candidateCol) {
+        if (!mainCol || !candidateCol) return 0;
+        const nameScore = getStringSimilarity(mainCol.name, candidateCol.name);
+        const mainUnit = normalizeChannelName(mainCol.unit || '');
+        const candUnit = normalizeChannelName(candidateCol.unit || '');
+        const unitScore = mainUnit && candUnit && mainUnit === candUnit ? 0.25 : 0;
+        return nameScore + unitScore;
+    }
+
     const api = {
         convertWhitespaceToTabs,
         decodeBytes,
         detectTextEncoding,
         detectHeaderRows,
+        getStringSimilarity,
         isTimeHeader,
+        normalizeChannelName,
+        scoreAliasCandidate,
         scoreDecodedText,
         toNumber,
     };

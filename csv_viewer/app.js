@@ -641,6 +641,7 @@ const state = {
     zoomHistoryIdx: -1,     // 現在の履歴位置（-1 = 履歴なし）
     zoomUndoRedoing: false, // Undo/Redo操作中フラグ（履歴の二重記録を防止）
     mergedGroups:   [],     // [[nameA, nameB], ...] チャンネルマージのペア
+    channelAliases: {},     // mainChannelName → [aliasName, ...] 全Subファイル共通の別名対応
     gridRegions:    [],     // [{ name, top, height, unit }] ドラッグ判定用
     mergeDrag:      null,   // { sourceName, ghostEl } マージドラッグ中の状態
     bitChannels:    new Set(), // Bitモード（0/1表示、グリッド高さ縮小）のチャンネル名
@@ -1107,6 +1108,8 @@ const {
     decodeBytes,
     detectTextEncoding,
     detectHeaderRows: detectHeaderRowsBase,
+    normalizeChannelName,
+    scoreAliasCandidate,
     isTimeHeader,
     toNumber,
 } = window.CSVUtils;
@@ -1515,8 +1518,7 @@ async function ensureColumnsAndRender() {
     try {
         const promises = [];
         for (const [fid, f] of Object.entries(state.files)) {
-            // Load selected columns that exist in this file
-            const relevantNames = names.filter(n => f.columns.some(c => c.name === n));
+            const relevantNames = getResolvedNamesForFile(f, names);
             if (relevantNames.length > 0) {
                 promises.push(loadColumnsForFile(fid, relevantNames));
             }
@@ -1537,6 +1539,80 @@ async function ensureColumnsAndRender() {
 function getMainFile()   { return Object.values(state.files).find(f => f.role === 'main'); }
 function getMainFileId() { return Object.keys(state.files).find(id => state.files[id].role === 'main'); }
 function getSubFileIds() { return Object.keys(state.files).filter(id => state.files[id].role === 'sub'); }
+
+function getChannelAliases(mainName) {
+    return Array.isArray(state.channelAliases[mainName])
+        ? state.channelAliases[mainName].filter(Boolean)
+        : [];
+}
+
+function addChannelAlias(mainName, aliasName) {
+    if (!mainName || !aliasName || mainName === aliasName) return false;
+    const aliases = getChannelAliases(mainName);
+    if (aliases.includes(aliasName)) return false;
+    state.channelAliases[mainName] = [...aliases, aliasName];
+    return true;
+}
+
+function removeChannelAlias(mainName, aliasName) {
+    const aliases = getChannelAliases(mainName).filter(a => a !== aliasName);
+    if (aliases.length) state.channelAliases[mainName] = aliases;
+    else delete state.channelAliases[mainName];
+}
+
+function pruneChannelAliasesForMain(mainFile = getMainFile()) {
+    if (!mainFile) return;
+    const mainNames = new Set(mainFile.columns.map(c => c.name));
+    for (const name of Object.keys(state.channelAliases)) {
+        if (!mainNames.has(name)) delete state.channelAliases[name];
+    }
+}
+
+function resolveColumnForFile(fileRecord, mainName, opts = {}) {
+    if (!fileRecord || !mainName) return null;
+    const exact = fileRecord.columns.find(c => c.name === mainName);
+    if (fileRecord.role === 'main') return exact;
+
+    for (const alias of getChannelAliases(mainName)) {
+        const col = fileRecord.columns.find(c => c.name === alias);
+        if (col) return col;
+    }
+    return opts.includeExactFallback === false ? null : exact;
+}
+
+function getResolvedNamesForFile(fileRecord, mainNames) {
+    const names = [];
+    for (const mainName of mainNames) {
+        const col = resolveColumnForFile(fileRecord, mainName);
+        if (col && !names.includes(col.name)) names.push(col.name);
+    }
+    return names;
+}
+
+function getAliasCandidates(mainCol) {
+    const seen = new Map();
+    for (const subId of getSubFileIds()) {
+        const file = state.files[subId];
+        if (!file) continue;
+        for (const col of file.columns) {
+            const key = col.name;
+            if (!seen.has(key)) {
+                seen.set(key, {
+                    col,
+                    score: scoreAliasCandidate(mainCol, col),
+                    files: [],
+                });
+            }
+            seen.get(key).files.push(file.shortName);
+        }
+    }
+
+    return [...seen.values()]
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return a.col.name.localeCompare(b.col.name, 'ja');
+        });
+}
 
 function updateParsePreview(fileRecord) {
     if (!dom.parsePreview || !fileRecord) return;
@@ -1577,6 +1653,7 @@ async function setMainFile(newMainId) {
     state.mergedGroups = state.mergedGroups.filter(
         ([a, b]) => newColNames.has(a) && newColNames.has(b)
     );
+    pruneChannelAliasesForMain(newMain);
     await recomputeCustomRAMs();
     updateUI();
 }
@@ -1594,6 +1671,7 @@ function removeFile(fileId) {
     if (wasMain) {
         state.selectedNames = new Set();
         state.mergedGroups  = [];
+        state.channelAliases = {};
         const remaining = Object.keys(state.files);
         if (remaining.length) state.files[remaining[0]].role = 'main';
     }
@@ -1610,6 +1688,7 @@ dom.clearBtn.addEventListener('click', () => {
     state.files         = {};
     state.selectedNames = new Set();
     state.mergedGroups  = [];
+    state.channelAliases = {};
     state.bitChannels   = new Set();
     _bitManualOff.clear();
     state.yRanges       = {};
@@ -2595,6 +2674,18 @@ function renderColumnList() {
         topRow.appendChild(nameSpan);
         topRow.appendChild(unitSpan);
 
+        const aliasCount = getChannelAliases(col.name).length;
+        const mapBtn = document.createElement('i');
+        mapBtn.className = 'bx bx-link-alt col-map-btn' + (aliasCount ? ' active' : '');
+        mapBtn.title = aliasCount
+            ? `別名対応: ${aliasCount}件`
+            : 'Subファイル側の別名チャンネルを対応付け';
+        mapBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            showChannelMapModal(col.name);
+        });
+        topRow.appendChild(mapBtn);
+
         // Bitバッジ: Bitチャンネルなら表示、クリックでON/OFF切り替え
         const isBit = state.bitChannels.has(col.name);
         if (isBit || _bitManualOff.has(col.name)) {
@@ -2688,6 +2779,99 @@ function renderColumnList() {
     }
 }
 
+function showChannelMapModal(mainName) {
+    const mainFile = getMainFile();
+    if (!mainFile) return;
+    const mainCol = mainFile.columns.find(c => c.name === mainName);
+    if (!mainCol) return;
+
+    let overlay = document.getElementById('app-modal-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'app-modal-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.setAttribute('aria-labelledby', 'channel-map-title');
+    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:680px;width:92%;max-height:82vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const render = (filterText = '') => {
+        const aliases = getChannelAliases(mainName);
+        const candidates = getAliasCandidates(mainCol)
+            .filter(c => c.col.name !== mainName && !aliases.includes(c.col.name))
+            .filter(c => !filterText || c.col.name.toLowerCase().includes(filterText.toLowerCase()))
+            .slice(0, 40);
+
+        const aliasChips = aliases.length
+            ? aliases.map(alias => `<span class="alias-chip">${esc(alias)}<button data-remove-alias="${esc(alias)}" title="削除">×</button></span>`).join('')
+            : '<span class="alias-empty">未設定</span>';
+
+        const candidateRows = candidates.length
+            ? candidates.map(c => {
+                const unit = c.col.unit ? ` (${esc(c.col.unit)})` : '';
+                const files = c.files.join(', ');
+                const score = c.score.toFixed(2);
+                return `<button class="alias-candidate" data-add-alias="${esc(c.col.name)}">
+                    <span class="alias-candidate-name">${esc(c.col.name)}${unit}</span>
+                    <span class="alias-candidate-meta">score ${score} / ${esc(files)}</span>
+                </button>`;
+            }).join('')
+            : '<div class="alias-empty">候補がありません</div>';
+
+        modal.innerHTML = `
+            <h3 id="channel-map-title" style="margin:0 0 10px;color:#818cf8;">Channel Map</h3>
+            <div class="alias-main">
+                <div class="alias-main-label">Main</div>
+                <div class="alias-main-name">${esc(mainName)}${mainCol.unit ? ` <span>(${esc(mainCol.unit)})</span>` : ''}</div>
+            </div>
+            <div class="alias-section">
+                <div class="alias-section-title">登録済み別名</div>
+                <div class="alias-chip-row">${aliasChips}</div>
+            </div>
+            <div class="alias-section">
+                <div class="alias-section-title">Sub側候補</div>
+                <input type="text" id="alias-filter-input" class="alias-filter-input" placeholder="候補を検索..." value="${esc(filterText)}">
+                <div class="alias-candidate-list">${candidateRows}</div>
+            </div>
+            <div class="alias-actions">
+                <button id="alias-close-btn" class="btn-secondary">閉じる</button>
+            </div>
+        `;
+
+        const input = modal.querySelector('#alias-filter-input');
+        input.addEventListener('input', () => render(input.value));
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+
+        modal.querySelectorAll('[data-add-alias]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                addChannelAlias(mainName, btn.dataset.addAlias);
+                saveSettings();
+                renderColumnList();
+                ensureColumnsAndRender();
+                render(input.value);
+            });
+        });
+        modal.querySelectorAll('[data-remove-alias]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                removeChannelAlias(mainName, btn.dataset.removeAlias);
+                saveSettings();
+                renderColumnList();
+                ensureColumnsAndRender();
+                render(input.value);
+            });
+        });
+        modal.querySelector('#alias-close-btn').addEventListener('click', () => overlay.remove());
+    };
+
+    render();
+    setupModalA11y(overlay, modal);
+}
+
 // ─────────────────────────────────────────────────────────────
 // Linear interpolation (binary search)
 // ─────────────────────────────────────────────────────────────
@@ -2720,18 +2904,17 @@ async function autoAlign(subFileId) {
     const subFile  = state.files[subFileId];
     if (!mainFile || !subFile) return;
 
-    // main と sub の両方に存在するチャンネル名を収集
-    const mainNames = new Set(mainFile.columns.map(c => c.name));
-    const subNames  = new Set(subFile.columns.map(c => c.name));
-    const commonAll = [...mainNames].filter(n => subNames.has(n));
+    const alignableNames = mainFile.columns
+        .map(c => c.name)
+        .filter(name => !!resolveColumnForFile(subFile, name));
 
-    if (!commonAll.length) {
-        alert('両ファイルに共通するチャンネルがありません。');
+    if (!alignableNames.length) {
+        alert('両ファイルで対応付けできるチャンネルがありません。Channel Mapで別名を設定してください。');
         return;
     }
 
     // --- チャンネル選択モーダルを表示 ---
-    const selectedChannels = await showAlignChannelModal(commonAll, subFileId);
+    const selectedChannels = await showAlignChannelModal(alignableNames, subFileId);
     if (!selectedChannels || !selectedChannels.names.length) return; // キャンセル
 
     const chosenNames = selectedChannels.names;
@@ -2739,13 +2922,14 @@ async function autoAlign(subFileId) {
 
     // 必要なカラムをロード
     const mainFileId = getMainFileId();
+    const subLoadNames = getResolvedNamesForFile(subFile, chosenNames);
     await Promise.all([
         loadColumnsForFile(mainFileId, chosenNames),
-        loadColumnsForFile(subFileId, chosenNames),
+        loadColumnsForFile(subFileId, subLoadNames),
     ]);
 
     const mainCols = chosenNames.map(name => mainFile.columns.find(c => c.name === name)).filter(Boolean);
-    const subCols  = chosenNames.map(name => subFile.columns.find(c => c.name === name)).filter(Boolean);
+    const subCols  = chosenNames.map(name => resolveColumnForFile(subFile, name)).filter(Boolean);
 
     if (!mainCols.length) {
         alert('選択されたチャンネルのデータが読み込めませんでした。');
@@ -2816,10 +3000,14 @@ function showAlignChannelModal(commonNames, subFileId) {
         // チャンネルリストを生成
         const channelItems = commonNames.map(name => {
             const checked = currentlySelected.has(name) ? 'checked' : '';
+            const resolved = resolveColumnForFile(subFile, name);
+            const aliasText = resolved && resolved.name !== name
+                ? `<span style="color:#86efac;font-size:11px;margin-left:auto;">← ${esc(resolved.name)}</span>`
+                : '';
             // チェックボックス＋チャンネル名のラベル
             return `<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:13px;transition:background 0.15s;"
                 onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
-                <input type="checkbox" value="${name}" ${checked} style="accent-color:#6366f1;"> ${name}
+                <input type="checkbox" value="${esc(name)}" ${checked} style="accent-color:#6366f1;"> ${esc(name)} ${aliasText}
             </label>`;
         }).join('');
 
@@ -2994,7 +3182,7 @@ function getActiveGroups() {
             // ── Sub series (dashed lines, time-shifted) ────────
             for (const subId of getSubFileIds()) {
                 const sf  = state.files[subId];
-                const sc  = sf.columns.find(c => c.name === chName);
+                const sc  = resolveColumnForFile(sf, chName);
                 if (!sc) continue;
 
                 const std    = sf.timeData;
@@ -3010,7 +3198,9 @@ function getActiveGroups() {
 
                 grp.series.push({
                     id:    sc.id,
-                    label: `${chName} [${sf.shortName}]`,
+                    label: sc.name === chName
+                        ? `${chName} [${sf.shortName}]`
+                        : `${chName} ← ${sc.name} [${sf.shortName}]`,
                     color: subColor,
                     dash:  true,
                     data:  sPts,
@@ -3395,7 +3585,7 @@ function updatePerGridLabels() {
             // Sub files
             for (const subId of getSubFileIds()) {
                 const sf = state.files[subId];
-                const sc = sf.columns.find(c => c.name === chName);
+                const sc = resolveColumnForFile(sf, chName);
                 if (!sc || !sf.colData[sc.id]) continue;
                 const subT = xVal - (sf.offset || 0);
                 const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
@@ -3990,6 +4180,7 @@ function saveSettings() {
             customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
             // チャンネルマージ設定
             mergedGroups: state.mergedGroups,
+            channelAliases: state.channelAliases,
             // Bit手動Offリスト
             bitManualOff: [..._bitManualOff],
             // パース設定
@@ -4043,6 +4234,7 @@ function buildSettingsForExport() {
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
         mergedGroups: state.mergedGroups,
+        channelAliases: state.channelAliases,
         bitManualOff: [..._bitManualOff],
         nameRowIdx: dom.nameRow.value,
         unitRowIdx: dom.unitRow.value,
@@ -4060,6 +4252,7 @@ function buildPresetSettings() {
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, expr: c.expr })),
         mergedGroups: state.mergedGroups,
+        channelAliases: state.channelAliases,
         bitManualOff: [..._bitManualOff],
         nameRowIdx: dom.nameRow.value,
         unitRowIdx: dom.unitRow.value,
@@ -4212,6 +4405,7 @@ function applySettings(s) {
 
     // Y軸範囲を復元
     if (s.yRanges) state.yRanges = s.yRanges;
+    if (s.channelAliases) state.channelAliases = { ...s.channelAliases };
 
     // 単色モード設定を復元
     if (s.monoColorMode !== undefined) {
@@ -4263,6 +4457,12 @@ function applyPendingSettings() {
             const hasB = mainFile.columns.some(c => c.name === b);
             if (hasA && hasB) addMerge(a, b);
         }
+    }
+
+    // チャンネル別名対応を復元（Mainに存在するチャンネルだけ有効化）
+    if (s.channelAliases) {
+        state.channelAliases = { ...s.channelAliases };
+        pruneChannelAliasesForMain(mainFile);
     }
 
     // Bit手動Off設定を復元
