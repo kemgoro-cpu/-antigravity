@@ -9,11 +9,15 @@ CSV / TRN ファイルをブラウザだけで読み込み、複数チャンネ�
 ```text
 csv_viewer/
 ├─ index.html
-├─ app.js
-├─ parser-utils.js
+├─ app.js              … メインロジック
+├─ parser-utils.js     … CSVパース・文字コード判定（Nodeテスト可能な純粋関数）
+├─ settings-utils.js   … 設定のバージョンチェック・マイグレーション（同上）
 ├─ styles.css
-└─ lib/
+├─ tests/              … Nodeで実行する単体テスト
+└─ lib/                … 同梱ライブラリ（ECharts, PapaParse等）
 ```
+
+変更履歴と引き継ぎ用の注意点は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 ## CSV / TRN の読み込み
 
@@ -123,6 +127,7 @@ Main と Sub で同じ物理値なのにチャンネル名が違う場合、Chan
 
 ```bash
 rtk node tests/parser-utils.test.js
+rtk node tests/settings-utils.test.js
 ```
 
 構文チェック:
@@ -130,7 +135,11 @@ rtk node tests/parser-utils.test.js
 ```bash
 rtk node --check app.js
 rtk node --check parser-utils.js
+rtk node --check settings-utils.js
 ```
+
+設定の保存形式（`_version`）を変更するときは、`settings-utils.js` の
+`SETTINGS_VERSION` とマイグレーション処理、テストを必ずセットで更新してください。
 
 ## 同梱ライブラリ
 
