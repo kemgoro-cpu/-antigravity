@@ -58,6 +58,15 @@ function testToNumber() {
     assert.ok(Number.isNaN(CSVUtils.toNumber('abc')));
 }
 
+function testTimeUnitHelpers() {
+    assert.equal(CSVUtils.getTimeUnitScale('ms').scale, 0.001);
+    assert.equal(CSVUtils.getTimeUnitScale('msec').scale, 0.001);
+    assert.equal(CSVUtils.getTimeUnitScale('sec').scale, 1);
+    assert.equal(CSVUtils.getTimeScaleInfo('Time(ms)', '').scale, 0.001);
+    assert.equal(CSVUtils.getTimeScaleInfo('Time [sec]', '').source, 'header');
+    assert.equal(CSVUtils.getTimeScaleInfo('Time', '').explicit, false);
+}
+
 function testChannelNameHelpers() {
     assert.equal(CSVUtils.normalizeChannelName(' Vehicle_Speed (km/h) '), 'vehiclespeedkmh');
     assert.equal(CSVUtils.getStringSimilarity('Vehicle Speed', 'vehicle_speed'), 1);
@@ -78,6 +87,7 @@ testBomDetection();
 testHeaderRows();
 testTrnConversion();
 testToNumber();
+testTimeUnitHelpers();
 testChannelNameHelpers();
 
 console.log('parser-utils tests passed');

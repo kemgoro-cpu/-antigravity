@@ -1108,6 +1108,7 @@ const {
     decodeBytes,
     detectTextEncoding,
     detectHeaderRows: detectHeaderRowsBase,
+    getTimeScaleInfo,
     normalizeChannelName,
     scoreAliasCandidate,
     isTimeHeader,
@@ -1264,7 +1265,9 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
         );
     }
 
+    const timeHeader = headers[timeIdx] || '';
     const timeUnit = unitRow >= 0 ? (raw[unitRow][timeIdx] || '').trim().toLowerCase() : '';
+    const timeScaleInfo = getTimeScaleInfo(timeHeader, timeUnit);
 
     const columns = [];
     for (let i = 0; i < headers.length; i++) {
@@ -1323,7 +1326,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                 if (!row) return;
                 const t = toNumber(row[timeIdx]);
                 if (!isNaN(t)) {
-                    timeChunks.push(timeUnit === 'ms' ? t / 1000 : t);
+                    timeChunks.push(t * timeScaleInfo.scale);
                 }
             },
             complete: function() {
@@ -1347,8 +1350,15 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                         role, offset: 0,
                         file,         // File reference for lazy column loading
                         previewRows: raw.slice(0, Math.min(raw.length, dataStart + 4)),
-                        headerInfo: { nameRow, unitRow, dataStart, timeIdx, timeUnit, delimiter, encoding, encodingMode },
+                        headerInfo: {
+                            nameRow, unitRow, dataStart, timeIdx, timeUnit,
+                            timeScale: timeScaleInfo.scale,
+                            timeScaleSource: timeScaleInfo.source,
+                            timeScaleUnit: timeScaleInfo.unit,
+                            delimiter, encoding, encodingMode,
+                        },
                     };
+                    autoNormalizeTimeScales();
                     updateParsePreview(state.files[fileId]);
 
                     // ファイル色を自動割り当て（単色モード用）
@@ -1614,6 +1624,155 @@ function getAliasCandidates(mainCol) {
         });
 }
 
+function getTimeSpan(fileRecord) {
+    const td = fileRecord?.timeData;
+    if (!td || td.length < 2) return NaN;
+    const span = Math.abs(td[td.length - 1] - td[0]);
+    return span > 0 ? span : NaN;
+}
+
+function getRawTimeSpan(fileRecord) {
+    const scale = Number(fileRecord?.headerInfo?.timeScale) || 1;
+    const span = getTimeSpan(fileRecord);
+    return isFinite(span) ? span / scale : NaN;
+}
+
+function isExplicitTimeScale(fileRecord) {
+    const source = fileRecord?.headerInfo?.timeScaleSource;
+    return source === 'unit' || source === 'header';
+}
+
+function applyTimeScale(fileRecord, scale, source, unit, note) {
+    const hi = fileRecord?.headerInfo;
+    if (!fileRecord || !hi) return false;
+
+    const oldScale = Number(hi.timeScale) || 1;
+    const ratio = scale / oldScale;
+    const needsDataChange = Math.abs(ratio - 1) > 1e-12;
+
+    if (needsDataChange && fileRecord.timeData) {
+        for (let i = 0; i < fileRecord.timeData.length; i++) {
+            fileRecord.timeData[i] *= ratio;
+        }
+    }
+
+    const metaChanged = hi.timeScale !== scale
+        || hi.timeScaleSource !== source
+        || hi.timeScaleUnit !== unit
+        || hi.timeScaleNote !== note;
+
+    hi.timeScale = scale;
+    hi.timeScaleSource = source;
+    hi.timeScaleUnit = unit;
+    hi.timeScaleNote = note || '';
+    return needsDataChange || metaChanged;
+}
+
+function inferTimeScaleAgainstReference(fileRecord, referenceFile) {
+    const rawSpan = getRawTimeSpan(fileRecord);
+    const refSpan = getTimeSpan(referenceFile);
+    if (!isFinite(rawSpan) || !isFinite(refSpan) || rawSpan <= 0 || refSpan <= 0) return null;
+
+    const candidates = [
+        { scale: 1, unit: 's' },
+        { scale: 0.001, unit: 'ms' },
+    ].map(c => {
+        const span = rawSpan * c.scale;
+        const ratio = span / refSpan;
+        return {
+            ...c,
+            span,
+            ratio,
+            score: Math.abs(Math.log(ratio)),
+        };
+    }).sort((a, b) => a.score - b.score);
+
+    const [best, second] = candidates;
+    if (!best || !second) return null;
+
+    const closeEnough = best.score <= Math.log(3);
+    const muchBetter = (second.score - best.score) >= Math.log(50);
+    return closeEnough && muchBetter ? best : null;
+}
+
+function autoNormalizeTimeScales({ notify = true } = {}) {
+    const files = Object.values(state.files).filter(f => f.timeData?.length >= 2);
+    if (files.length < 2) return;
+
+    const changes = [];
+    const explicitFiles = files.filter(isExplicitTimeScale);
+    const unknownFiles = files.filter(f => !isExplicitTimeScale(f));
+
+    if (explicitFiles.length) {
+        const mainExplicit = explicitFiles.find(f => f.role === 'main');
+        const reference = mainExplicit || explicitFiles[0];
+        for (const file of unknownFiles) {
+            const inferred = inferTimeScaleAgainstReference(file, reference);
+            if (!inferred) continue;
+            const changed = applyTimeScale(
+                file,
+                inferred.scale,
+                'auto',
+                inferred.unit,
+                `matched ${reference.shortName || reference.name}`
+            );
+            if (changed) changes.push(`${file.shortName}: ${inferred.unit}`);
+        }
+    } else {
+        const entries = unknownFiles
+            .map(file => ({ file, rawSpan: getRawTimeSpan(file) }))
+            .filter(e => isFinite(e.rawSpan) && e.rawSpan > 0)
+            .sort((a, b) => a.rawSpan - b.rawSpan);
+
+        if (entries.length >= 2) {
+            const minSpan = entries[0].rawSpan;
+            const maxSpan = entries[entries.length - 1].rawSpan;
+            const ratio = maxSpan / minSpan;
+
+            if (ratio >= 500 && ratio <= 2000) {
+                const threshold = Math.sqrt(minSpan * maxSpan);
+                for (const entry of entries) {
+                    const inferred = entry.rawSpan >= threshold
+                        ? { scale: 0.001, unit: 'ms' }
+                        : { scale: 1, unit: 's' };
+                    const changed = applyTimeScale(
+                        entry.file,
+                        inferred.scale,
+                        'auto',
+                        inferred.unit,
+                        'duration ratio'
+                    );
+                    if (changed) changes.push(`${entry.file.shortName}: ${inferred.unit}`);
+                }
+            }
+        }
+    }
+
+    if (notify && changes.length) {
+        showWarning(
+            'Time単位を自動調整しました',
+            `${changes.join(', ')} を秒基準に揃えました。Parse Info で判定結果を確認できます。`
+        );
+    }
+}
+
+function getTimeScaleLabel(fileRecord) {
+    const hi = fileRecord?.headerInfo || {};
+    const rawUnit = hi.timeUnit || '';
+    const unit = hi.timeScaleUnit || rawUnit || '';
+    const scale = Number(hi.timeScale) || 1;
+    const source = hi.timeScaleSource || 'auto';
+    const sourceLabel = source === 'unit'
+        ? 'unit'
+        : source === 'header'
+            ? 'header'
+            : 'auto';
+
+    if (unit) return `${unit} -> s (${sourceLabel})`;
+    if (scale !== 1) return `x${scale} -> s (${sourceLabel})`;
+    return `s (${sourceLabel})`;
+}
+
 function updateParsePreview(fileRecord) {
     if (!dom.parsePreview || !fileRecord) return;
     const hi = fileRecord.headerInfo;
@@ -1630,7 +1789,7 @@ function updateParsePreview(fileRecord) {
         <dl class="parse-preview-grid">
             <dt>Encoding</dt><dd>${esc(encodingLabel)}</dd>
             <dt>Rows</dt><dd>Name ${hi.nameRow + 1}, Unit ${hi.unitRow >= 0 ? hi.unitRow + 1 : '-'}, Data ${hi.dataStart + 1}</dd>
-            <dt>Time</dt><dd>${esc(timeHeader)} (${esc(hi.timeUnit || 'unitなし')})</dd>
+            <dt>Time</dt><dd>${esc(timeHeader)} (${esc(getTimeScaleLabel(fileRecord))})</dd>
             <dt>Data</dt><dd>${fileRecord.timeData.length} points / ${fileRecord.columns.length} channels</dd>
         </dl>
         <div class="parse-preview-channels" title="${esc(channelNames + more)}">${esc(channelNames + more || 'チャンネルなし')}</div>
@@ -1654,6 +1813,7 @@ async function setMainFile(newMainId) {
         ([a, b]) => newColNames.has(a) && newColNames.has(b)
     );
     pruneChannelAliasesForMain(newMain);
+    autoNormalizeTimeScales();
     await recomputeCustomRAMs();
     updateUI();
 }
@@ -1881,6 +2041,8 @@ function showDebugModal(fileId) {
         ['dataStart (0始まり)', hi.dataStart],
         ['timeIdx (列番号)', hi.timeIdx],
         ['timeUnit', hi.timeUnit || '(なし)'],
+        ['timeScale', getTimeScaleLabel(f)],
+        ['timeScaleNote', hi.timeScaleNote || '-'],
         ['delimiter', hi.delimiter === '\t' ? 'TAB (\\t)' : hi.delimiter === undefined ? 'auto' : JSON.stringify(hi.delimiter)],
         ['encoding', hi.encodingMode === 'auto' ? `Auto → ${hi.encoding}` : hi.encoding],
         ['columns数', f.columns.length],

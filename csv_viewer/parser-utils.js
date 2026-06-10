@@ -83,6 +83,90 @@
         return isNaN(n) ? NaN : n;
     }
 
+    function normalizeTimeUnitText(unitText) {
+        return String(unitText || '')
+            .normalize('NFKC')
+            .toLowerCase()
+            .replace(/[|\s()[\]{}<>]+/g, '')
+            .trim();
+    }
+
+    function getTimeUnitScale(unitText) {
+        const unit = normalizeTimeUnitText(unitText);
+        if (!unit) return { unit: '', scale: 1, explicit: false };
+
+        const millisecondJa = '\u30df\u30ea\u79d2';
+        const secondJa = '\u79d2';
+        if (
+            unit === 'ms'
+            || unit === 'msec'
+            || unit === 'msecs'
+            || unit === 'millisecond'
+            || unit === 'milliseconds'
+            || unit.includes(millisecondJa)
+        ) {
+            return { unit: 'ms', scale: 0.001, explicit: true };
+        }
+
+        if (
+            unit === 's'
+            || unit === 'sec'
+            || unit === 'secs'
+            || unit === 'second'
+            || unit === 'seconds'
+            || unit === secondJa
+        ) {
+            return { unit: 's', scale: 1, explicit: true };
+        }
+
+        return { unit, scale: 1, explicit: false };
+    }
+
+    function getTimeHeaderScale(headerText) {
+        const raw = String(headerText || '').normalize('NFKC').toLowerCase();
+        const compact = normalizeTimeUnitText(headerText);
+        const millisecondJa = '\u30df\u30ea\u79d2';
+        const secondJa = '\u79d2';
+
+        if (
+            /(^|[^a-z])milli\s*-?\s*seconds?([^a-z]|$)/.test(raw)
+            || /(^|[^a-z])msecs?([^a-z]|$)/.test(raw)
+            || /(^|[^a-z])ms([^a-z]|$)/.test(raw)
+            || compact.endsWith('ms')
+            || compact.includes(millisecondJa)
+        ) {
+            return { unit: 'ms', scale: 0.001, explicit: true };
+        }
+
+        if (
+            /(^|[^a-z])seconds?([^a-z]|$)/.test(raw)
+            || /(^|[^a-z])secs?([^a-z]|$)/.test(raw)
+            || /(^|[^a-z])s([^a-z]|$)/.test(raw)
+            || compact.endsWith('sec')
+            || (compact.endsWith('s') && compact.includes('time'))
+            || compact.endsWith(secondJa)
+        ) {
+            return { unit: 's', scale: 1, explicit: true };
+        }
+
+        return { unit: compact, scale: 1, explicit: false };
+    }
+
+    function getTimeScaleInfo(headerText, unitText) {
+        const unitInfo = getTimeUnitScale(unitText);
+        if (unitInfo.explicit) return { ...unitInfo, source: 'unit' };
+
+        const headerInfo = getTimeHeaderScale(headerText);
+        if (headerInfo.explicit) return { ...headerInfo, source: 'header' };
+
+        return {
+            unit: unitInfo.unit || headerInfo.unit || '',
+            scale: 1,
+            explicit: false,
+            source: 'auto',
+        };
+    }
+
     function normalizeChannelName(name) {
         return String(name || '')
             .normalize('NFKC')
@@ -120,9 +204,12 @@
         decodeBytes,
         detectTextEncoding,
         detectHeaderRows,
+        getTimeScaleInfo,
+        getTimeUnitScale,
         getStringSimilarity,
         isTimeHeader,
         normalizeChannelName,
+        normalizeTimeUnitText,
         scoreAliasCandidate,
         scoreDecodedText,
         toNumber,
