@@ -645,6 +645,9 @@ const state = {
     bitChannels:    new Set(), // Bitモード（0/1表示、グリッド高さ縮小）のチャンネル名
     monoColorMode:  false,     // 単色モード: trueならファイル単位の色で描画
     fileColors:     {},        // fileId → '#RRGGBB' ファイルごとの色（単色モード用）
+    fontScale:      'normal',  // フォントサイズ段階: 'small'|'normal'|'large'|'xlarge'
+    rowHeightPx:    null,      // グリッド基準高さ(px)。null=コンテナに自動フィット
+    gridHeights:    {},        // グリッド個別の高さ上書き { signature: px }
     parseJobs:      new Map(), // jobId → { name, detail, cancelled }
 };
 
@@ -862,6 +865,7 @@ const dom = {
     encoding:   $('encoding-mode'),
     parsePreview: $('parse-preview'),
     sampling:   $('sampling-mode'),
+    fontScale:  $('font-scale'),
     customName: $('custom-ram-name'),
     customUnit: $('custom-ram-unit'),
     customExpr: $('custom-ram-expr'),
@@ -3775,6 +3779,10 @@ function renderChart() {
     dom.resetBtn.disabled = false;
     state.numGrids = n;
 
+    // フォントスケールと、それに連動する余白(数値ラベル幅・軸名間隔・左マージン)
+    const F  = CSVLayout.getFontSizes(state.fontScale);
+    const DL = CSVLayout.deriveLayout(F);
+
     const H = state.chart.getHeight();
     const topPx  = L.topPx;
     const botPx  = L.bottomPx;
@@ -3811,14 +3819,14 @@ function renderChart() {
     }
     if (!isFinite(globalXMin)) { globalXMin = 0; globalXMax = 1; }
 
-    const AXIS_GAP = 58;
+    const AXIS_GAP = DL.axisGap; // フォントに連動(大きいフォントで軸同士が重ならないように)
     const ZOOM_GAP = 12;
     const groupLayouts = order.map(groupId => {
         const axisCount = Math.max(groups.get(groupId).axes.length, 1);
         const leftCount = Math.ceil(axisCount / 2);
         const rightCount = Math.floor(axisCount / 2);
         return {
-            left: L.gridLeft + Math.max(0, leftCount - 1) * AXIS_GAP,
+            left: DL.gridLeft + Math.max(0, leftCount - 1) * AXIS_GAP,
             right: Math.max(L.gridRight, 68) + Math.max(0, rightCount - 1) * AXIS_GAP + axisCount * ZOOM_GAP,
             axisCount,
         };
@@ -3847,7 +3855,7 @@ function renderChart() {
         backgroundColor: 'rgba(255,255,255,0.03)',
         fillerColor: 'rgba(99,102,241,0.18)',
         handleStyle: { color: '#6366f1', borderColor: '#6366f1' },
-        textStyle: { color: T.dim, fontSize: 10 },
+        textStyle: { color: T.dim, fontSize: F.slider },
         dataBackground: {
             lineStyle: { color: 'rgba(99,102,241,0.4)', width: 1 },
             areaStyle: { color: 'rgba(99,102,241,0.07)' },
@@ -3886,7 +3894,7 @@ function renderChart() {
             type: 'value',
             axisLabel: {
                 show: i === n - 1,
-                color: T.dim, fontSize: 10,
+                color: T.dim, fontSize: F.label,
                 formatter: v => v % 1 === 0 ? v.toString() : v.toFixed(1),
             },
             axisTick:  { show: i === n - 1, lineStyle: { color: T.axis } },
@@ -3932,12 +3940,15 @@ function renderChart() {
                 offset,
                 name: yLabel,
                 nameLocation: 'middle',
-                nameGap: 50,
-                nameTextStyle: { color: T.dim, fontSize: 10, fontWeight: 500 },
+                nameGap: DL.nameGap,
+                nameTextStyle: { color: T.dim, fontSize: F.name, fontWeight: 500 },
+                // 軸名(回転表示)がグリッド高さを超えると上下のチャートのラベルと
+                // 重なるため、収まらない分は「…」で自動的に切り詰める(ECharts 5.5組み込み)
+                nameTruncate: { maxWidth: CSVLayout.truncateMaxWidth(gridH), ellipsis: '…' },
                 min: hasYMin ? yMinParsed : undefined,
                 max: hasYMax ? yMaxParsed : undefined,
                 scale: !hasYMin && !hasYMax,
-                axisLabel: { color: T.dim, fontSize: 10, width: 44, overflow: 'truncate', formatter: yValFmt },
+                axisLabel: { color: T.dim, fontSize: F.label, width: DL.labelWidth, overflow: 'truncate', formatter: yValFmt },
                 axisPointer: { show: false },
                 axisTick: { lineStyle: { color: T.axis } },
                 axisLine: { show: true, lineStyle: { color: T.axis } },
@@ -3980,8 +3991,8 @@ function renderChart() {
                 silent: true,
                 symbol: 'none',
                 data: [
-                    ...(hasYMax ? [{ yAxis: yMaxParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▲ ${yMaxParsed}`, fontSize: 9, color: 'rgba(255,120,60,0.8)', position: 'insideStartTop' } }] : []),
-                    ...(hasYMin ? [{ yAxis: yMinParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▼ ${yMinParsed}`, fontSize: 9, color: 'rgba(255,120,60,0.8)', position: 'insideStartBottom' } }] : []),
+                    ...(hasYMax ? [{ yAxis: yMaxParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▲ ${yMaxParsed}`, fontSize: F.label - 1, color: 'rgba(255,120,60,0.8)', position: 'insideStartTop' } }] : []),
+                    ...(hasYMin ? [{ yAxis: yMinParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▼ ${yMinParsed}`, fontSize: F.label - 1, color: 'rgba(255,120,60,0.8)', position: 'insideStartBottom' } }] : []),
                 ],
             } : undefined;
 
@@ -4044,7 +4055,7 @@ function renderChart() {
                 updatePerGridLabels();
                 const t = params[0].axisValue;
                 const tStr = typeof t === 'number' ? t.toFixed(3) : String(t);
-                return `<span style="font-family:'Roboto Mono',monospace;font-size:11px;color:#818cf8;font-weight:600">t = ${tStr} s</span>`;
+                return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:#818cf8;font-weight:600">t = ${tStr} s</span>`;
             },
         },
 
@@ -4256,11 +4267,14 @@ function updatePerGridLabels() {
     }
 
     // Update label positions and content
+    // フォントスケール設定に連動(要素は再利用されるため毎回上書きする)
+    const labelFontPx = CSVLayout.getFontSizes(state.fontScale).tooltip + 'px';
     for (let i = 0; i < _labelEls.length; i++) {
         const el = _labelEls[i];
         if (i < gridLabels.length) {
             const lb = gridLabels[i];
             el.style.display = '';
+            el.style.fontSize = labelFontPx;
             el.style.left = (lb.xPx + 12) + 'px';
             el.style.top  = (lb.yPx - 10) + 'px';
 
@@ -4633,6 +4647,12 @@ $('shortcuts-help-btn')?.addEventListener('click', showShortcutsModal);
 
 dom.sampling.addEventListener('change', () => { renderChart(); saveSettings(); });
 dom.encoding?.addEventListener('change', saveSettings);
+// チャートのフォントサイズ段階(小/標準/大/特大)
+dom.fontScale?.addEventListener('change', () => {
+    state.fontScale = dom.fontScale.value;
+    renderChart();
+    saveSettings();
+});
 
 if (dom.shiftBtn) dom.shiftBtn.addEventListener('click', toggleShiftMode);
 if (dom.arrangeBtn) dom.arrangeBtn.addEventListener('click', toggleArrangeMode);
@@ -4982,6 +5002,10 @@ function collectSettings() {
         encodingMode: dom.encoding?.value || 'auto',
         // サンプリングモード
         samplingMode: dom.sampling.value,
+        // チャートの表示設定（見た目のみ。Undo履歴の比較からは除外される）
+        fontScale: state.fontScale,
+        rowHeightPx: state.rowHeightPx,
+        gridHeights: state.gridHeights,
         // サイドバー幅
         sidebarWidth: sidebar ? sidebar.offsetWidth : null,
         // Y軸範囲のユーザー設定
@@ -5222,6 +5246,14 @@ function applySettings(rawSettings) {
 
     // サンプリングモードを復元
     if (s.samplingMode !== undefined) dom.sampling.value = s.samplingMode;
+
+    // チャート表示設定を復元
+    if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
+        state.fontScale = s.fontScale;
+        if (dom.fontScale) dom.fontScale.value = s.fontScale;
+    }
+    if (s.rowHeightPx !== undefined) state.rowHeightPx = s.rowHeightPx;
+    if (s.gridHeights) state.gridHeights = { ...s.gridHeights };
 
     // サイドバー幅を復元
     if (s.sidebarWidth) {

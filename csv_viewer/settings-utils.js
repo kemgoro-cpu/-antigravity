@@ -10,7 +10,7 @@
     // 配列であるべきキー(違う型が入っていたら該当キーだけ捨てる)
     const ARRAY_KEYS = ['fileInfos', 'selectedNames', 'customRAMs', 'chartGroups', 'bitManualOff', 'mergedGroups'];
     // プレーンオブジェクトであるべきキー
-    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors'];
+    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights'];
 
     /**
      * 保存済み設定を現行スキーマに揃える。
