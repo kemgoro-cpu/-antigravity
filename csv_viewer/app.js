@@ -4333,9 +4333,12 @@ function onBrushEnd(params) {
     if (!area.coordRange) return;
     const [sv, ev] = area.coordRange;
     if (ev <= sv) return;
+    // dataZoomIndex:0(X軸スライダー)だけを対象にする。
+    // xAxisIndex指定はdataZoomアクションのフィルタとして機能せず全dataZoomに波及し、
+    // Y軸の値域が時間値と重なるグリッドでY軸ズームが壊れるバグがあった。
+    // X軸のinsideズーム(index 1)は同じ軸を共有しているため自動で連動する。
     state.chart.dispatchAction({
-        type: 'dataZoom', startValue: sv, endValue: ev,
-        xAxisIndex: Array.from({ length: state.numGrids }, (_, i) => i),
+        type: 'dataZoom', dataZoomIndex: 0, startValue: sv, endValue: ev,
     });
     state.chart.dispatchAction({ type: 'brush', areas: [] });
     exitBoxZoom();
@@ -4347,10 +4350,7 @@ function onBrushEnd(params) {
 function resetZoom() {
     if (!state.chart || state.numGrids === 0) return;
     exitBoxZoom();
-    state.chart.dispatchAction({
-        type: 'dataZoom', start: 0, end: 100,
-        xAxisIndex: Array.from({ length: state.numGrids }, (_, i) => i),
-    });
+    // 全dataZoom(X軸+各Y軸スライダー)を個別に全範囲へ戻す
     const opts = state.chart.getOption();
     if (opts?.dataZoom) {
         opts.dataZoom.forEach((_, idx) =>
@@ -4478,11 +4478,13 @@ async function restoreHistoryEntry(entry) {
  */
 function dispatchZoom(zoom) {
     if (!state.chart || state.numGrids === 0) return;
+    // dataZoomIndex:0(X軸スライダー)のみ対象。insideズームは軸共有で自動連動する
+    // (xAxisIndex指定だとY軸ズームまで壊れる。onBrushEndのコメント参照)
     state.chart.dispatchAction({
         type: 'dataZoom',
+        dataZoomIndex: 0,
         start: zoom.start,
         end: zoom.end,
-        xAxisIndex: Array.from({ length: state.numGrids }, (_, i) => i),
     });
 }
 

@@ -50,6 +50,21 @@ CSVの数値データ本体はスナップショットに含まれず復元不�
 - Reset View（`resetZoom`）は履歴に記録される（Undoで戻れる）。ホイール/スライダーの
   ズームは従来どおり記録しない（スパム防止）
 
+### 【バグ修正】Box ZoomでY軸ズームが壊れる（既存バグ）
+
+`dispatchAction({type:'dataZoom', xAxisIndex:[...]})` の `xAxisIndex` はフィルタとして
+機能せず、アクションが**全dataZoom（Y軸スライダー含む）に波及**していた。
+X軸の時間値（例: 300〜800秒）がY軸ズームに適用され、Y軸の値域が時間値と重なる
+グリッド（Engine_RPM等）だけY軸が異常拡大して一部しか表示されなくなる。
+Y範囲を数値入力すると直って見えたのは、renderChartがY軸ズームを作り直すため。
+
+修正: `dataZoomIndex: 0`（X軸スライダー）のみを対象にdispatchする。X軸のinsideズームは
+軸を共有しているためEChartsが自動連動させる。対象箇所は `onBrushEnd` / `dispatchZoom`
+（Undo復元）/ `resetZoom`（冗長な初回dispatchを削除しループのみに）。
+旧 `applyZoomFromHistory` 時代から存在した既存バグで、Undo/Redo実装由来ではない。
+
+**制約: dataZoomを操作するdispatchActionは必ず `dataZoomIndex` で対象を明示すること。**
+
 ### 【バグ修正】Custom RAMの永続化漏れ
 
 `addCustomRAM` / `removeCustomRAM` が `saveSettings()` を呼んでおらず、RAMの追加/削除が
