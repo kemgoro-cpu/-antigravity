@@ -986,6 +986,31 @@ function hitTestGrid(clientY) {
 }
 
 /**
+ * Y座標がグリッド下端の「高さリサイズ帯」(境界±6px)にあるか判定する。
+ * マージドラッグ等よりも先に判定し、境界ドラッグによる高さ調整を優先する。
+ */
+function hitTestResizeBand(clientY) {
+    const rect = dom.chartEl.getBoundingClientRect();
+    const y = clientY - rect.top;
+    for (let i = 0; i < state.gridRegions.length; i++) {
+        const r = state.gridRegions[i];
+        const edge = r.top + r.height;
+        if (y >= edge - 6 && y <= edge + 6) return { index: i, region: r };
+    }
+    return null;
+}
+
+/**
+ * グリッドのsignature(チャンネル名のソート結合)を取得する。
+ * state.gridHeights(個別の高さ上書き)のキーとして使う。
+ */
+function gridSignatureForRegion(region) {
+    const group = getChartGroupById(region.groupId);
+    const names = group ? group.channels.map(c => c.name) : [region.name];
+    return CSVLayout.gridSignature(names);
+}
+
+/**
  * X座標がY軸ラベル領域（グリッドの左端）にあるか判定する。
  */
 function isInYAxisArea(clientX, region = null) {
@@ -1100,6 +1125,7 @@ function setupMergeDrag() {
     dom.chartEl.addEventListener('mousedown', e => {
         if (state.shiftMode || state.brushMode || state.arrangeMode) return;
         if (e.button !== 0) return;
+        if (hitTestResizeBand(e.clientY)) return; // 境界の高さリサイズを優先
 
         const hit = hitTestGrid(e.clientY);
         if (!hit || !isInYAxisArea(e.clientX, hit.region)) return;
@@ -1162,6 +1188,7 @@ function setupMergeDrag() {
     // --- dblclick: マージ解除 ---
     dom.chartEl.addEventListener('dblclick', e => {
         if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (hitTestResizeBand(e.clientY)) return; // 境界のダブルクリックは高さリセット側で処理
 
         const hit = hitTestGrid(e.clientY);
         if (!hit || !isInYAxisArea(e.clientX, hit.region)) return;
@@ -1170,6 +1197,72 @@ function setupMergeDrag() {
         if (group?.channels.length > 1) showChartGroupModal(group.id);
     });
 }
+
+// ─────────────────────────────────────────────────────────────
+// グリッド境界ドラッグ: チャートの高さを個別に調整する
+// ─────────────────────────────────────────────────────────────
+
+function setupGridResizeDrag() {
+    let drag = null;   // { signature, startY, startH } リサイズ中の状態
+    let rafId = null;
+
+    // 境界の上でカーソルをns-resizeにする(通常モードのみ)
+    dom.chartEl.addEventListener('mousemove', e => {
+        if (drag) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        const band = hitTestResizeBand(e.clientY);
+        if (band) {
+            // 他のドラッグ(grabbing等)のカーソルを上書きしない
+            if (!dom.chartEl.style.cursor) dom.chartEl.style.cursor = 'ns-resize';
+        } else if (dom.chartEl.style.cursor === 'ns-resize') {
+            dom.chartEl.style.cursor = '';
+        }
+    });
+
+    dom.chartEl.addEventListener('mousedown', e => {
+        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (e.button !== 0) return;
+        const band = hitTestResizeBand(e.clientY);
+        if (!band) return;
+        drag = {
+            signature: gridSignatureForRegion(band.region),
+            startY: e.clientY,
+            startH: band.region.height,
+        };
+        dom.chartEl.style.cursor = 'ns-resize';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!drag) return;
+        const newH = Math.min(
+            Math.max(drag.startH + (e.clientY - drag.startY), CSVLayout.MIN_GRID_H),
+            CSVLayout.MAX_GRID_H
+        );
+        state.gridHeights[drag.signature] = Math.round(newH);
+        // シフトドラッグと同様、再描画はrAFで間引く
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => { renderChart(); rafId = null; });
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!drag) return;
+        drag = null;
+        dom.chartEl.style.cursor = '';
+        saveSettings(); // 見た目だけの設定なのでUndo履歴には積まれない
+    });
+
+    // 境界のダブルクリックでそのグリッドだけ自動の高さに戻す
+    dom.chartEl.addEventListener('dblclick', e => {
+        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        const band = hitTestResizeBand(e.clientY);
+        if (!band) return;
+        delete state.gridHeights[gridSignatureForRegion(band.region)];
+        renderChart();
+        saveSettings();
+    });
+}
+setupGridResizeDrag();
 
 function showChartGroupModal(groupId) {
     const group = getChartGroupById(groupId);
@@ -3820,6 +3913,9 @@ function renderChart() {
     // キャンバス高さを反映（変化したときだけresizeする。setOptionの%指定より前に行う）
     const targetStyleH = totalH > containerH ? totalH + 'px' : '100%';
     if (dom.chartEl.style.height !== targetStyleH) {
+        // ツールチップ表示中にresizeするとECharts内部で
+        // 「offsetWidth of null」エラーが出るため、先に隠す
+        state.chart.dispatchAction({ type: 'hideTip' });
         dom.chartEl.style.height = targetStyleH;
         state.chart.resize();
     }
