@@ -857,6 +857,9 @@ const dom = {
     resetBtn:   $('reset-zoom-btn'),
     undoBtn:    $('undo-btn'),
     redoBtn:    $('redo-btn'),
+    rowFitBtn:  $('row-fit-btn'),
+    rowMinusBtn: $('row-minus-btn'),
+    rowPlusBtn: $('row-plus-btn'),
     shiftBtn:   $('shift-mode-btn'),
     arrangeBtn: $('arrange-mode-btn'),
     hintEl:     $('toolbar-hint'),
@@ -3744,6 +3747,9 @@ function getActiveGroups() {
 // Chart rendering
 // ─────────────────────────────────────────────────────────────
 
+// 自動フィット時の実効行高さ（renderChartが更新、全体＋/−ボタンの起点に使う）
+let _lastAutoRow = null;
+
 function renderChart() {
     if (!state.chart) initChart();
 
@@ -3783,7 +3789,6 @@ function renderChart() {
     const F  = CSVLayout.getFontSizes(state.fontScale);
     const DL = CSVLayout.deriveLayout(F);
 
-    const H = state.chart.getHeight();
     const topPx  = L.topPx;
     const botPx  = L.bottomPx;
     const gapPx  = L.gapPx;
@@ -3797,11 +3802,29 @@ function renderChart() {
         const allBit = grp.mergedNames.every(n => state.bitChannels.has(n));
         return allBit ? BIT_WEIGHT : 1.0;
     });
-    const totalWeight = gridWeights.reduce((s, w) => s + w, 0);
-    const availH = H - topPx - botPx - (n - 1) * gapPx;
-    // 重みに応じてグリッド高さを配分
-    const gridHeights = gridWeights.map(w => Math.max(Math.floor(availH * w / totalWeight), 24));
 
+    // グリッド高さの配分（layout-utils.jsの純粋関数）。
+    // rowHeightPx/個別上書きが未設定なら従来どおりコンテナに収まる自動配分、
+    // 設定されていれば合計がコンテナを超えた分だけキャンバスを伸ばす（縦スクロール）
+    const containerH = dom.chartEl.parentElement.clientHeight;
+    const gridSigs = order.map(gid => CSVLayout.gridSignature(groups.get(gid).mergedNames));
+    const { heights: gridHeights, totalH, autoRow } = CSVLayout.computeGridHeights({
+        weights: gridWeights,
+        signatures: gridSigs,
+        overrides: state.gridHeights,
+        rowHeightPx: state.rowHeightPx,
+        containerH, topPx, botPx, gapPx,
+    });
+    _lastAutoRow = autoRow; // 全体＋/−ボタンの起点（自動フィット時の実効行高さ）
+
+    // キャンバス高さを反映（変化したときだけresizeする。setOptionの%指定より前に行う）
+    const targetStyleH = totalH > containerH ? totalH + 'px' : '100%';
+    if (dom.chartEl.style.height !== targetStyleH) {
+        dom.chartEl.style.height = targetStyleH;
+        state.chart.resize();
+    }
+
+    const H = totalH;
     const pct    = px => `${(px / H * 100).toFixed(3)}%`;
 
     const grids    = [], xAxes  = [], yAxes  = [];
@@ -4307,6 +4330,30 @@ dom.resetBtn.addEventListener('click', resetZoom);
 // ── Undo / Redo ──
 dom.undoBtn.addEventListener('click', appUndo);
 dom.redoBtn.addEventListener('click', appRedo);
+
+// ── チャート縦幅の全体調整 ──
+
+/**
+ * 全チャートの基準行高さを倍率で変更する。
+ * 自動フィット中は現在の実効行高さを起点にする。
+ */
+function scaleRowHeight(factor) {
+    if (!getMainFile() || state.numGrids === 0) return;
+    const base = state.rowHeightPx != null ? state.rowHeightPx : (_lastAutoRow || 120);
+    state.rowHeightPx = Math.round(Math.min(Math.max(base * factor, CSVLayout.MIN_GRID_H), 600));
+    renderChart();
+    saveSettings();
+}
+
+dom.rowPlusBtn.addEventListener('click', () => scaleRowHeight(1.25));
+dom.rowMinusBtn.addEventListener('click', () => scaleRowHeight(0.8));
+dom.rowFitBtn.addEventListener('click', () => {
+    // 全画面フィットに戻す（個別の高さ上書きもリセット）
+    state.rowHeightPx = null;
+    state.gridHeights = {};
+    renderChart();
+    saveSettings();
+});
 
 // ── 単色モード切り替え ──
 dom.monoColorBtn.addEventListener('click', toggleMonoColor);
