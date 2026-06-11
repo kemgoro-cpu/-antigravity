@@ -13,6 +13,7 @@ csv_viewer/
 ├─ parser-utils.js     … CSVパース・文字コード判定（Nodeテスト可能な純粋関数）
 ├─ settings-utils.js   … 設定のバージョンチェック・マイグレーション（同上）
 ├─ history-utils.js    … Undo/Redo統合履歴のロジック（同上）
+├─ layout-utils.js     … フォントプリセット・グリッド高さ配分（同上）
 ├─ styles.css
 ├─ tests/              … Nodeで実行する単体テスト
 └─ lib/                … 同梱ライブラリ（ECharts, PapaParse等）
@@ -80,6 +81,8 @@ Settings の Encoding で読み込み文字コードを指定できます。
 - 設定の JSON エクスポート / インポート
 - Settings セクションで設定プリセットを保存 / 適用 / 削除
 - Undo / Redo（Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z、ツールバーボタン）。ズーム・チャンネル選択・マージ・Custom RAM・色変更などの操作を時系列順に戻せる。ファイル追加 / 削除 / Clear All / Time 単位変更の時点で履歴はリセットされる
+- チャートの縦幅調整: ツールバーの `Fit / − / ＋` で全体を段階調整（入りきらない分は縦スクロール）。グリッドの下端境界をドラッグすると個別に高さ変更でき、境界のダブルクリックでそのチャートだけ自動に戻る
+- チャートのフォントサイズ: ツールバーで 小 / 標準 / 大 / 特大 を選択（チャンネル名・軸の数値・ホバー値が連動）。長いチャンネル名はチャート高さに収まらない分が「…」で自動省略される
 - Channel Map で、名前が違うSub側チャンネルをMainチャンネルへ対応付け
 
 ## Custom RAM
@@ -131,6 +134,7 @@ Main と Sub で同じ物理値なのにチャンネル名が違う場合、Chan
 rtk node tests/parser-utils.test.js
 rtk node tests/settings-utils.test.js
 rtk node tests/history-utils.test.js
+rtk node tests/layout-utils.test.js
 ```
 
 構文チェック:

@@ -3,6 +3,47 @@
 開発を引き継ぐ人（人間・AIエージェント問わず）向けの正確な変更記録。
 コミット単位の詳細は `git log` も参照のこと。
 
+## 2026-06-11 (3): チャート縦幅調整・チャンネル名表示改善・フォントサイズ設定（Claude Code実施）
+
+### 新規ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `layout-utils.js` | フォントサイズプリセットとグリッド高さ配分の純粋関数（UMD、グローバル名 `CSVLayout`） |
+| `tests/layout-utils.test.js` | 7ケースのNodeテスト |
+
+### 機能
+
+1. **チャート縦幅調整（スクロール型）**
+   - ツールバーの `Fit / − / ＋` で全グリッドの基準高さ(`state.rowHeightPx`)を段階調整。
+     コンテナに入りきらない分は `#chart` の `style.height` をpx指定して
+     `.chart-container`（`overflow-y:auto` に変更）が縦スクロールする
+   - **グリッド下端±6pxの帯**をドラッグで個別の高さ調整(`state.gridHeights`)。
+     帯のダブルクリックでそのグリッドだけ自動に戻す。`Fit` は両方リセット
+   - 個別高さのキーは **signature（チャンネル名のソート'|'結合）**。
+     `chartGroups` の id は連番カウンタでセッションごとに変わるため使わない
+2. **フォントサイズの段階調整**（ツールバーの 小/標準/大/特大）
+   - `CSVLayout.FONT_PRESETS`: 軸数値(label)・Y軸名(name)・tooltip/ホバーラベル・
+     Xスライダーが連動。**標準でもY軸名は10px→13pxに拡大**（常に数値より大きい）
+   - フォントに応じて数値ラベル幅・nameGap・グリッド左マージン・複数軸の間隔も
+     `CSVLayout.deriveLayout()` で連動（見切れ防止）
+3. **Y軸チャンネル名の重なり対策**: yAxisに `nameTruncate: { maxWidth: gridH-8 }` を設定。
+   グリッド高さに収まらない長い名前は「…」で自動省略される（ECharts 5.5組み込み）
+
+### 設計判断と制約
+
+- `fontScale` / `rowHeightPx` / `gridHeights` は `collectSettings()` で永続化されるが、
+  **`VISUAL_ONLY_KEYS`（history-utils.js）に追加済み = Undo履歴の比較から除外**。
+  境界ドラッグ中の連続saveSettingsで履歴がスパムになるのを防ぐため
+- settings-utils.js の `OBJECT_KEYS` に `gridHeights` を追加（型防御）
+- **ツールチップ表示中に `chart.resize()` するとECharts内部で
+  「offsetWidth of null」エラーが出る** → resize前に `hideTip` をdispatchする
+  （renderChart内。今後resizeを追加する場合も同様にすること）
+- 割り切り: X軸スライダーはキャンバス最下部に付くため、縦スクロール時は
+  最下部までスクロールしないと見えない（必要なら将来 position:sticky 等を検討）
+- 検証メモ: ヘッドレスプレビューはウィンドウ非表示時に requestAnimationFrame が
+  発火しないため、rAF経由の処理（境界ドラッグの再描画等）は直呼びで検証した
+
 ## 2026-06-11 (2): アプリ全体のUndo/Redo機能（Claude Code実施）
 
 Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z とツールバーボタンで、ズーム・チャンネル選択・
