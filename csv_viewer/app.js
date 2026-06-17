@@ -649,6 +649,9 @@ const state = {
     rowHeightPx:    null,      // グリッド基準高さ(px)。null=コンテナに自動フィット
     gridHeights:    {},        // グリッド個別の高さ上書き { signature: px }
     parseJobs:      new Map(), // jobId → { name, detail, cancelled }
+    lineWidth:         1.0,    // 線の太さ（一括のデフォルト値）
+    channelLineWidths: {},     // チャンネルごとの太さ上書き { channelName: width }。未指定はlineWidthを使う
+    showMarkers:       false,  // データ点マーカー（丸印）を表示するか（全体ON/OFF）
 };
 
 // 復元待ちの設定（ファイル読込後に適用される）
@@ -3384,6 +3387,45 @@ function renderColumnList() {
                     saveSettings();
                 });
             });
+
+            // ── チャンネル個別の線の太さ ──────────────────────
+            // 個別指定があればその値、なければ一括値(state.lineWidth)を初期表示する
+            const hasOwnWidth = col.name in state.channelLineWidths;
+            const lwRow = document.createElement('div');
+            lwRow.className = 'col-linewidth';
+            lwRow.addEventListener('click', e => e.stopPropagation());
+            lwRow.innerHTML = `
+                <span class="col-linewidth-label">太さ</span>
+                <input type="range" class="col-linewidth-range" min="0.5" max="5" step="0.5"
+                    value="${hasOwnWidth ? state.channelLineWidths[col.name] : state.lineWidth}">
+                <span class="col-linewidth-value">${Number(hasOwnWidth ? state.channelLineWidths[col.name] : state.lineWidth).toFixed(1)}</span>
+                <button type="button" class="col-linewidth-reset${hasOwnWidth ? ' active' : ''}"
+                    title="一括の太さに戻す">⟲</button>
+            `;
+            item.appendChild(lwRow);
+
+            const lwRange = lwRow.querySelector('.col-linewidth-range');
+            const lwValue = lwRow.querySelector('.col-linewidth-value');
+            const lwReset = lwRow.querySelector('.col-linewidth-reset');
+            // スライダー操作: このチャンネルの個別太さを設定
+            lwRange.addEventListener('input', () => {
+                const w = parseFloat(lwRange.value);
+                state.channelLineWidths[col.name] = w;
+                lwValue.textContent = w.toFixed(1);
+                lwReset.classList.add('active');
+                renderChart();
+                saveSettings();
+            });
+            // リセット: 個別指定を消して一括値に従わせる
+            lwReset.addEventListener('click', e => {
+                e.stopPropagation();
+                delete state.channelLineWidths[col.name];
+                lwRange.value = state.lineWidth;
+                lwValue.textContent = Number(state.lineWidth).toFixed(1);
+                lwReset.classList.remove('active');
+                renderChart();
+                saveSettings();
+            });
         }
 
         topRow.addEventListener('click', () => {
@@ -4122,12 +4164,13 @@ function renderChart() {
                 xAxisIndex: i,
                 yAxisIndex,
                 data:       s.data,
-                showSymbol: false,
+                showSymbol: state.showMarkers,
+                symbolSize: 4,
                 sampling:   dom.sampling.value || false,
                 progressive: 400,
                 progressiveThreshold: 3000,
                 clip:       true,
-                lineStyle:  { width: 1.5, color: s.color, type: s.dash ? [6, 4] : 'solid' },
+                lineStyle:  { width: state.channelLineWidths[s.channelName] ?? state.lineWidth, color: s.color, type: s.dash ? [6, 4] : 'solid' },
                 itemStyle:  { color: s.color },
                 emphasis:   { disabled: true },
                 ...(markArea ? { markArea } : {}),
@@ -4797,6 +4840,30 @@ dom.fontScale?.addEventListener('change', () => {
     saveSettings();
 });
 
+// 線の太さ（一括）スライダー: 全系列の太さをまとめて変更
+const lineWidthRange = document.getElementById('line-width-range');
+if (lineWidthRange) {
+    const lineWidthValue = document.getElementById('line-width-value');
+    lineWidthRange.value = state.lineWidth;
+    if (lineWidthValue) lineWidthValue.textContent = Number(state.lineWidth).toFixed(1);
+    lineWidthRange.addEventListener('input', () => {
+        state.lineWidth = parseFloat(lineWidthRange.value);
+        if (lineWidthValue) lineWidthValue.textContent = state.lineWidth.toFixed(1);
+        renderChart();
+        saveSettings();
+    });
+}
+// データ点マーカー表示トグル: 全系列の点表示をまとめて切り替え
+const showMarkersChk = document.getElementById('show-markers-chk');
+if (showMarkersChk) {
+    showMarkersChk.checked = state.showMarkers;
+    showMarkersChk.addEventListener('change', () => {
+        state.showMarkers = showMarkersChk.checked;
+        renderChart();
+        saveSettings();
+    });
+}
+
 if (dom.shiftBtn) dom.shiftBtn.addEventListener('click', toggleShiftMode);
 if (dom.arrangeBtn) dom.arrangeBtn.addEventListener('click', toggleArrangeMode);
 
@@ -5149,6 +5216,10 @@ function collectSettings() {
         fontScale: state.fontScale,
         rowHeightPx: state.rowHeightPx,
         gridHeights: state.gridHeights,
+        // 線の太さ・データ点マーカー設定
+        lineWidth: state.lineWidth,
+        channelLineWidths: state.channelLineWidths,
+        showMarkers: state.showMarkers,
         // サイドバー幅
         sidebarWidth: sidebar ? sidebar.offsetWidth : null,
         // Y軸範囲のユーザー設定
@@ -5397,6 +5468,14 @@ function applySettings(rawSettings) {
     }
     if (s.rowHeightPx !== undefined) state.rowHeightPx = s.rowHeightPx;
     if (s.gridHeights) state.gridHeights = { ...s.gridHeights };
+    if (s.lineWidth != null) state.lineWidth = s.lineWidth;
+    if (s.channelLineWidths) state.channelLineWidths = { ...s.channelLineWidths };
+    if (s.showMarkers != null) state.showMarkers = s.showMarkers;
+    // 太さ・マーカーのUIを復元値に同期
+    const _lwr = document.getElementById('line-width-range');
+    if (_lwr) { _lwr.value = state.lineWidth; const _lwv = document.getElementById('line-width-value'); if (_lwv) _lwv.textContent = Number(state.lineWidth).toFixed(1); }
+    const _smc = document.getElementById('show-markers-chk');
+    if (_smc) _smc.checked = state.showMarkers;
 
     // サイドバー幅を復元
     if (s.sidebarWidth) {

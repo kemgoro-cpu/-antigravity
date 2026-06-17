@@ -157,6 +157,15 @@
                             <option value="xlarge">特大</option>
                         </select>
                     </label>
+                    <label class="sampling-label" title="線の太さ">
+                        <i class='bx bx-pulse' aria-hidden="true"></i>
+                        <input type="range" id="line-width-range" min="0.5" max="5" step="0.5" value="1.0" style="width:80px;">
+                        <span id="line-width-value">1.0</span>
+                    </label>
+                    <label class="sampling-label" title="データ点（マーカー）を表示">
+                        <input type="checkbox" id="show-markers-chk">
+                        <span style="font-size:12px;">点</span>
+                    </label>
                     <div class="toolbar-sep"></div>
                     <button id="mono-color-btn" class="btn-secondary" title="単色モード: ファイルごとに同じ色で表示">
                         <i class='bx bx-palette' aria-hidden="true"></i> Mono Color

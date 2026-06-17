@@ -651,6 +651,51 @@ input[type="text"]:focus {
     flex-shrink: 0;
 }
 
+/* チャンネル個別の線の太さ調整行（Y範囲行と同じレイアウトに合わせる） */
+.col-linewidth {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 1px 7px 2px 23px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.col-linewidth-label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.col-linewidth-range {
+    flex: 1;
+    min-width: 50px;
+    height: 14px;
+}
+
+.col-linewidth-value {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    min-width: 24px;
+    text-align: right;
+}
+
+/* 「一括に戻す」リセットボタン。個別指定があるときだけ濃く表示 */
+.col-linewidth-reset {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    cursor: pointer;
+    opacity: 0.4;
+    background: none;
+    border: none;
+    padding: 0 2px;
+}
+.col-linewidth-reset.active {
+    opacity: 1;
+    color: var(--accent);
+}
+
 /* ── Buttons ──────────────────────────────── */
 .btn-primary {
     background: var(--accent);
