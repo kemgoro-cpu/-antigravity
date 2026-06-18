@@ -652,6 +652,15 @@ const state = {
     lineWidth:         1.0,    // 線の太さ（一括のデフォルト値）
     channelLineWidths: {},     // チャンネルごとの太さ上書き { channelName: width }。未指定はlineWidthを使う
     showMarkers:       false,  // データ点マーカー（丸印）を表示するか（全体ON/OFF）
+    // ドライビングインデックス（モード走行の走行品質指標＋燃費）
+    driveIndex: {
+        channels:       { target: null, actual: null, fuel: null }, // 使用チャンネル名（自動検出＋手動上書き）
+        cycleId:        null,  // 判別/選択したサイクルID（'nedc'等）。nullは未判別
+        phaseOverride:  null,  // 手動編集したフェーズ [{name,start,end}]。nullなら自動境界
+        roadLoadByFile: {},    // 走行抵抗係数・質量をファイル別に保持 { ファイル名: {A,B,C,mass} }（任意。揃えばER/EER算出）
+        results:        [],    // ファイル別の計算結果 [{ fileId, fileName, role, result, ... }]（永続化しない）
+        lastResult:     null,  // メインの計算結果（ツールバーボタン表示用。永続化しない）
+    },
 };
 
 // 復元待ちの設定（ファイル読込後に適用される）
@@ -888,6 +897,7 @@ const dom = {
     presetSave: $('preset-save-btn'),
     presetLoad: $('preset-load-btn'),
     presetDelete: $('preset-delete-btn'),
+    driveIndexBtn: $('drive-index-btn'),
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1717,6 +1727,8 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                         // ファイルが増えたのでUndo履歴を取り直す（追加前には戻せない）
                         resetHistoryBaseline();
                     }
+                    // モード走行データ（目標・実測車速あり）ならドライビングインデックスを自動計算
+                    computeDriveIndex().catch(e => console.warn('[DriveIndex] auto compute failed:', e));
                 } catch (e) {
                     showError(`Failed to process time data: ${fileName}`, e.stack || e.message);
                 }
@@ -2959,6 +2971,363 @@ dom.customAdd.addEventListener('click', () => {
     dom.customValidation.textContent = '';
     dom.customValidation.className = 'custom-ram-validation';
 });
+
+// ─────────────────────────────────────────────────────────────
+// ドライビングインデックス（モード走行の走行品質指標＋燃費）
+//   計算ロジックは drive-index-utils.js（window.DriveIndex）の純粋関数に分離。
+//   ここは「チャンネル解決 → データ収集 → 計算呼び出し → 表示」の配線のみ。
+// ─────────────────────────────────────────────────────────────
+
+/** ファイルのカラム名から 目標車速/実測車速/燃料流量 を推定する */
+function detectDriveChannels(file) {
+    const cols = file.columns.map(c => c.name);
+    const isSpeed = n => /(speed|veloc|車速|spd)/i.test(n);
+    // 目標車速: target/reference/目標 系 ＋ 速度語（無ければ目標語のみ）
+    const target = cols.find(n => /(target|reference|ref|目標|指示|cmd|command)/i.test(n) && isSpeed(n))
+                || cols.find(n => /(target|目標)/i.test(n));
+    // 実測車速: actual/実測 系 ＋ 速度語、無ければ目標以外の速度チャンネル
+    const actual = cols.find(n => /(actual|実測|meas|driven)/i.test(n) && isSpeed(n))
+                || cols.find(n => isSpeed(n) && n !== target);
+    // 燃料流量: Fuel_Rate / 燃料 系
+    const fuel = cols.find(n => /fuel.?rate/i.test(n)) || cols.find(n => /(燃料|fuel)/i.test(n));
+    return { target: target || null, actual: actual || null, fuel: fuel || null };
+}
+
+/** ファイルから指定チャンネル名のデータ配列を取得（未ロード/不在は null） */
+function getColData(file, name) {
+    if (!name) return null;
+    const col = file.columns.find(c => c.name === name);
+    if (!col) return null;
+    return file.colData[col.id] || null;
+}
+
+/** サイクルIDから表示名を返す（未判別は「未判別」） */
+function cycleNameOf(id) {
+    const c = window.DriveIndex.CYCLE_REGISTRY.find(x => x.id === id);
+    return c ? c.name : '未判別';
+}
+
+/** 計算に使う実効フェーズを返す（手動編集 > サイクル既定 > 空） */
+function getEffectivePhases(effectiveId) {
+    const di = state.driveIndex;
+    if (di.phaseOverride && di.phaseOverride.length) return di.phaseOverride;
+    const c = window.DriveIndex.CYCLE_REGISTRY.find(x => x.id === effectiveId);
+    return c ? c.phases : [];
+}
+
+/**
+ * メインファイルがモード走行データなら指標・燃費を計算し state.driveIndex.lastResult に格納する。
+ * 目標・実測車速が見つからなければ計算しない（lastResult=null）。
+ * @returns {Promise<object|null>}
+ */
+async function computeDriveIndex({ autoDetect = true } = {}) {
+    const mainFile = getMainFile();
+    if (!mainFile || !window.DriveIndex) return null;
+    const di = state.driveIndex;
+
+    // チャンネル解決: 保存名が現ファイルに存在すれば優先、無ければ自動検出で補完。
+    // autoDetect=false（モーダルからの再計算）では補完せず、ユーザー指定（null＝なし含む）を尊重する。
+    const auto  = detectDriveChannels(mainFile);
+    const names = mainFile.columns.map(c => c.name);
+    const pick  = kind => {
+        const stored = di.channels[kind];
+        if (stored && names.includes(stored)) return stored;
+        return autoDetect ? auto[kind] : null;
+    };
+    const targetName = pick('target');
+    const actualName = pick('actual');
+    const fuelName   = pick('fuel');
+    // 解決結果を state に反映（永続化・モーダル表示用）
+    di.channels = { target: targetName || null, actual: actualName || null, fuel: fuelName || null };
+
+    if (!targetName || !actualName) {
+        di.results = [];            // モード走行データではない
+        di.lastResult = null;
+        updateDriveIndexButton();
+        return null;
+    }
+
+    // メイン＋全サブを順に計算する。サブはチャンネル名を別名解決（resolveColumnForFile）。
+    const results = [];
+    const fileIds = [getMainFileId(), ...getSubFileIds()];
+    for (const fid of fileIds) {
+        const f = state.files[fid];
+        if (!f) continue;
+        const entry = { fileId: fid, fileName: f.shortName, fullName: f.name, role: f.role };
+
+        // 各ファイルで対象カラムを解決（メインは厳密一致、サブは別名→同名フォールバック）
+        const tCol = resolveColumnForFile(f, targetName);
+        const aCol = resolveColumnForFile(f, actualName);
+        const fCol = fuelName ? resolveColumnForFile(f, fuelName) : null;
+        if (!tCol || !aCol) {
+            entry.result = null;
+            entry.reason = '対象チャンネルなし';
+            results.push(entry);
+            continue;
+        }
+
+        // 必要列を遅延ロード
+        const need = [tCol.name, aCol.name];
+        if (fCol) need.push(fCol.name);
+        await loadColumnsForFile(fid, need);
+
+        const time   = f.timeData;
+        const target = f.colData[tCol.id];
+        const actual = f.colData[aCol.id];
+        const fuel   = fCol ? f.colData[fCol.id] : null;
+        if (!time || !target || !actual) {
+            entry.result = null;
+            entry.reason = 'データなし';
+            results.push(entry);
+            continue;
+        }
+
+        // サイクル判別はファイルごと（手動 di.cycleId があれば全ファイルそれを優先）
+        const det = window.DriveIndex.detectCycle(time, target);
+        const effectiveId = di.cycleId || det.id;
+        const phases = getEffectivePhases(effectiveId);
+        const roadLoad = di.roadLoadByFile[f.name] || null; // 走行抵抗はファイル別（任意）
+
+        entry.result = window.DriveIndex.computeMetrics({
+            time, target, actual, fuelRate: fuel, phases, roadLoad,
+        });
+        entry.effectiveId  = effectiveId;
+        entry.cycleName    = cycleNameOf(effectiveId);
+        entry.detectedName = det.name;
+        entry.detectedId   = det.id;
+        entry.channels     = { target: tCol.name, actual: aCol.name, fuel: fCol ? fCol.name : null };
+        results.push(entry);
+    }
+
+    di.results = results;
+    // メインの結果をボタン表示用に保持（後方互換）
+    const mainEntry = results.find(r => r.role === 'main' && r.result);
+    di.lastResult = mainEntry ? {
+        ...mainEntry.result,
+        effectiveId:  mainEntry.effectiveId,
+        cycleName:    mainEntry.cycleName,
+        detectedName: mainEntry.detectedName,
+        detectedId:   mainEntry.detectedId,
+        channels:     mainEntry.channels,
+    } : null;
+    updateDriveIndexButton();
+    return di.results;
+}
+
+/** ツールバーボタンのラベル/状態を直近結果に合わせて更新する */
+function updateDriveIndexButton() {
+    const btn = dom.driveIndexBtn;
+    if (!btn) return;
+    const di = state.driveIndex;
+    const labelEl = btn.querySelector('.di-label') || btn;
+    if (di.lastResult) {
+        btn.classList.add('di-active');
+        labelEl.textContent = di.lastResult.cycleName || 'Drive Index';
+    } else {
+        btn.classList.remove('di-active');
+        labelEl.textContent = 'Drive Index';
+    }
+}
+
+// 表示用フォーマッタ（null/非数は「-」）
+function diFmtPct(v) { return (v == null || !isFinite(v)) ? '-' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; }
+function diFmtNum(v, d = 2) { return (v == null || !isFinite(v)) ? '-' : v.toFixed(d); }
+
+/** 計算結果から指標テーブルのHTMLを組み立てる */
+function buildDriveIndexTable(result) {
+    if (!result) {
+        return `<p class="di-empty">目標車速・実測車速チャンネルが見つかりませんでした。`
+             + `上の「目標車速 / 実測車速」で対象チャンネルを選び、「再計算」を押してください。</p>`;
+    }
+    const rowHtml = (label, m, cls = '') => `<tr class="${cls}">
+        <td class="di-row-label">${esc(label)}</td>
+        <td>${diFmtNum(m.rmsse)}</td>
+        <td>${diFmtPct(m.iwr)}</td>
+        <td>${diFmtPct(m.ascr)}</td>
+        <td>${diFmtPct(m.dr)}</td>
+        <td>${diFmtPct(m.er)}</td>
+        <td>${diFmtPct(m.eer)}</td>
+        <td>${diFmtNum(m.fuelKmPerL)}</td>
+        <td>${diFmtNum(m.fuelLper100km)}</td>
+        <td>${diFmtNum(m.distanceKm, 3)}</td>
+        <td>${diFmtNum(m.fuelL, 3)}</td>
+    </tr>`;
+    const phaseRows = (result.phases || []).map(p => rowHtml(p.name, p)).join('');
+    const totalRow  = rowHtml('モード全体 (Total)', result.total || {}, 'di-total-row');
+    return `<table class="di-table">
+        <thead><tr>
+            <th>区間</th><th>RMSSE<br>[km/h]</th><th>IWR</th><th>ASCR</th><th>DR</th>
+            <th>ER</th><th>EER</th><th>燃費<br>[km/L]</th><th>[L/100km]</th><th>距離<br>[km]</th><th>燃料<br>[L]</th>
+        </tr></thead>
+        <tbody>${phaseRows}${totalRow}</tbody>
+    </table>`;
+}
+
+/**
+ * ファイル別の計算結果をまとめて表示する。各ファイルに
+ * 「見出し（ファイル名・Main/Subバッジ・判別サイクル）」「ファイル別走行抵抗入力」「指標表」を並べる。
+ */
+function buildDriveIndexAllTables(results, roadLoadByFile) {
+    if (!results || !results.length) {
+        return `<p class="di-empty">目標車速・実測車速チャンネルが見つかりませんでした。`
+             + `上の「目標車速 / 実測車速」で対象チャンネルを選び、「再計算」を押してください。</p>`;
+    }
+    return results.map(entry => {
+        const rl = (roadLoadByFile && roadLoadByFile[entry.fullName]) || {};
+        const roleLabel = entry.role === 'main' ? 'Main' : 'Sub';
+        const sub = entry.result ? esc(entry.cycleName || '—') : esc(entry.reason || '計算できませんでした');
+        const head = `<div class="di-file-head">
+            <span class="di-file-name" title="${esc(entry.fullName)}">${esc(entry.fileName)}</span>
+            <span class="di-file-role di-role-${entry.role}">${roleLabel}</span>
+            <span class="di-file-cycle">${sub}</span>
+        </div>`;
+        // ファイル別 走行抵抗入力（data-file にフルネームを持たせ、再計算時に読み取る）
+        const rlInputs = `<div class="di-roadload di-file-rl" data-file="${esc(entry.fullName)}">
+            <span class="di-rl-title">走行抵抗（任意・ER/EER用）</span>
+            <label>A<input type="number" class="di-rl-a" value="${esc(rl.A || '')}" step="any" placeholder="N"></label>
+            <label>B<input type="number" class="di-rl-b" value="${esc(rl.B || '')}" step="any" placeholder="N/(km/h)"></label>
+            <label>C<input type="number" class="di-rl-c" value="${esc(rl.C || '')}" step="any" placeholder="N/(km/h)²"></label>
+            <label>質量<input type="number" class="di-rl-mass" value="${esc(rl.mass || '')}" step="any" placeholder="kg"></label>
+        </div>`;
+        const body = entry.result
+            ? buildDriveIndexTable(entry.result)
+            : `<p class="di-empty">${esc(entry.reason || '計算できませんでした')}</p>`;
+        return `<div class="di-file-section">${head}${rlInputs}${body}</div>`;
+    }).join('');
+}
+
+/** ドライビングインデックスの詳細モーダルを開く（サイクル/チャンネル/係数/フェーズ編集＋指標表） */
+function showDriveIndexModal() {
+    const mainFile = getMainFile();
+    if (!mainFile) { alert('先にファイルを読み込んでください。'); return; }
+    const di = state.driveIndex;
+    const REG = window.DriveIndex.CYCLE_REGISTRY;
+
+    document.getElementById('app-modal-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'app-modal-overlay';
+    overlay.className = 'app-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'app-modal drive-index-modal';
+    modal.setAttribute('aria-labelledby', 'drive-index-title');
+
+    const colNames  = mainFile.columns.filter(c => !c.isCustom).map(c => c.name);
+    const speedOpts = sel => colNames.map(n => `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    const fuelOpts  = sel => `<option value="" ${!sel ? 'selected' : ''}>（なし）</option>`
+        + colNames.map(n => `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    const cycleOpts = () => `<option value="" ${di.cycleId == null ? 'selected' : ''}>自動判別</option>`
+        + REG.map(c => `<option value="${c.id}" ${di.cycleId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+    const detName = di.lastResult ? di.lastResult.detectedName : '—';
+
+    modal.innerHTML = `
+        <h3 id="drive-index-title"><i class='bx bx-tachometer'></i> Driving Index（モード走行品質・燃費）</h3>
+        <p class="di-detected">自動判別: <strong>${esc(detName)}</strong>　<span class="di-note">走行抵抗はファイルごとに各表の上で入力できます</span></p>
+        <div class="di-controls">
+            <label>サイクル<select class="di-cycle">${cycleOpts()}</select></label>
+            <label>目標車速<select class="di-ch-target">${speedOpts(di.channels.target)}</select></label>
+            <label>実測車速<select class="di-ch-actual">${speedOpts(di.channels.actual)}</select></label>
+            <label>燃料流量<select class="di-ch-fuel">${fuelOpts(di.channels.fuel)}</select></label>
+        </div>
+        <div class="di-phase-edit">
+            <div class="di-phase-head">フェーズ区間 [秒]<button class="btn-secondary btn-sm di-phase-add">+ 行追加</button></div>
+            <div class="di-phase-rows"></div>
+        </div>
+        <div class="di-result"></div>
+        <div class="modal-actions">
+            <button class="btn-secondary di-close">閉じる</button>
+            <button class="btn-primary di-recompute"><i class='bx bx-refresh'></i> 再計算</button>
+        </div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
+    const close = () => overlay.remove();
+
+    // ── フェーズ編集行 ──
+    const phaseRowsEl = modal.querySelector('.di-phase-rows');
+    const registryPhasesOf = id => {
+        const c = REG.find(x => x.id === id);
+        return c ? c.phases.map(p => ({ ...p })) : [];
+    };
+    const renderPhaseRows = phases => {
+        phaseRowsEl.innerHTML = phases.map(p => `
+            <div class="di-phase-row">
+                <input type="text" class="di-p-name" value="${esc(p.name)}">
+                <input type="number" class="di-p-start" value="${p.start}" step="any">
+                <span class="di-p-sep">–</span>
+                <input type="number" class="di-p-end" value="${p.end}" step="any">
+                <button class="di-p-del" title="この区間を削除">×</button>
+            </div>`).join('');
+        phaseRowsEl.querySelectorAll('.di-p-del').forEach(b =>
+            b.addEventListener('click', e => e.target.closest('.di-phase-row').remove()));
+    };
+    const readPhaseRows = () => [...phaseRowsEl.querySelectorAll('.di-phase-row')].map(r => ({
+        name:  r.querySelector('.di-p-name').value.trim() || 'phase',
+        start: parseFloat(r.querySelector('.di-p-start').value),
+        end:   parseFloat(r.querySelector('.di-p-end').value),
+    })).filter(p => isFinite(p.start) && isFinite(p.end));
+
+    // 現在ドロップダウンで選ばれている実効サイクルID（自動なら判別結果）
+    const currentEffectiveId = () =>
+        modal.querySelector('.di-cycle').value || (di.lastResult ? di.lastResult.detectedId : null);
+
+    // 初期フェーズ＝実効フェーズ（手動編集があればそれ）
+    renderPhaseRows(getEffectivePhases(currentEffectiveId()));
+
+    modal.querySelector('.di-phase-add').addEventListener('click', () => {
+        const rows = readPhaseRows();
+        rows.push({ name: 'phase ' + (rows.length + 1), start: 0, end: 0 });
+        renderPhaseRows(rows);
+    });
+    // サイクル変更でフェーズ既定値を入れ替え（手動編集はリセット）
+    modal.querySelector('.di-cycle').addEventListener('change', e =>
+        renderPhaseRows(registryPhasesOf(e.target.value || (di.lastResult ? di.lastResult.detectedId : null))));
+
+    // 結果テーブル描画（ファイル別）
+    const renderResult = () => {
+        modal.querySelector('.di-result').innerHTML = buildDriveIndexAllTables(di.results, di.roadLoadByFile);
+    };
+    renderResult();
+
+    // 各ファイルの走行抵抗入力を state.roadLoadByFile に取り込む
+    const readRoadLoadInputs = () => {
+        modal.querySelectorAll('.di-file-rl').forEach(el => {
+            const key = el.getAttribute('data-file');
+            di.roadLoadByFile[key] = {
+                A:    el.querySelector('.di-rl-a').value.trim(),
+                B:    el.querySelector('.di-rl-b').value.trim(),
+                C:    el.querySelector('.di-rl-c').value.trim(),
+                mass: el.querySelector('.di-rl-mass').value.trim(),
+            };
+        });
+    };
+
+    // 再計算
+    modal.querySelector('.di-recompute').addEventListener('click', async () => {
+        di.cycleId = modal.querySelector('.di-cycle').value || null;
+        di.channels = {
+            target: modal.querySelector('.di-ch-target').value || null,
+            actual: modal.querySelector('.di-ch-actual').value || null,
+            fuel:   modal.querySelector('.di-ch-fuel').value || null,
+        };
+        readRoadLoadInputs(); // ファイル別の走行抵抗を取り込む
+        // 編集フェーズが既定と同じなら override 解除（＝自動追従に戻す）
+        const edited   = readPhaseRows();
+        const defaults = registryPhasesOf(currentEffectiveId());
+        const same = edited.length === defaults.length &&
+            edited.every((p, i) => p.name === defaults[i].name && +p.start === +defaults[i].start && +p.end === +defaults[i].end);
+        di.phaseOverride = same ? null : edited;
+
+        await computeDriveIndex({ autoDetect: false });
+        renderResult();
+        saveSettings();
+    });
+
+    modal.querySelector('.di-close').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
+// ツールバーの Driving Index ボタン → 詳細モーダルを開く
+dom.driveIndexBtn?.addEventListener('click', showDriveIndexModal);
 
 // ── Custom RAM サジェスト（オートコンプリート） ──
 
@@ -5310,6 +5679,13 @@ function collectSettings() {
         // 単色モード設定
         monoColorMode: state.monoColorMode,
         fileColors: state.fileColors,
+        // ドライビングインデックス設定（results/lastResultは保存しない＝再計算で得られる）
+        driveIndex: {
+            channels:       state.driveIndex.channels,
+            cycleId:        state.driveIndex.cycleId,
+            phaseOverride:  state.driveIndex.phaseOverride,
+            roadLoadByFile: state.driveIndex.roadLoadByFile,
+        },
     };
 }
 
@@ -5579,6 +5955,15 @@ function applySettings(rawSettings) {
         dom.monoColorBtn.classList.toggle('btn-active', state.monoColorMode);
     }
     if (s.fileColors) state.fileColors = s.fileColors;
+
+    // ドライビングインデックス設定を復元（lastResultは保存していないので再計算で得る）
+    if (s.driveIndex) {
+        const d = s.driveIndex;
+        if (d.channels)      state.driveIndex.channels      = d.channels;
+        if (d.cycleId !== undefined)       state.driveIndex.cycleId       = d.cycleId;
+        if (d.phaseOverride !== undefined) state.driveIndex.phaseOverride = d.phaseOverride;
+        if (d.roadLoadByFile) state.driveIndex.roadLoadByFile = d.roadLoadByFile;
+    }
 
     // ファイルがまだ読み込まれていない場合は、残りの設定を保留する
     _pendingSettings = s;

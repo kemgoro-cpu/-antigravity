@@ -788,6 +788,47 @@ input[type="text"]:focus {
 .custom-edit-hint { margin-left: 8px; font-size: 0.72rem; color: var(--text-secondary); font-weight: 400; }
 .custom-edit-label { display: block; margin: 10px 0 4px; font-size: 0.74rem; color: var(--text-secondary); }
 .custom-edit-validation { margin-top: 6px; }
+
+/* Driving Index モーダル（モード走行品質・燃費） */
+.drive-index-modal { width: min(96vw, 1000px); }
+.di-detected { margin: 0 0 12px !important; font-size: 0.8rem !important; }
+.di-controls, .di-roadload { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
+.di-controls label, .di-roadload label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--text-secondary); }
+.di-rl-title { width: 100%; font-size: 0.74rem; color: var(--text-secondary); margin-bottom: 2px; }
+/* モーダル内の入力/選択は既存のダーク入力に合わせる */
+.drive-index-modal select, .drive-index-modal input[type="number"], .drive-index-modal input[type="text"] {
+    background: var(--bg-main); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 4px 7px; font-size: 0.78rem; font-family: inherit; outline: none;
+}
+.drive-index-modal select:focus, .drive-index-modal input:focus { border-color: var(--accent); }
+.di-roadload input { width: 92px; }
+.di-phase-edit { margin: 10px 0; }
+.di-phase-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 4px; }
+.di-phase-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.di-phase-row .di-p-name { width: 160px; }
+.di-phase-row .di-p-start, .di-phase-row .di-p-end { width: 80px; }
+.di-p-sep { color: var(--text-secondary); }
+.di-p-del { background: transparent; border: none; color: #f87171; cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0 4px; }
+.di-result { overflow-x: auto; margin-top: 8px; }
+.di-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+.di-table th, .di-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: right; white-space: nowrap; }
+.di-table th { color: var(--text-secondary); font-weight: 500; background: rgba(255,255,255,0.03); }
+.di-table .di-row-label { text-align: left; }
+.di-table .di-total-row { font-weight: 600; background: rgba(99,102,241,0.10); }
+.di-empty { color: var(--text-secondary); font-size: 0.8rem; padding: 12px 0; }
+/* ツールバーの Drive Index ボタン: 判別済みは強調 */
+#drive-index-btn.di-active { color: #6ee7b7; border-color: rgba(110,231,183,0.4); }
+/* ファイル別セクション */
+.di-note { font-size: 0.72rem; color: var(--text-secondary); }
+.di-file-section { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.di-file-section:first-child { border-top: none; margin-top: 4px; }
+.di-file-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.di-file-name { font-size: 0.84rem; font-weight: 600; color: var(--text-primary); }
+.di-file-role { font-size: 0.66rem; padding: 1px 6px; border-radius: 8px; color: #fff; }
+.di-file-role.di-role-main { background: #6366f1; }
+.di-file-role.di-role-sub { background: #6b7280; }
+.di-file-cycle { font-size: 0.74rem; color: #6ee7b7; }
 .axis-choice-list { display: flex; flex-direction: column; gap: 6px; }
 .axis-choice-btn {
     display: flex;
