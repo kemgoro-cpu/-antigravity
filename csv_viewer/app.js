@@ -2697,6 +2697,69 @@ async function addCustomRAM(name, expr, unit = '') {
     saveSettings();
 }
 
+/**
+ * 既存 Custom RAM の式・単位を編集し、全ファイルのカラムを再計算する。
+ * 名前は変更しない（名前はチャンネルの識別子で、選択状態・チャートグループ・
+ * Y軸設定・色などが名前で紐づくため、変更すると影響範囲が広い）。
+ * カラムID・色は保持して見た目を維持し、対象1件だけを in-place 更新する
+ * （recomputeCustomRAMs は全RAMの色を振り直すので使わない）。
+ * @returns {Promise<boolean>} 成功すれば true、検証失敗なら false（モーダルを閉じない用）
+ */
+async function editCustomRAM(id, newExpr, newUnit) {
+    const cr = state.customRAMs.find(c => c.id === id);
+    const mainFile = getMainFile();
+    if (!cr || !mainFile) return false;
+
+    newExpr = String(newExpr || '').trim();
+    if (!newExpr) return false;
+    // newUnit 未指定（undefined/null）なら既存単位を維持する
+    const unit = String(newUnit != null ? newUnit : (cr.unit || '')).trim();
+
+    // 新しい式が参照するカラムを全ファイルにロード（addCustomRAM と同じ手順）
+    const refNames  = extractExprNames(newExpr);
+    const crossRefs = extractCrossRefs(newExpr);
+    const isCross   = crossRefs.length > 0;
+    const loadPromises = [];
+    for (const fid of Object.keys(state.files)) {
+        loadPromises.push(loadColumnsForFile(fid, refNames));
+    }
+    // ファイル間参照（s1:Name 等）のカラムも該当サブファイルでロード
+    const subIds = getSubFileIds();
+    for (const ref of crossRefs) {
+        const idx = parseInt(ref.fileKey.replace('s', ''), 10) - 1;
+        if (idx >= 0 && idx < subIds.length) {
+            loadPromises.push(loadColumnsForFile(subIds[idx], [ref.name]));
+        }
+    }
+    await Promise.all(loadPromises);
+
+    // メインファイルで評価してエラーチェック（全 NaN なら中止）
+    const mainVals = computeCustomExpr(newExpr, mainFile);
+    if (mainVals.every(v => isNaN(v))) {
+        alert(`式のエラー: "${newExpr}" を評価できません。\nRAM名や関数名を確認してください。`);
+        return false;
+    }
+
+    // 各ファイルの既存カラムを「色・id はそのまま」で中身だけ再計算する
+    for (const f of Object.values(state.files)) {
+        const col = f.columns.find(c => c.isCustom && c.name === cr.name);
+        if (!col) continue;
+        col.isCrossFile = isCross;   // cross↔非cross の切替を描画側（二重線判定）へ反映
+        col.unit = unit;
+        f.colData[col.id] = (f === mainFile) ? mainVals : computeCustomExpr(newExpr, f);
+    }
+
+    // state 側のメタ情報も更新
+    cr.expr = newExpr;
+    cr.unit = unit;
+
+    renderCustomRAMList();
+    renderColumnList();
+    renderChart();
+    saveSettings();   // 永続化＋Undo履歴記録（addCustomRAM と同様）
+    return true;
+}
+
 function removeCustomRAM(id) {
     const idx = state.customRAMs.findIndex(c => c.id === id);
     if (idx < 0) return;
@@ -2814,7 +2877,7 @@ function renderCustomRAMList() {
         li.innerHTML = `<span class="cr-name">${esc(cr.name)}</span>`
             + `<span class="cr-unit">${esc(cr.unit || 'unitなし')}</span>`
             + `<span class="cr-expr" title="${esc(cr.expr)}">${esc(cr.expr)}</span>`
-            + `<i class='bx bx-edit-alt cr-edit' data-crid="${esc(cr.id)}" title="単位を編集"></i>`
+            + `<i class='bx bx-edit-alt cr-edit' data-crid="${esc(cr.id)}" title="式・単位を編集"></i>`
             + `<i class='bx bx-x cr-del' data-crid="${esc(cr.id)}" title="Remove"></i>`;
         dom.customList.appendChild(li);
     }
@@ -2823,11 +2886,11 @@ function renderCustomRAMList() {
     });
 
     dom.customList.querySelectorAll('.cr-edit').forEach(el => {
-        el.addEventListener('click', () => showCustomRAMUnitModal(el.dataset.crid));
+        el.addEventListener('click', () => showCustomRAMEditModal(el.dataset.crid));
     });
 }
 
-function showCustomRAMUnitModal(id) {
+function showCustomRAMEditModal(id) {
     const cr = state.customRAMs.find(item => item.id === id);
     if (!cr) return;
     document.getElementById('app-modal-overlay')?.remove();
@@ -2836,33 +2899,53 @@ function showCustomRAMUnitModal(id) {
     overlay.className = 'app-modal-overlay';
     const modal = document.createElement('div');
     modal.className = 'app-modal custom-unit-modal';
-    modal.setAttribute('aria-labelledby', 'custom-unit-title');
+    modal.setAttribute('aria-labelledby', 'custom-edit-title');
+    // 名前は読み取り専用（識別子のため変更不可）。式と単位を編集できる
     modal.innerHTML = `
-        <h3 id="custom-unit-title">Custom RAM Unit</h3>
-        <p>${esc(cr.name)}</p>
-        <input type="text" class="custom-ram-input custom-unit-edit-input" value="${esc(cr.unit || '')}" placeholder="Unit (optional)">
+        <h3 id="custom-edit-title">Custom RAM を編集</h3>
+        <p class="custom-edit-name">${esc(cr.name)}<span class="custom-edit-hint">（名前は変更できません）</span></p>
+        <label class="custom-edit-label">式</label>
+        <input type="text" class="custom-ram-input custom-edit-expr-input" value="${esc(cr.expr)}" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" autocomplete="off">
+        <div class="custom-ram-validation custom-edit-validation"></div>
+        <label class="custom-edit-label">単位（任意）</label>
+        <input type="text" class="custom-ram-input custom-edit-unit-input" value="${esc(cr.unit || '')}" placeholder="Unit (optional)">
         <div class="modal-actions">
-            <button class="btn-secondary custom-unit-cancel">キャンセル</button>
-            <button class="btn-primary custom-unit-save">保存</button>
+            <button class="btn-secondary custom-edit-cancel">キャンセル</button>
+            <button class="btn-primary custom-edit-save">保存</button>
         </div>`;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
     setupModalA11y(overlay, modal);
-    const input = modal.querySelector('.custom-unit-edit-input');
-    input.focus();
+
+    const exprInput = modal.querySelector('.custom-edit-expr-input');
+    const unitInput = modal.querySelector('.custom-edit-unit-input');
+    const vEl       = modal.querySelector('.custom-edit-validation');
+    const saveBtn   = modal.querySelector('.custom-edit-save');
     const close = () => overlay.remove();
-    modal.querySelector('.custom-unit-cancel').addEventListener('click', close);
-    modal.querySelector('.custom-unit-save').addEventListener('click', () => {
-        cr.unit = input.value.trim();
-        for (const file of Object.values(state.files)) {
-            const col = file.columns.find(c => c.isCustom && c.name === cr.name);
-            if (col) col.unit = cr.unit;
-        }
-        renderCustomRAMList();
-        renderColumnList();
-        renderChart();
-        saveSettings();
-        close();
+
+    // 式入力をライブ検証（追加フォームと同じ evaluateExprForValidation を共用）
+    let vTimer = null;
+    const runValidate = () => {
+        const { ok, text, cls } = evaluateExprForValidation(exprInput.value);
+        vEl.textContent = text;
+        vEl.className = 'custom-ram-validation custom-edit-validation' + (cls ? ' ' + cls : '');
+        // 空式は保存不可。検証エラーも保存不可
+        saveBtn.disabled = !ok || !exprInput.value.trim();
+    };
+    exprInput.addEventListener('input', () => {
+        clearTimeout(vTimer);
+        vTimer = setTimeout(runValidate, 300);
+    });
+    runValidate();           // 初期表示（既存式のプレビューを出す）
+    exprInput.focus();
+    exprInput.select();
+
+    modal.querySelector('.custom-edit-cancel').addEventListener('click', close);
+    saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;   // 再計算中の二重クリック防止
+        const saved = await editCustomRAM(id, exprInput.value, unitInput.value);
+        if (saved) close();
+        else runValidate();        // 失敗時はボタンの有効/無効を戻す
     });
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
@@ -3037,25 +3120,21 @@ const _validateDebounce = () => {
     _validateTimer = setTimeout(validateCustomExpr, 300);
 };
 
-/** 式のバリデーションと結果プレビューを行う */
-function validateCustomExpr() {
-    const expr = dom.customExpr.value.trim();
-    const vEl = dom.customValidation;
-
-    if (!expr) {
-        vEl.textContent = '';
-        vEl.className = 'custom-ram-validation';
-        dom.customAdd.disabled = false;
-        return;
-    }
+/**
+ * 式を検証し結果を返す（DOM非依存・追加フォームと編集モーダルで共用）。
+ * @param {string} expr 検証する式
+ * @returns {{ ok: boolean, text: string, cls: ''|'error'|'preview' }}
+ *   ok   … 追加/保存してよいか（true=有効）
+ *   text … 表示メッセージ（プレビュー統計 or エラー文）
+ *   cls  … 付与するCSSクラス（''=なし / 'error' / 'preview'）
+ */
+function evaluateExprForValidation(expr) {
+    expr = String(expr || '').trim();
+    // 空欄は「まだ何も入力していない」状態。エラー扱いせず追加は許可する
+    if (!expr) return { ok: true, text: '', cls: '' };
 
     const mainFile = getMainFile();
-    if (!mainFile) {
-        vEl.textContent = 'ファイルを読み込んでください';
-        vEl.className = 'custom-ram-validation error';
-        dom.customAdd.disabled = true;
-        return;
-    }
+    if (!mainFile) return { ok: false, text: 'ファイルを読み込んでください', cls: 'error' };
 
     const errors = [];
 
@@ -3110,10 +3189,7 @@ function validateCustomExpr() {
     if (errors.length > 0) {
         // 重複除去して最大3件表示
         const unique = [...new Set(errors)].slice(0, 3);
-        vEl.textContent = unique.join(' / ');
-        vEl.className = 'custom-ram-validation error';
-        dom.customAdd.disabled = true;
-        return;
+        return { ok: false, text: unique.join(' / '), cls: 'error' };
     }
 
     // 3. 計算結果プレビュー（エラーがなければ）
@@ -3130,22 +3206,23 @@ function validateCustomExpr() {
             }
         }
         if (cnt === 0) {
-            vEl.textContent = '⚠ 全値がNaN — 参照チャンネルのデータを確認してください';
-            vEl.className = 'custom-ram-validation error';
-            dom.customAdd.disabled = true;
-        } else {
-            const avg = sum / cnt;
-            // 数値を見やすくフォーマット（小数4桁まで）
-            const fmt = (v) => Math.abs(v) >= 1000 ? v.toFixed(1) : v.toPrecision(4);
-            vEl.textContent = `min: ${fmt(min)} / max: ${fmt(max)} / avg: ${fmt(avg)}`;
-            vEl.className = 'custom-ram-validation preview';
-            dom.customAdd.disabled = false;
+            return { ok: false, text: '⚠ 全値がNaN — 参照チャンネルのデータを確認してください', cls: 'error' };
         }
+        const avg = sum / cnt;
+        // 数値を見やすくフォーマット（小数4桁まで）
+        const fmt = (v) => Math.abs(v) >= 1000 ? v.toFixed(1) : v.toPrecision(4);
+        return { ok: true, text: `min: ${fmt(min)} / max: ${fmt(max)} / avg: ${fmt(avg)}`, cls: 'preview' };
     } catch (e) {
-        vEl.textContent = '計算エラー: ' + e.message;
-        vEl.className = 'custom-ram-validation error';
-        dom.customAdd.disabled = true;
+        return { ok: false, text: '計算エラー: ' + e.message, cls: 'error' };
     }
+}
+
+/** 追加フォームの式入力をライブ検証し、結果をDOM（検証行・Addボタン）へ反映する薄いラッパー */
+function validateCustomExpr() {
+    const { ok, text, cls } = evaluateExprForValidation(dom.customExpr.value);
+    dom.customValidation.textContent = text;
+    dom.customValidation.className = 'custom-ram-validation' + (cls ? ' ' + cls : '');
+    dom.customAdd.disabled = !ok;
 }
 
 // ── Custom RAM ヘルプモーダル ──
@@ -3842,6 +3919,12 @@ function getActiveGroups() {
                 channelName: chName,
                 axisId: assignment.axisId,
             });
+
+            // クロスファイルの Custom RAM（式に s1: などサブ参照を含む）は
+            // メイン時間軸に固定された1本が正しい姿。サブファイル側にも同名カラムが
+            // 自動生成されているが、それは別物の曲線になるので描画をスキップする。
+            // （メイン参照だけの式は isCrossFile=false なので従来どおりサブ破線も出る）
+            if (col.isCustom && col.isCrossFile) continue;
 
             // ── Sub series (dashed lines, time-shifted) ────────
             for (const subId of getSubFileIds()) {

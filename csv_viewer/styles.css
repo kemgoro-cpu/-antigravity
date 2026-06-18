@@ -782,6 +782,12 @@ input[type="text"]:focus {
 .app-modal h3 { margin: 0 0 12px; color: #818cf8; font-size: 1rem; }
 .app-modal p { margin: 0 0 14px; color: var(--text-secondary); font-size: 0.78rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* Custom RAM 編集モーダル（式・単位） */
+.custom-edit-name { font-size: 0.9rem !important; color: var(--text-primary) !important; font-weight: 600; }
+.custom-edit-hint { margin-left: 8px; font-size: 0.72rem; color: var(--text-secondary); font-weight: 400; }
+.custom-edit-label { display: block; margin: 10px 0 4px; font-size: 0.74rem; color: var(--text-secondary); }
+.custom-edit-validation { margin-top: 6px; }
 .axis-choice-list { display: flex; flex-direction: column; gap: 6px; }
 .axis-choice-btn {
     display: flex;
