@@ -499,11 +499,24 @@ function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
             case 'integral': {
                 const x = evalNode(argNodes[0]);
                 const out = new Float32Array(len);
-                out[0] = 0;
+                // 累積値は専用変数 acc で持ち回す。out[i] に直接 out[i-1] を
+                // 足し込むと、x に1点でも NaN（クロスファイル参照の範囲外など）が
+                // 混じった瞬間に out[i] 以降がすべて NaN に伝播し、
+                // 線が丸ごと消えてしまうため。
+                let acc = 0;
+                // 最初のサンプルが欠損ならまだ積分を開始できないので NaN。
+                out[0] = isNaN(x[0]) ? NaN : 0;
                 for (let i = 1; i < len; i++) {
                     const dt = timeData[i] - timeData[i - 1];
-                    // 台形法: (前の値 + 現在の値) / 2 × 時間差
-                    out[i] = out[i - 1] + (x[i - 1] + x[i]) / 2 * dt;
+                    if (!isNaN(x[i - 1]) && !isNaN(x[i])) {
+                        // 台形法: (前の値 + 現在の値) / 2 × 時間差
+                        acc += (x[i - 1] + x[i]) / 2 * dt;
+                        out[i] = acc;
+                    } else {
+                        // 欠損区間は積分できない。その点だけ NaN にして描画から外し、
+                        // 累積 acc は据え置く。有効な値が戻れば続きから積分を再開する。
+                        out[i] = NaN;
+                    }
                 }
                 return out;
             }
@@ -834,6 +847,11 @@ function isBitData(arr) {
  */
 function detectBitChannels(fileRecord) {
     for (const col of fileRecord.columns) {
+        // Custom RAMは式の計算結果なのでBit自動判定の対象外にする。
+        // 特にクロスファイル式のサブ側コピーは全ゼロに縮退しがちで、
+        // これをBit判定すると名前基準でメイン側の同名カラムまでBit軸[-0.2,1.2]に
+        // 強制固定され、実値がクリップされて線が消える不具合の原因になる。
+        if (col.isCustom) continue;
         const data = fileRecord.colData[col.id];
         if (!data) continue;
         // まだbitChannelsに入っておらず、手動でOFFにされたわけでもない場合のみ追加
@@ -975,6 +993,12 @@ function setupShiftDrag() {
         if (state.shiftDrag) {
             state.shiftDrag = null;
             dom.chartEl.style.cursor = state.shiftMode ? 'grab' : '';
+            // ドラッグ確定時、クロスファイルCustom RAMを最終オフセットで再計算する。
+            // ドラッグ中（mousemove）は毎フレーム再計算すると重いので、
+            // 指を離したこのタイミングで1回だけ計算し直す。
+            if (hasCrossFileCustomRAMs()) {
+                recomputeCustomRAMs().then(renderChart);
+            }
         }
     });
 }
@@ -2173,6 +2197,20 @@ function updateParsePreview(fileRecord) {
 async function setMainFile(newMainId) {
     const oldMainId = getMainFileId();
     if (oldMainId === newMainId) return;
+
+    // メイン/サブを入れ替えても、ファイル間の時間アライメント（オフセット）を保つ。
+    // メインは常に基準=offset 0。新メインのオフセット分を全ファイルから引いて
+    // 基準を取り直すと、ファイル同士の相対的なズレ量はそのまま維持される。
+    //   例: サブBが offset 5（=Bを5秒ずらすとAに揃う）の状態で B をメインにすると、
+    //       B:5→0, 旧メインA:0→-5 となり「AとBは5秒ズレ」という関係が引き継がれる。
+    // （これをしないと旧メインAは offset 0 のままで、せっかくの位置合わせが失われる）
+    const rebase = state.files[newMainId].offset || 0;
+    if (rebase !== 0) {
+        for (const f of Object.values(state.files)) {
+            f.offset = (f.offset || 0) - rebase;
+        }
+    }
+
     if (oldMainId) state.files[oldMainId].role = 'sub';
     state.files[newMainId].role = 'main';
 
@@ -2391,12 +2429,13 @@ function renderFileList() {
 
     // Offset input change
     dom.fileList.querySelectorAll('.offset-input').forEach(inp => {
-        inp.addEventListener('change', () => {
+        inp.addEventListener('change', async () => {
             const fid = inp.dataset.offsetId;
             const v   = parseFloat(inp.value);
             if (!isNaN(v) && state.files[fid]) {
                 state.files[fid].offset = v;
-                renderChart();
+                // オフセットをクロスファイルCustom RAMの計算へ反映（必要時のみ再計算）
+                await applyOffsetChange();
                 saveSettings();
             }
         });
@@ -2582,6 +2621,29 @@ function hasCrossRef(expr) {
 }
 
 /**
+ * クロスファイル参照を含むCustom RAMが1つでも存在するか。
+ * （こうしたRAMだけがサブファイルのオフセットに依存して計算結果が変わる）
+ */
+function hasCrossFileCustomRAMs() {
+    return state.customRAMs.some(cr => hasCrossRef(cr.expr));
+}
+
+/**
+ * サブファイルのオフセット（Δt）が変わったときの反映処理。
+ * クロスファイルCustom RAM（例 integral(Fuel_Rate - s1:Fuel_Rate)）は、
+ * getCrossRef がサブのオフセットを使ってメイン時間軸に補間して計算するため、
+ * オフセットを変えたら再計算しないとグラフが古い値のまま残る。
+ * 通常のサブ破線は renderChart だけでオフセットに追従するので、
+ * クロスファイルRAMが1つも無ければ再計算は不要（無駄な計算を避ける）。
+ */
+async function applyOffsetChange() {
+    if (hasCrossFileCustomRAMs()) {
+        await recomputeCustomRAMs();
+    }
+    renderChart();
+}
+
+/**
  * Custom RAMの式をAST一括評価で計算する。
  * 時系列関数（integral, diff, mavg, delay）にも対応。
  * ファイル間参照（s1:Name等）にも対応。
@@ -2698,6 +2760,9 @@ async function addCustomRAM(name, expr, unit = '') {
     }
 
     state.customRAMs.push({ name, unit, expr, id });
+    // Custom RAMはBitチャンネルにしない。過去に誤検出で登録された場合に備えて解除し、
+    // 名前基準のBit軸強制でメイン側の線が消える状態を自己修復する。
+    state.bitChannels.delete(name);
     state.selectedNames.add(name);
     addStandaloneChart(name);
 
@@ -2848,6 +2913,8 @@ async function recomputeCustomRAMs() {
             f.columns.unshift(colDef);
             f.colData[colId] = computeCustomExpr(cr.expr, f);
         }
+        // Custom RAMはBit扱いにしない（過去の誤検出登録を解除して自己修復）
+        state.bitChannels.delete(cr.name);
     }
 }
 
@@ -2859,12 +2926,28 @@ async function addCustomRAMsToFile(fileId) {
     const f = state.files[fileId];
     if (!f || state.customRAMs.length === 0) return;
 
-    // 参照カラムをロード
+    // 参照カラムをロード（通常参照＋ファイル間参照）
+    // ファイル間参照（s1:Name等）はサブファイル側のカラムが必要。
+    // recomputeCustomRAMs と同じく cross-ref も対象サブファイルにロードしておかないと、
+    // 後からファイルを追加したときに cross-ref 未ロードで計算がNaN化し描画が崩れる。
     const allRefNames = [];
-    for (const cr of state.customRAMs) allRefNames.push(...extractExprNames(cr.expr));
-    if (allRefNames.length > 0) {
-        await loadColumnsForFile(fileId, allRefNames);
+    const allCrossRefs = [];
+    for (const cr of state.customRAMs) {
+        allRefNames.push(...extractExprNames(cr.expr));
+        allCrossRefs.push(...extractCrossRefs(cr.expr));
     }
+    const loadPromises = [];
+    if (allRefNames.length > 0) {
+        loadPromises.push(loadColumnsForFile(fileId, allRefNames));
+    }
+    const subIds = getSubFileIds();
+    for (const cr of allCrossRefs) {
+        const idx = parseInt(cr.fileKey.replace('s', ''), 10) - 1;
+        if (idx >= 0 && idx < subIds.length) {
+            loadPromises.push(loadColumnsForFile(subIds[idx], [cr.name]));
+        }
+    }
+    await Promise.all(loadPromises);
 
     // 各Custom RAMを計算してカラムに追加（ファイル間参照ありも含む）
     for (const cr of state.customRAMs) {
@@ -4028,20 +4111,27 @@ async function autoAlign(subFileId) {
         return;
     }
 
-    // --- チャンネル選択モーダルを表示 ---
-    const selectedChannels = await showAlignChannelModal(alignableNames, subFileId);
+    // 候補を相関の大きい順に並べるため、対象チャンネルのデータを両ファイルで先読みする。
+    // （相関の計算にデータが要るので、モーダル表示の前にロードしておく）
+    const mainFileId = getMainFileId();
+    await Promise.all([
+        loadColumnsForFile(mainFileId, alignableNames),
+        loadColumnsForFile(subFileId, getResolvedNamesForFile(subFile, alignableNames)),
+    ]);
+
+    // 各チャンネルのメイン↔サブ相関（絶対値）を計算し、大きい順に並べ替える。
+    const corrMap = computeAlignCorrelations(mainFile, subFile, alignableNames);
+    const sortedNames = [...alignableNames].sort(
+        (a, b) => (corrMap.get(b) ?? -1) - (corrMap.get(a) ?? -1)
+    );
+
+    // --- チャンネル選択モーダルを表示（相関順・強相関を初期チェック）---
+    const selectedChannels = await showAlignChannelModal(sortedNames, subFileId, corrMap);
     if (!selectedChannels || !selectedChannels.names.length) return; // キャンセル
 
     const chosenNames = selectedChannels.names;
     const searchRange = selectedChannels.range; // 探索範囲（秒）
-
-    // 必要なカラムをロード
-    const mainFileId = getMainFileId();
-    const subLoadNames = getResolvedNamesForFile(subFile, chosenNames);
-    await Promise.all([
-        loadColumnsForFile(mainFileId, chosenNames),
-        loadColumnsForFile(subFileId, subLoadNames),
-    ]);
+    // 選択チャンネルのデータは上で先読み済み（loadColumnsForFileはキャッシュ済みなら即返る）
 
     const mainCols = chosenNames.map(name => mainFile.columns.find(c => c.name === name)).filter(Boolean);
     const subCols  = chosenNames.map(name => resolveColumnForFile(subFile, name)).filter(Boolean);
@@ -4081,15 +4171,21 @@ async function autoAlign(subFileId) {
     subFile.offset = bestOff;
     const inp = document.querySelector(`[data-offset-id="${subFileId}"]`);
     if (inp) inp.value = bestOff.toFixed(3);
-    renderChart();
+    // 自動整合で決めたオフセットもクロスファイルCustom RAMの計算へ反映する
+    await applyOffsetChange();
+    saveSettings(); // 手動入力と同様にオフセットを永続化（Undo履歴にも記録）
 }
 
 /**
  * Auto-align用のチャンネル選択＆探索範囲設定モーダル。
  * ユーザーが使いたいチャンネルにチェックを入れて「実行」を押す。
+ * 候補は呼び出し側で相関の大きい順に整列済み。相関の強いものを初期チェックする。
+ * @param {string[]} commonNames 相関降順に整列済みのチャンネル名
+ * @param {string} subFileId サブファイルID
+ * @param {Map<string, number>} corrMap チャンネル名→|相関係数|（0〜1）
  * @returns {Promise<{names: string[], range: number}|null>} 選択結果、またはキャンセル時null
  */
-function showAlignChannelModal(commonNames, subFileId) {
+function showAlignChannelModal(commonNames, subFileId, corrMap = new Map()) {
     return new Promise(resolve => {
         // 既存モーダルがあれば削除
         const old = document.getElementById('align-channel-modal');
@@ -4104,25 +4200,33 @@ function showAlignChannelModal(commonNames, subFileId) {
         const subDur  = sTd[sTd.length - 1] - sTd[0];
         const defaultRange = Math.round(Math.min(mainDur, subDur) * 0.25);
 
-        // 現在選択中のチャンネル（チェックを入れるデフォルト候補）
-        const currentlySelected = new Set(state.selectedNames);
+        // 初期チェックの基準: 相関 |r| >= 0.7（統計の慣用で「強い相関」）。
+        // ただし最上位（commonNamesは相関降順）は必ずONにして、最低1つは選ばれるようにする。
+        const CORR_STRONG = 0.7;
+        const topName = commonNames[0];
+        const isRecommended = (name) =>
+            name === topName || (corrMap.get(name) ?? 0) >= CORR_STRONG;
 
         const modal = document.createElement('div');
         modal.id = 'align-channel-modal';
         // デバッグモーダルと同じインラインスタイルで統一
         modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
 
-        // チャンネルリストを生成
+        // チャンネルリストを生成（相関の大きい順。強相関だけ初期チェック）
         const channelItems = commonNames.map(name => {
-            const checked = currentlySelected.has(name) ? 'checked' : '';
+            const checked = isRecommended(name) ? 'checked' : '';
             const resolved = resolveColumnForFile(subFile, name);
             const aliasText = resolved && resolved.name !== name
-                ? `<span style="color:#86efac;font-size:11px;margin-left:auto;">← ${esc(resolved.name)}</span>`
+                ? `<span style="color:#86efac;font-size:11px;">← ${esc(resolved.name)}</span>`
                 : '';
+            // 相関係数バッジ（強=緑 / 中=黄 / 弱=灰）。右端に寄せる
+            const corr = corrMap.get(name);
+            const corrColor = corr == null ? '#9ca3af' : corr >= 0.7 ? '#86efac' : corr >= 0.4 ? '#fcd34d' : '#9ca3af';
+            const corrBadge = `<span style="margin-left:auto;font-size:11px;font-variant-numeric:tabular-nums;color:${corrColor};" title="メイン↔サブの相関（絶対値、1に近いほど波形が似ている）">r=${corr != null ? corr.toFixed(2) : '—'}</span>`;
             // チェックボックス＋チャンネル名のラベル
             return `<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:13px;transition:background 0.15s;"
                 onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
-                <input type="checkbox" value="${esc(name)}" ${checked} style="accent-color:#6366f1;"> ${esc(name)} ${aliasText}
+                <input type="checkbox" value="${esc(name)}" ${checked} style="accent-color:#6366f1;"> ${esc(name)} ${aliasText} ${corrBadge}
             </label>`;
         }).join('');
 
@@ -4131,7 +4235,8 @@ function showAlignChannelModal(commonNames, subFileId) {
                 <h3 style="margin:0 0 8px;font-size:16px;"><i class='bx bx-target-lock'></i> Auto-Align 設定</h3>
                 <p style="color:#a0a5b1;font-size:12px;margin-bottom:16px;line-height:1.5;">
                     位置合わせに使うチャンネルと探索範囲を指定してください。<br>
-                    チャンネルを絞ると精度が上がります（例: 目標車速）。
+                    相関（r）の高い順に並べ、おすすめ（r≧0.7）を初期選択しています。
+                    波形がよく似たチャンネルほど位置合わせの精度が上がります（例: 目標車速）。
                 </p>
 
                 <div style="margin-bottom:14px;">
@@ -4185,6 +4290,57 @@ function showAlignChannelModal(commonNames, subFileId) {
         modal.querySelector('#align-cancel-btn').addEventListener('click', cancel);
         modal.addEventListener('click', e => { if (e.target === modal) cancel(); });
     });
+}
+
+/**
+ * Auto-Align候補の並べ替え用に、各チャンネルの「メイン↔サブ相関係数（絶対値）」を計算する。
+ * メインの時間軸上でサブを現在のオフセットで補間し、ピアソン相関を求める。
+ * 相関が強い（波形がよく似ている）チャンネルほど位置合わせの基準として信頼できる。
+ * 定数チャンネル（変化なし）は分散≈0なので相関0扱いになり、おすすめから自然に外れる。
+ * @param {object} mainFile メインファイル
+ * @param {object} subFile  サブファイル
+ * @param {string[]} names  対象チャンネル名（メイン基準の名前）
+ * @returns {Map<string, number>} チャンネル名 → |相関係数|（0〜1、計算不能は0）
+ */
+function computeAlignCorrelations(mainFile, subFile, names) {
+    const mTd = mainFile.timeData;
+    const sTd = subFile.timeData;
+    const len = mTd.length;
+    const offset = subFile.offset || 0;
+    // 計算量を抑えるため最大2000点にダウンサンプル（RMSE探索と同じ方針）
+    const step = Math.max(1, Math.floor(len / 2000));
+    const map = new Map();
+
+    for (const name of names) {
+        const mc = mainFile.columns.find(c => c.name === name);
+        const sc = resolveColumnForFile(subFile, name);
+        const mVals = mc && mainFile.colData[mc.id];
+        const sVals = sc && subFile.colData[sc.id];
+        if (!mVals || !sVals) { map.set(name, 0); continue; }
+
+        // メイン時間軸上で両者をサンプリングしてピアソン相関の各種和を蓄積する
+        let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+        for (let i = 0; i < len; i += step) {
+            const t = mTd[i];
+            const tSub = t - offset;
+            // サブの範囲外は外挿せずスキップ（RMSE探索と揃える）
+            if (tSub < sTd[0] || tSub > sTd[sTd.length - 1]) continue;
+            const x = mVals[i];
+            const y = interpolate(sTd, sVals, tSub);
+            if (isNaN(x) || isNaN(y)) continue;
+            n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+        }
+        if (n < 3) { map.set(name, 0); continue; }
+        // 相関係数 r = cov(x,y) / (σx·σy)。和の形から算出（n倍したまま比をとる）
+        const cov = sxy - sx * sy / n;
+        const vx  = sxx - sx * sx / n;
+        const vy  = syy - sy * sy / n;
+        const denom = Math.sqrt(vx * vy);
+        // 分母≈0（どちらかが定数＝変化なし）は位置合わせに使えないので相関0扱い
+        const r = denom > 1e-12 ? cov / denom : 0;
+        map.set(name, Math.min(1, Math.abs(r))); // 強さで順位付けするので符号は捨てて絶対値
+    }
+    return map;
 }
 
 function computeRmse(sampleTimes, mainFile, mainCols, subFile, subCols, offset) {
