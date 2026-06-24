@@ -7,16 +7,20 @@
  *
  * 指標（実測トレース v / 目標トレース u を比較）:
  *   - RMSSE : 速度誤差のRMS [km/h]
- *   - IWR   : 慣性仕事の目標比偏差 [%]（正の運動エネルギー増分の総和）
- *   - ASCR  : 絶対速度変化の目標比偏差 [%]（運動エネルギー増分の絶対値総和）
+ *   - IWR   : 慣性仕事の目標比偏差 [%]
+ *   - ASCR  : 絶対速度変化の目標比偏差 [%]（絶対加速度の時間積分）
  *   - DR    : 走行距離の目標比偏差 [%]
  *   - ER/EER: エネルギー/エネルギー経済の目標比偏差 [%]（走行抵抗A/B/Cと質量がある時のみ）
  *   - 燃費  : Fuel_Rate積算 ÷ 走行距離（km/L, L/100km）
  *
- * 注: J2951 は 1Hz 基準なので、目標・実測を1秒グリッドに再サンプルしてから計算する。
+ * 注: SAE J2951 / WLTP の公開手順に合わせ、目標・実測を10Hzグリッドに線形補間してから計算する。
  */
 (function () {
     'use strict';
+
+    const DRIVE_INDEX_SAMPLE_HZ = 10;
+    const DRIVE_INDEX_SAMPLE_DT = 1 / DRIVE_INDEX_SAMPLE_HZ;
+    const INERTIA_FACTOR = 1.015;
 
     // ─────────────────────────────────────────────────────────────
     // 既知サイクルのレジストリ
@@ -69,20 +73,30 @@
     }
 
     /**
-     * 1秒グリッドに再サンプルした値配列を返す。
+     * 指定Hzの等間隔グリッドに線形補間した値配列を返す。
      * @param {number} [startSec] 範囲開始（省略時は先頭時刻）
      * @param {number} [endSec]   範囲終了（省略時は末尾時刻）
-     * @returns {{ time:number[], values:number[] }}
+     * @param {number} [hz]       サンプリング周波数
+     * @returns {{ time:number[], values:number[], hz:number, dt:number }}
      */
-    function resampleTo1Hz(timeArr, valArr, startSec, endSec) {
+    function resampleTrace(timeArr, valArr, startSec, endSec, hz = DRIVE_INDEX_SAMPLE_HZ) {
         const t0 = startSec != null ? startSec : timeArr[0];
         const t1 = endSec   != null ? endSec   : timeArr[timeArr.length - 1];
+        const dt = 1 / hz;
         const time = [], values = [];
-        for (let t = Math.ceil(t0); t <= Math.floor(t1); t++) {
+        const k0 = Math.ceil(t0 * hz - 1e-9);
+        const k1 = Math.floor(t1 * hz + 1e-9);
+        for (let k = k0; k <= k1; k++) {
+            const t = k * dt;
             time.push(t);
             values.push(interp1(timeArr, valArr, t));
         }
-        return { time, values };
+        return { time, values, hz, dt };
+    }
+
+    /** 後方互換用。標準計算には使わない。 */
+    function resampleTo1Hz(timeArr, valArr, startSec, endSec) {
+        return resampleTrace(timeArr, valArr, startSec, endSec, 1);
     }
 
     /** 走行抵抗の入力を数値化。A/B/C/mass が全て有効数値ならオブジェクト、不足ならnull。 */
@@ -100,13 +114,12 @@
 
     /**
      * 1つの時間窓（フェーズ）について指標を計算する。
-     * target/actual/fuel は同じ1秒グリッドの配列（速度km/h、燃料L/h）。
+     * target/actual/fuel は同じ10Hzグリッドの配列（速度km/h、燃料L/h）。
      */
-    function metricsForWindow(target, actual, fuel, roadLoad) {
+    function metricsForWindow(target, actual, fuel, roadLoad, dt = DRIVE_INDEX_SAMPLE_DT) {
         const N = Math.min(target.length, actual.length);
         if (N < 2) return null;
         const KMH2MS = 1 / 3.6;
-        const dt = 1; // 1秒グリッドなので区間幅は1s
 
         // ── RMSSE（速度誤差のRMS） ──
         let sse = 0, cnt = 0;
@@ -118,21 +131,25 @@
 
         // 1トレース分の 慣性仕事(IW)・絶対速度変化(ASC)・距離・牽引エネルギー を計算
         const hasRL = !!roadLoad;
+        const etw = hasRL && isFinite(roadLoad.mass) ? roadLoad.mass : 1;
         function traceWork(speedKmh) {
             let iw = 0, asc = 0, dist = 0, energy = 0;
             for (let i = 0; i < N - 1; i++) {
                 const v0 = speedKmh[i]     * KMH2MS;
                 const v1 = speedKmh[i + 1] * KMH2MS;
                 if (!isFinite(v0) || !isFinite(v1)) continue;
-                const dKE = 0.5 * (v1 * v1 - v0 * v0); // 単位質量あたり運動エネルギー増分[J/kg]
-                if (dKE > 0) iw += dKE;                // 正値のみ（加速の仕事）
-                asc += Math.abs(dKE);                  // 絶対値（加減速とも）
+                const a = (v1 - v0) / dt;              // 加速度[m/s^2]
                 const dd = (v0 + v1) / 2 * dt;         // 距離増分[m]（台形）
                 dist += dd;
+
+                const inertialWork = INERTIA_FACTOR * etw * a * dd;
+                if (inertialWork > 0) iw += inertialWork;
+                asc += Math.abs(a) * dt;
+
                 if (hasRL) {
-                    const a = (v1 - v0) / dt;           // 加速度[m/s^2]
                     const V = speedKmh[i];              // 走行抵抗はkm/hで係数定義される慣例
-                    const F = (roadLoad.A + roadLoad.B * V + roadLoad.C * V * V) + roadLoad.mass * a;
+                    const F = (roadLoad.A + roadLoad.B * V + roadLoad.C * V * V)
+                            + INERTIA_FACTOR * roadLoad.mass * a;
                     if (F > 0) energy += F * dd;        // 正の牽引仕事のみ[J]
                 }
             }
@@ -148,9 +165,9 @@
         let er = null, eer = null;
         if (hasRL && wu.energy > 0) {
             er = pctDiff(wv.energy, wu.energy);
-            const econV = wv.energy > 0 ? wv.dist / wv.energy : null; // 距離/エネルギー
-            const econU = wu.energy > 0 ? wu.dist / wu.energy : null;
-            if (econV != null && econU != null) eer = pctDiff(econV, econU);
+            if (er != null && dr != null && (1 + er / 100) !== 0) {
+                eer = (1 - (1 + dr / 100) / (1 + er / 100)) * 100;
+            }
         }
 
         // ── 燃費（実測速度ベースの走行距離を使う） ──
@@ -160,7 +177,7 @@
             let vol = 0;
             for (let i = 0; i < N - 1; i++) {
                 const fr = fuel[i];
-                if (isFinite(fr)) vol += (fr / 3600) * dt; // L/h → L（1s分）
+                if (isFinite(fr)) vol += (fr / 3600) * dt; // L/h → L
             }
             fuelL = vol;
             if (vol > 0 && distanceKm > 0) {
@@ -216,10 +233,10 @@
         const rl = normalizeRoadLoad(roadLoad);
 
         function windowMetrics(start, end) {
-            const tg = resampleTo1Hz(time, target, start, end).values;
-            const ac = resampleTo1Hz(time, actual, start, end).values;
-            const fu = fuelRate ? resampleTo1Hz(time, fuelRate, start, end).values : null;
-            return metricsForWindow(tg, ac, fu, rl);
+            const tg = resampleTrace(time, target, start, end, DRIVE_INDEX_SAMPLE_HZ);
+            const ac = resampleTrace(time, actual, start, end, DRIVE_INDEX_SAMPLE_HZ);
+            const fu = fuelRate ? resampleTrace(time, fuelRate, start, end, DRIVE_INDEX_SAMPLE_HZ).values : null;
+            return metricsForWindow(tg.values, ac.values, fu, rl, tg.dt);
         }
 
         const t0 = time[0], t1 = time[time.length - 1];
@@ -234,6 +251,8 @@
 
     window.DriveIndex = {
         CYCLE_REGISTRY,
+        DRIVE_INDEX_SAMPLE_HZ,
+        resampleTrace,
         resampleTo1Hz,
         detectCycle,
         computeMetrics,
