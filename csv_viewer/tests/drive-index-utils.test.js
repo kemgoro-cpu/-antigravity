@@ -26,6 +26,18 @@ function approx(actual, expected, eps = 1e-9) {
 }
 
 {
+    const wltc = DriveIndex.CYCLE_REGISTRY.find(c => c.id === 'wltc3');
+    assert.ok(wltc);
+    assert.strictEqual(wltc.name, 'WLTC 4-phase (Class 3)');
+    assert.strictEqual(JSON.stringify(wltc.phases.map(p => [p.name, p.start, p.end])), JSON.stringify([
+        ['Low', 0, 589],
+        ['Medium', 589, 1022],
+        ['High', 1022, 1477],
+        ['Extra-High', 1477, 1800],
+    ]));
+}
+
+{
     const result = DriveIndex.computeMetrics({
         time: [0, 1],
         target: [0, 10],
@@ -59,6 +71,24 @@ function approx(actual, expected, eps = 1e-9) {
     const expectedEer = (1 - (1 + result.dr / 100) / (1 + result.er / 100)) * 100;
 
     approx(result.eer, expectedEer, 1e-9);
+}
+
+{
+    const wltc = DriveIndex.CYCLE_REGISTRY.find(c => c.id === 'wltc3');
+    const result = DriveIndex.computeMetrics({
+        time: [0, 1800],
+        target: [10, 10],
+        actual: [10, 10],
+        fuelRate: [36, 36],
+        phases: wltc.phases,
+    });
+
+    assert.strictEqual(result.phases.length, 4);
+    approx(result.total.fuelL, 18, 1e-9);
+    approx(result.phases[0].fuelL, 5.89, 1e-9);
+    approx(result.phases[1].fuelL, 4.33, 1e-9);
+    approx(result.phases[2].fuelL, 4.55, 1e-9);
+    approx(result.phases[3].fuelL, 3.23, 1e-9);
 }
 
 console.log('drive-index-utils tests passed');

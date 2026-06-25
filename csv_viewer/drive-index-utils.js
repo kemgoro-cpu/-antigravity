@@ -37,7 +37,7 @@
             ],
         },
         {
-            id: 'wltc3', name: 'WLTC Class 3', total: 1800, maxSpeed: 131.3,
+            id: 'wltc3', name: 'WLTC 4-phase (Class 3)', total: 1800, maxSpeed: 131.3,
             phases: [
                 { name: 'Low',        start: 0,    end: 589  },
                 { name: 'Medium',     start: 589,  end: 1022 },
