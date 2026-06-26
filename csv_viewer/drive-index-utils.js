@@ -16,7 +16,8 @@
  * 注: 一般的な理論式ではなく「既存の社内Excel計算と数値一致する」ことを目的とする。
  *     目標・実測を10Hzグリッドに線形補間 → 各々を独立に前処理（5点移動平均×2 → 0.03m/s未満ゼロ化）
  *     → 中心差分加速度（端点0）・右端矩形距離（v·dt）で点ごとに積算する。
- *     WOT/GEARが99の点は実測側の積算に目標側の寄与を用い、RMSSEは WOT=0 かつ GEAR=0 の点のみ集計する。
+ *     WOT（アクセル開度AP≧95%）またはGEAR=99の点は実測側の積算に目標側の寄与を用い、
+ *     RMSSEは WOTでなく かつ GEAR=0 の点のみ集計する。
  */
 (function () {
     'use strict';
@@ -24,6 +25,7 @@
     const DRIVE_INDEX_SAMPLE_HZ = 10;
     const DRIVE_INDEX_SAMPLE_DT = 1 / DRIVE_INDEX_SAMPLE_HZ;
     const INERTIA_FACTOR = 1.015;
+    const WOT_AP_THRESHOLD = 95; // アクセル開度[%]がこの値以上の点をWOT（全開）とみなす
 
     // ─────────────────────────────────────────────────────────────
     // 既知サイクルのレジストリ
@@ -228,20 +230,22 @@
      *   - 目標・実測を10Hzグリッドに補間後、各々を独立に前処理（5点移動平均×2→0.03m/s未満ゼロ）
      *   - 加速度は前処理後速度の中心差分（端点0）、距離増分は右端矩形 v[i]·dt
      *   - 慣性仕事/牽引仕事/絶対速度変化は点ごとに算出
-     *   - WOTまたはGEARが99の点では、実測側の積算に実測値ではなく目標値の寄与を使う
-     *     （＝事前置換せず、最後の積算でのみ Wid↔Wit を切り替える）
-     *   - RMSSEは前処理後km/h差のRMS。ただし WOT=0 かつ GEAR=0 の点だけを集計対象にする
+     *   - WOT（アクセル開度AP≧95%）またはGEAR=99の点では、実測側の積算に実測値ではなく
+     *     目標値の寄与を使う（＝事前置換せず、最後の積算でのみ Wid↔Wit を切り替える）
+     *   - RMSSEは前処理後km/h差のRMS。ただし WOTでなく かつ GEAR=0 の点だけを集計対象にする
      *
      * @param {object} opts
      *   time, target, actual : 同じ時間軸の配列（actual/targetは速度km/h）
      *   fuelRate             : 実測Fuel_Rate配列[L/h]（省略可）
-     *   wot, gear            : WOT/GEARフラグ配列（同じ時間軸、99で目標側に切替・0以外はRMSSE除外。省略可）
+     *   ap                   : アクセル開度[%]配列（同じ時間軸。≧apThresholdの点をWOTとみなす。省略可）
+     *   apThreshold          : WOT判定しきい値[%]（既定95）
+     *   gear                 : GEARフラグ配列（同じ時間軸、99で目標側に切替・0以外はRMSSE除外。省略可）
      *   phases               : [{name,start,end}]（省略/空なら全体のみ）
      *   roadLoad             : {A,B,C,mass}（省略可。揃っていればER/EERを計算）
      * @returns {{ total, phases:[{name,...}] } | null}
      */
     function computeMetrics(opts) {
-        const { time, target, actual, fuelRate, phases, roadLoad, wot, gear } = opts || {};
+        const { time, target, actual, fuelRate, phases, roadLoad, ap, apThreshold, gear } = opts || {};
         if (!time || !target || !actual || time.length < 2) return null;
         const rl = normalizeRoadLoad(roadLoad);
         const dt = DRIVE_INDEX_SAMPLE_DT;
@@ -253,8 +257,9 @@
         const tgtRaw  = grid.values;
         const actRaw  = resampleTrace(time, actual, t0, t1, DRIVE_INDEX_SAMPLE_HZ).values;
         const fuelG   = fuelRate ? resampleTrace(time, fuelRate, t0, t1, DRIVE_INDEX_SAMPLE_HZ).values : null;
-        const wotG    = wot  ? resampleNearest(time, wot,  gtime) : null;
-        const gearG   = gear ? resampleNearest(time, gear, gtime) : null;
+        const apG     = ap   ? resampleTrace(time, ap, t0, t1, DRIVE_INDEX_SAMPLE_HZ).values : null; // アクセル開度%（線形補間）
+        const gearG   = gear ? resampleNearest(time, gear, gtime) : null;                            // GEARフラグ（最近傍）
+        const thr     = isFinite(apThreshold) ? apThreshold : WOT_AP_THRESHOLD;
         const N = gtime.length;
 
         // 目標・実測を別々に前処理
@@ -270,13 +275,13 @@
         const cTgt = pointContrib(tgt, aTgt, mass, rl, dt);
         const cAct = pointContrib(act, aAct, mass, rl, dt);
 
-        // フラグ: 99判定（目標側へ切替）/ RMSSE集計対象（WOT=0 かつ GEAR=0）
+        // WOT判定（AP≧しきい値）/ 99判定（目標側へ切替）/ RMSSE集計対象（WOTでなく かつ GEAR=0）
         const use99 = new Array(N), counted = new Array(N);
         for (let i = 0; i < N; i++) {
-            const w = wotG  ? wotG[i]  : 0;
+            const wotActive = apG ? apG[i] >= thr : false; // アクセル開度95%以上をWOTとみなす
             const g = gearG ? gearG[i] : 0;
-            use99[i]   = (w === 99 || g === 99);
-            counted[i] = (w === 0 && g === 0);
+            use99[i]   = wotActive || (g === 99);
+            counted[i] = !wotActive && (g === 0);
         }
 
         function windowMetrics(start, end) {

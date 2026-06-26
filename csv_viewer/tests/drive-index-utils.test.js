@@ -65,16 +65,25 @@ function approx(actual, expected, eps = 1e-9) {
 }
 
 {
-    // WOT/GEARが99の点は実測側の積算に目標寄与を使う → 実測が目標と違っても指標は0。
-    const all99 = DriveIndex.computeMetrics({
+    // WOT（アクセル開度AP≧95%）の点は実測側の積算に目標寄与を使う → 実測が目標と違っても指標は0。
+    const wotAll = DriveIndex.computeMetrics({
         time: [0, 1],
         target: [0, 10],
         actual: [0, 20],
-        wot: [99, 99],
+        ap: [100, 100], // 全点WOT
     }).total;
-    approx(all99.iwr, 0, 1e-9);
-    approx(all99.ascr, 0, 1e-9);
-    approx(all99.dr, 0, 1e-9);
+    approx(wotAll.iwr, 0, 1e-9);
+    approx(wotAll.ascr, 0, 1e-9);
+    approx(wotAll.dr, 0, 1e-9);
+
+    // しきい値未満（94%）はWOTにならない → 通常通り差が出る。
+    const notWot = DriveIndex.computeMetrics({
+        time: [0, 1],
+        target: [0, 10],
+        actual: [0, 20],
+        ap: [94, 94],
+    }).total;
+    approx(notWot.iwr, 300, 1e-9);
 
     // GEAR=99でも同様（WOTとORで判定）。
     const gear99 = DriveIndex.computeMetrics({
@@ -87,18 +96,22 @@ function approx(actual, expected, eps = 1e-9) {
 }
 
 {
-    // RMSSEは WOT=0 かつ GEAR=0 の点だけ集計。定常オフセット5km/hで確認。
+    // RMSSEは WOTでなく かつ GEAR=0 の点だけ集計。定常オフセット5km/hで確認。
     const base = { time: [0, 1], target: [10, 10], actual: [15, 15] };
-    const counted = DriveIndex.computeMetrics({ ...base, wot: [0, 0], gear: [0, 0] }).total;
+    const counted = DriveIndex.computeMetrics({ ...base, ap: [0, 0], gear: [0, 0] }).total;
     approx(counted.rmsse, 5, 1e-9);
 
-    // WOTが99の点は除外 → 集計点ゼロ → rmsse=null。
-    const excludedWot = DriveIndex.computeMetrics({ ...base, wot: [99, 99], gear: [0, 0] }).total;
+    // 全点WOT（AP=100）は除外 → 集計点ゼロ → rmsse=null。
+    const excludedWot = DriveIndex.computeMetrics({ ...base, ap: [100, 100], gear: [0, 0] }).total;
     assert.strictEqual(excludedWot.rmsse, null);
 
     // GEARが0以外（99でなくても）も除外対象。
-    const excludedGear = DriveIndex.computeMetrics({ ...base, wot: [0, 0], gear: [3, 3] }).total;
+    const excludedGear = DriveIndex.computeMetrics({ ...base, ap: [0, 0], gear: [3, 3] }).total;
     assert.strictEqual(excludedGear.rmsse, null);
+
+    // apThresholdは変更可能（90%しきい→AP=92でWOT扱い）。
+    const customThr = DriveIndex.computeMetrics({ ...base, ap: [92, 92], apThreshold: 90 }).total;
+    assert.strictEqual(customThr.rmsse, null);
 }
 
 {
