@@ -26,18 +26,24 @@ function approx(actual, expected, eps = 1e-9) {
     approx(sampled.values[5], 5);
 }
 
-// ── movingAverage5: 端は縮みウィンドウ、定数は保存 ──
+// ── movingAverage5: 先頭2点・末尾2点は素通し、内部のみ5点平均 ──
 {
     const flat = DriveIndex.movingAverage5([1, 1, 1, 1, 1]);
     flat.forEach(v => approx(v, 1));
 
-    // [0,0,0,0,10] を手計算（端は対称に縮める）
-    const m = DriveIndex.movingAverage5([0, 0, 0, 0, 10]);
-    approx(m[0], 0);        // mean(0,0,0)
-    approx(m[1], 0);        // mean(0,0,0,0)
-    approx(m[2], 2);        // mean(0,0,0,0,10)
-    approx(m[3], 10 / 4);   // mean(0,0,0,10)
-    approx(m[4], 10 / 3);   // mean(0,0,10)
+    // n=7。i=0,1,5,6 は素通し、i=2..4 のみ平均
+    const m = DriveIndex.movingAverage5([0, 0, 0, 0, 0, 0, 70]);
+    approx(m[0], 0);   // 素通し
+    approx(m[1], 0);   // 素通し
+    approx(m[2], 0);   // mean(idx0..4)=0
+    approx(m[3], 0);   // mean(idx1..5)=0
+    approx(m[4], 14);  // mean(idx2..6)=mean(0,0,0,0,70)
+    approx(m[5], 0);   // 素通し
+    approx(m[6], 70);  // 素通し（末尾）
+
+    // 線形ランプは移動平均で不変（内部は中心対称、端は素通し）
+    const lin = DriveIndex.movingAverage5([0, 1, 2, 3, 4, 5, 6]);
+    lin.forEach((v, i) => approx(v, i));
 }
 
 // ── inertialWork: 不変条件 ──
@@ -46,8 +52,8 @@ function approx(actual, expected, eps = 1e-9) {
     const flat = new Array(20).fill(50);
     approx(DriveIndex.inertialWork(flat, 0.1, 1), 0);
 
-    // 全区間 0.3 m/s 未満（=1.08 km/h 未満）→ ゼロ化されて慣性仕事ゼロ
-    const tiny = [0, 0.2, 0.4, 0.6, 0.8, 1.0]; // km/h
+    // 全区間 0.03 m/s 未満（=0.108 km/h 未満）→ ゼロ化されて慣性仕事ゼロ
+    const tiny = [0, 0.02, 0.04, 0.06, 0.08, 0.1]; // km/h, すべて 0.03 m/s 未満
     approx(DriveIndex.inertialWork(tiny, 0.1, 1), 0);
 
     // 加速トレースは正の慣性仕事を生む
