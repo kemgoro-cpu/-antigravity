@@ -51,6 +51,8 @@ function approx(actual, expected, eps = 1e-9) {
 }
 
 {
+    // 実測=目標の2倍（線形ランプ）。前処理・中心差分・右端矩形は線形性を保つので
+    //   距離は2倍 → DR=100%、絶対加速度も2倍 → ASCR=100%、慣性仕事は4倍 → IWR=300%。
     const result = DriveIndex.computeMetrics({
         time: [0, 1],
         target: [0, 10],
@@ -59,6 +61,66 @@ function approx(actual, expected, eps = 1e-9) {
 
     approx(result.ascr, 100, 1e-9);
     approx(result.iwr, 300, 1e-9);
+    approx(result.dr, 100, 1e-9);
+}
+
+{
+    // WOT/GEARが99の点は実測側の積算に目標寄与を使う → 実測が目標と違っても指標は0。
+    const all99 = DriveIndex.computeMetrics({
+        time: [0, 1],
+        target: [0, 10],
+        actual: [0, 20],
+        wot: [99, 99],
+    }).total;
+    approx(all99.iwr, 0, 1e-9);
+    approx(all99.ascr, 0, 1e-9);
+    approx(all99.dr, 0, 1e-9);
+
+    // GEAR=99でも同様（WOTとORで判定）。
+    const gear99 = DriveIndex.computeMetrics({
+        time: [0, 1],
+        target: [0, 10],
+        actual: [0, 20],
+        gear: [99, 99],
+    }).total;
+    approx(gear99.iwr, 0, 1e-9);
+}
+
+{
+    // RMSSEは WOT=0 かつ GEAR=0 の点だけ集計。定常オフセット5km/hで確認。
+    const base = { time: [0, 1], target: [10, 10], actual: [15, 15] };
+    const counted = DriveIndex.computeMetrics({ ...base, wot: [0, 0], gear: [0, 0] }).total;
+    approx(counted.rmsse, 5, 1e-9);
+
+    // WOTが99の点は除外 → 集計点ゼロ → rmsse=null。
+    const excludedWot = DriveIndex.computeMetrics({ ...base, wot: [99, 99], gear: [0, 0] }).total;
+    assert.strictEqual(excludedWot.rmsse, null);
+
+    // GEARが0以外（99でなくても）も除外対象。
+    const excludedGear = DriveIndex.computeMetrics({ ...base, wot: [0, 0], gear: [3, 3] }).total;
+    assert.strictEqual(excludedGear.rmsse, null);
+}
+
+{
+    // 前処理: 0.03m/s(=0.108km/h)未満はゼロ化。0.05km/hは全点ゼロ、10km/hは保持。
+    const tiny = DriveIndex.preprocessSpeed([0.05, 0.05, 0.05, 0.05, 0.05]);
+    assert.ok(tiny.every(v => v === 0));
+    const big = DriveIndex.preprocessSpeed([10, 10, 10, 10, 10]);
+    assert.ok(big.every(v => v === 10));
+
+    // 端2点は平均せず元値のまま（縮小窓平均にしない）。
+    const edge = DriveIndex.preprocessSpeed([100, 0, 0, 0, 0, 0, 0]);
+    approx(edge[0], 100, 1e-9);   // 先頭は元値
+    assert.ok(edge[2] !== 0);     // 内側は平滑化で値が入る
+}
+
+{
+    // 中心差分加速度: 端点は0、内側は (v[i+1]-v[i-1])/(2dt)。
+    const a = DriveIndex.centralAccel([0, 1, 2, 3], 1);
+    approx(a[0], 0, 1e-12);
+    approx(a[1], 1, 1e-12);
+    approx(a[2], 1, 1e-12);
+    approx(a[3], 0, 1e-12);
 }
 
 {

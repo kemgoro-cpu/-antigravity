@@ -667,7 +667,7 @@ const state = {
     showMarkers:       false,  // データ点マーカー（丸印）を表示するか（全体ON/OFF）
     // ドライビングインデックス（モード走行の走行品質指標＋燃費）
     driveIndex: {
-        channels:       { target: null, actual: null, fuel: null }, // 使用チャンネル名（自動検出＋手動上書き）
+        channels:       { target: null, actual: null, fuel: null, wot: null, gear: null }, // 使用チャンネル名（自動検出＋手動上書き）
         cycleId:        null,  // 判別/選択したサイクルID（'nedc'等）。nullは未判別
         phaseOverride:  null,  // 手動編集したフェーズ [{name,start,end}]。nullなら自動境界
         roadLoadByFile: {},    // 走行抵抗係数・質量をファイル別に保持 { ファイル名: {A,B,C,mass} }（任意。揃えばER/EER算出）
@@ -3073,7 +3073,10 @@ function detectDriveChannels(file) {
                 || cols.find(n => isSpeed(n) && n !== target);
     // 燃料流量: Fuel_Rate / 燃料 系
     const fuel = cols.find(n => /fuel.?rate/i.test(n)) || cols.find(n => /(燃料|fuel)/i.test(n));
-    return { target: target || null, actual: actual || null, fuel: fuel || null };
+    // WOT/GEARフラグ（99で目標側へ切替、RMSSE集計から除外）
+    const wot  = cols.find(n => /\bwot\b/i.test(n)) || cols.find(n => /(wot|全開)/i.test(n));
+    const gear = cols.find(n => /\bgear\b/i.test(n)) || cols.find(n => /(gear|ギア|変速|シフト)/i.test(n));
+    return { target: target || null, actual: actual || null, fuel: fuel || null, wot: wot || null, gear: gear || null };
 }
 
 /** ファイルから指定チャンネル名のデータ配列を取得（未ロード/不在は null） */
@@ -3120,8 +3123,13 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     const targetName = pick('target');
     const actualName = pick('actual');
     const fuelName   = pick('fuel');
+    const wotName    = pick('wot');
+    const gearName   = pick('gear');
     // 解決結果を state に反映（永続化・モーダル表示用）
-    di.channels = { target: targetName || null, actual: actualName || null, fuel: fuelName || null };
+    di.channels = {
+        target: targetName || null, actual: actualName || null, fuel: fuelName || null,
+        wot: wotName || null, gear: gearName || null,
+    };
 
     if (!targetName || !actualName) {
         di.results = [];            // モード走行データではない
@@ -3142,6 +3150,8 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         const tCol = resolveColumnForFile(f, targetName);
         const aCol = resolveColumnForFile(f, actualName);
         const fCol = fuelName ? resolveColumnForFile(f, fuelName) : null;
+        const wCol = wotName  ? resolveColumnForFile(f, wotName)  : null;
+        const gCol = gearName ? resolveColumnForFile(f, gearName) : null;
         if (!tCol || !aCol) {
             entry.result = null;
             entry.reason = '対象チャンネルなし';
@@ -3152,12 +3162,16 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         // 必要列を遅延ロード
         const need = [tCol.name, aCol.name];
         if (fCol) need.push(fCol.name);
+        if (wCol) need.push(wCol.name);
+        if (gCol) need.push(gCol.name);
         await loadColumnsForFile(fid, need);
 
         const time   = f.timeData;
         const target = f.colData[tCol.id];
         const actual = f.colData[aCol.id];
         const fuel   = fCol ? f.colData[fCol.id] : null;
+        const wotArr = wCol ? f.colData[wCol.id] : null;
+        const gearArr = gCol ? f.colData[gCol.id] : null;
         if (!time || !target || !actual) {
             entry.result = null;
             entry.reason = 'データなし';
@@ -3172,13 +3186,16 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         const roadLoad = di.roadLoadByFile[f.name] || null; // 走行抵抗はファイル別（任意）
 
         entry.result = window.DriveIndex.computeMetrics({
-            time, target, actual, fuelRate: fuel, phases, roadLoad,
+            time, target, actual, fuelRate: fuel, wot: wotArr, gear: gearArr, phases, roadLoad,
         });
         entry.effectiveId  = effectiveId;
         entry.cycleName    = cycleNameOf(effectiveId);
         entry.detectedName = det.name;
         entry.detectedId   = det.id;
-        entry.channels     = { target: tCol.name, actual: aCol.name, fuel: fCol ? fCol.name : null };
+        entry.channels     = {
+            target: tCol.name, actual: aCol.name, fuel: fCol ? fCol.name : null,
+            wot: wCol ? wCol.name : null, gear: gCol ? gCol.name : null,
+        };
         results.push(entry);
     }
 
@@ -3310,6 +3327,8 @@ function showDriveIndexModal() {
             <label>目標車速<select class="di-ch-target">${speedOpts(di.channels.target)}</select></label>
             <label>実測車速<select class="di-ch-actual">${speedOpts(di.channels.actual)}</select></label>
             <label>燃料流量<select class="di-ch-fuel">${fuelOpts(di.channels.fuel)}</select></label>
+            <label>WOT<select class="di-ch-wot">${fuelOpts(di.channels.wot)}</select></label>
+            <label>GEAR<select class="di-ch-gear">${fuelOpts(di.channels.gear)}</select></label>
         </div>
         <div class="di-phase-edit">
             <div class="di-phase-head">フェーズ区間 [秒]<button class="btn-secondary btn-sm di-phase-add">+ 行追加</button></div>
@@ -3391,6 +3410,8 @@ function showDriveIndexModal() {
             target: modal.querySelector('.di-ch-target').value || null,
             actual: modal.querySelector('.di-ch-actual').value || null,
             fuel:   modal.querySelector('.di-ch-fuel').value || null,
+            wot:    modal.querySelector('.di-ch-wot').value || null,
+            gear:   modal.querySelector('.di-ch-gear').value || null,
         };
         readRoadLoadInputs(); // ファイル別の走行抵抗を取り込む
         // 編集フェーズが既定と同じなら override 解除（＝自動追従に戻す）

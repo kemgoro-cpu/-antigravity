@@ -13,7 +13,10 @@
  *   - ER/EER: エネルギー/エネルギー経済の目標比偏差 [%]（走行抵抗A/B/Cと質量がある時のみ）
  *   - 燃費  : Fuel_Rate積算 ÷ 走行距離（km/L, L/100km）
  *
- * 注: SAE J2951 / WLTP の公開手順に合わせ、目標・実測を10Hzグリッドに線形補間してから計算する。
+ * 注: 一般的な理論式ではなく「既存の社内Excel計算と数値一致する」ことを目的とする。
+ *     目標・実測を10Hzグリッドに線形補間 → 各々を独立に前処理（5点移動平均×2 → 0.03m/s未満ゼロ化）
+ *     → 中心差分加速度（端点0）・右端矩形距離（v·dt）で点ごとに積算する。
+ *     WOT/GEARが99の点は実測側の積算に目標側の寄与を用い、RMSSEは WOT=0 かつ GEAR=0 の点のみ集計する。
  */
 (function () {
     'use strict';
@@ -112,81 +115,81 @@
         return (isFinite(a) && isFinite(b) && b !== 0) ? (a - b) / b * 100 : null;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 前処理（社内Excel手順に一致させる）
+    //   1) 5点移動平均を2回かける（端処理: 先頭2点・末尾2点は元値のまま。縮小窓平均はしない）
+    //   2) 0.03 m/s 未満をゼロにする（速度はkm/h保持、判定だけm/s換算）
+    // ─────────────────────────────────────────────────────────────
+    const ZERO_SPEED_KMH = 0.03 * 3.6; // 0.03 m/s = 0.108 km/h
+
+    /** 5点移動平均（端2点は元値のまま）。 */
+    function movingAvg5(arr) {
+        const n = arr.length;
+        const out = arr.slice();
+        for (let i = 2; i < n - 2; i++) {
+            out[i] = (arr[i - 2] + arr[i - 1] + arr[i] + arr[i + 1] + arr[i + 2]) / 5;
+        }
+        return out;
+    }
+
+    /** 速度トレースの前処理（5点移動平均×2 → 0.03m/s未満ゼロ化）。入力・出力ともkm/h。 */
+    function preprocessSpeed(speedKmh) {
+        const sm = movingAvg5(movingAvg5(speedKmh));
+        return sm.map(v => (isFinite(v) && Math.abs(v) < ZERO_SPEED_KMH ? 0 : v));
+    }
+
+    /** 中心差分による加速度（端点は0）。速度はkm/h、加速度は (km/h)/s 単位（比率指標では単位は相殺）。 */
+    function centralAccel(speedKmh, dt) {
+        const n = speedKmh.length;
+        const a = new Array(n).fill(0);
+        for (let i = 1; i < n - 1; i++) {
+            a[i] = (speedKmh[i + 1] - speedKmh[i - 1]) / (2 * dt);
+        }
+        return a;
+    }
+
     /**
-     * 1つの時間窓（フェーズ）について指標を計算する。
-     * target/actual/fuel は同じ10Hzグリッドの配列（速度km/h、燃料L/h）。
+     * 1トレース分の「点ごとの寄与」を計算する。
+     *   dist[i]   : 右端矩形の距離増分 v[i]·dt
+     *   iw[i]     : 正の慣性仕事 1.015·mass·a[i]·dist[i]（負は0）
+     *   asc[i]    : |a[i]|·dt（絶対速度変化）
+     *   energy[i] : 正の牽引仕事 (A+B·V+C·V² + 1.015·mass·a)·dist[i]（負は0、走行抵抗がある時のみ）
      */
-    function metricsForWindow(target, actual, fuel, roadLoad, dt = DRIVE_INDEX_SAMPLE_DT) {
-        const N = Math.min(target.length, actual.length);
-        if (N < 2) return null;
-        const KMH2MS = 1 / 3.6;
-
-        // ── RMSSE（速度誤差のRMS） ──
-        let sse = 0, cnt = 0;
-        for (let i = 0; i < N; i++) {
-            const d = actual[i] - target[i];
-            if (isFinite(d)) { sse += d * d; cnt++; }
-        }
-        const rmsse = cnt > 0 ? Math.sqrt(sse / cnt) : null;
-
-        // 1トレース分の 慣性仕事(IW)・絶対速度変化(ASC)・距離・牽引エネルギー を計算
-        const hasRL = !!roadLoad;
-        const etw = hasRL && isFinite(roadLoad.mass) ? roadLoad.mass : 1;
-        function traceWork(speedKmh) {
-            let iw = 0, asc = 0, dist = 0, energy = 0;
-            for (let i = 0; i < N - 1; i++) {
-                const v0 = speedKmh[i]     * KMH2MS;
-                const v1 = speedKmh[i + 1] * KMH2MS;
-                if (!isFinite(v0) || !isFinite(v1)) continue;
-                const a = (v1 - v0) / dt;              // 加速度[m/s^2]
-                const dd = (v0 + v1) / 2 * dt;         // 距離増分[m]（台形）
-                dist += dd;
-
-                const inertialWork = INERTIA_FACTOR * etw * a * dd;
-                if (inertialWork > 0) iw += inertialWork;
-                asc += Math.abs(a) * dt;
-
-                if (hasRL) {
-                    const V = speedKmh[i];              // 走行抵抗はkm/hで係数定義される慣例
-                    const F = (roadLoad.A + roadLoad.B * V + roadLoad.C * V * V)
-                            + INERTIA_FACTOR * roadLoad.mass * a;
-                    if (F > 0) energy += F * dd;        // 正の牽引仕事のみ[J]
-                }
-            }
-            return { iw, asc, dist, energy };
-        }
-        const wv = traceWork(actual); // 実測（driven）
-        const wu = traceWork(target); // 目標（target）
-
-        const iwr  = pctDiff(wv.iw,   wu.iw);
-        const ascr = pctDiff(wv.asc,  wu.asc);
-        const dr   = pctDiff(wv.dist, wu.dist);
-
-        let er = null, eer = null;
-        if (hasRL && wu.energy > 0) {
-            er = pctDiff(wv.energy, wu.energy);
-            if (er != null && dr != null && (1 + er / 100) !== 0) {
-                eer = (1 - (1 + dr / 100) / (1 + er / 100)) * 100;
+    function pointContrib(speedKmh, accel, mass, roadLoad, dt) {
+        const n = speedKmh.length;
+        const iw = new Array(n), asc = new Array(n), dist = new Array(n), energy = new Array(n);
+        for (let i = 0; i < n; i++) {
+            const v = speedKmh[i], a = accel[i];
+            const dd = v * dt; // 右端矩形
+            dist[i] = isFinite(dd) ? dd : 0;
+            const w = INERTIA_FACTOR * mass * a * dist[i];
+            iw[i] = isFinite(w) && w > 0 ? w : 0;
+            asc[i] = isFinite(a) ? Math.abs(a) * dt : 0;
+            if (roadLoad) {
+                const F = (roadLoad.A + roadLoad.B * v + roadLoad.C * v * v)
+                        + INERTIA_FACTOR * roadLoad.mass * a;
+                const e = F * dist[i];
+                energy[i] = isFinite(e) && F > 0 ? e : 0;
+            } else {
+                energy[i] = 0;
             }
         }
+        return { iw, asc, dist, energy };
+    }
 
-        // ── 燃費（実測速度ベースの走行距離を使う） ──
-        const distanceKm = wv.dist / 1000;
-        let fuelL = null, fuelKmPerL = null, fuelLper100km = null;
-        if (fuel) {
-            let vol = 0;
-            for (let i = 0; i < N - 1; i++) {
-                const fr = fuel[i];
-                if (isFinite(fr)) vol += (fr / 3600) * dt; // L/h → L
-            }
-            fuelL = vol;
-            if (vol > 0 && distanceKm > 0) {
-                fuelKmPerL    = distanceKm / vol;
-                fuelLper100km = vol / distanceKm * 100;
-            }
+    /** ソース系列を最近傍でグリッド時刻へ載せ替える（フラグ列の補間に使う）。 */
+    function resampleNearest(timeArr, valArr, gridTime) {
+        const n = timeArr.length;
+        const out = new Array(gridTime.length);
+        let j = 0;
+        for (let i = 0; i < gridTime.length; i++) {
+            const t = gridTime[i];
+            while (j < n - 1 && timeArr[j + 1] <= t) j++;
+            let v = valArr[j];
+            if (j + 1 < n && Math.abs(timeArr[j + 1] - t) < Math.abs(t - timeArr[j])) v = valArr[j + 1];
+            out[i] = v;
         }
-
-        return { rmsse, iwr, ascr, dr, er, eer, distanceKm, fuelL, fuelKmPerL, fuelLper100km };
+        return out;
     }
 
     /**
@@ -220,26 +223,120 @@
 
     /**
      * 指標と燃費を「全体＋フェーズ別」で計算する。
+     *
+     * 社内Excel手順への一致を最優先する:
+     *   - 目標・実測を10Hzグリッドに補間後、各々を独立に前処理（5点移動平均×2→0.03m/s未満ゼロ）
+     *   - 加速度は前処理後速度の中心差分（端点0）、距離増分は右端矩形 v[i]·dt
+     *   - 慣性仕事/牽引仕事/絶対速度変化は点ごとに算出
+     *   - WOTまたはGEARが99の点では、実測側の積算に実測値ではなく目標値の寄与を使う
+     *     （＝事前置換せず、最後の積算でのみ Wid↔Wit を切り替える）
+     *   - RMSSEは前処理後km/h差のRMS。ただし WOT=0 かつ GEAR=0 の点だけを集計対象にする
+     *
      * @param {object} opts
      *   time, target, actual : 同じ時間軸の配列（actual/targetは速度km/h）
      *   fuelRate             : 実測Fuel_Rate配列[L/h]（省略可）
+     *   wot, gear            : WOT/GEARフラグ配列（同じ時間軸、99で目標側に切替・0以外はRMSSE除外。省略可）
      *   phases               : [{name,start,end}]（省略/空なら全体のみ）
      *   roadLoad             : {A,B,C,mass}（省略可。揃っていればER/EERを計算）
      * @returns {{ total, phases:[{name,...}] } | null}
      */
     function computeMetrics(opts) {
-        const { time, target, actual, fuelRate, phases, roadLoad } = opts || {};
+        const { time, target, actual, fuelRate, phases, roadLoad, wot, gear } = opts || {};
         if (!time || !target || !actual || time.length < 2) return null;
         const rl = normalizeRoadLoad(roadLoad);
+        const dt = DRIVE_INDEX_SAMPLE_DT;
+        const t0 = time[0], t1 = time[time.length - 1];
 
-        function windowMetrics(start, end) {
-            const tg = resampleTrace(time, target, start, end, DRIVE_INDEX_SAMPLE_HZ);
-            const ac = resampleTrace(time, actual, start, end, DRIVE_INDEX_SAMPLE_HZ);
-            const fu = fuelRate ? resampleTrace(time, fuelRate, start, end, DRIVE_INDEX_SAMPLE_HZ).values : null;
-            return metricsForWindow(tg.values, ac.values, fu, rl, tg.dt);
+        // 全トレースを10Hzグリッドへ補間（前処理・端処理はトレース全体で一度だけ行う）
+        const grid    = resampleTrace(time, target, t0, t1, DRIVE_INDEX_SAMPLE_HZ);
+        const gtime   = grid.time;
+        const tgtRaw  = grid.values;
+        const actRaw  = resampleTrace(time, actual, t0, t1, DRIVE_INDEX_SAMPLE_HZ).values;
+        const fuelG   = fuelRate ? resampleTrace(time, fuelRate, t0, t1, DRIVE_INDEX_SAMPLE_HZ).values : null;
+        const wotG    = wot  ? resampleNearest(time, wot,  gtime) : null;
+        const gearG   = gear ? resampleNearest(time, gear, gtime) : null;
+        const N = gtime.length;
+
+        // 目標・実測を別々に前処理
+        const tgt = preprocessSpeed(tgtRaw);
+        const act = preprocessSpeed(actRaw);
+
+        // 前処理後速度からの中心差分加速度（端点0）
+        const aTgt = centralAccel(tgt, dt);
+        const aAct = centralAccel(act, dt);
+
+        // 点ごとの寄与（目標/実測）
+        const mass = rl && isFinite(rl.mass) ? rl.mass : 1;
+        const cTgt = pointContrib(tgt, aTgt, mass, rl, dt);
+        const cAct = pointContrib(act, aAct, mass, rl, dt);
+
+        // フラグ: 99判定（目標側へ切替）/ RMSSE集計対象（WOT=0 かつ GEAR=0）
+        const use99 = new Array(N), counted = new Array(N);
+        for (let i = 0; i < N; i++) {
+            const w = wotG  ? wotG[i]  : 0;
+            const g = gearG ? gearG[i] : 0;
+            use99[i]   = (w === 99 || g === 99);
+            counted[i] = (w === 0 && g === 0);
         }
 
-        const t0 = time[0], t1 = time[time.length - 1];
+        function windowMetrics(start, end) {
+            const lo = Math.max(0,     Math.ceil((start - gtime[0]) / dt - 1e-9));
+            const hi = Math.min(N - 1, Math.floor((end - gtime[0]) / dt + 1e-9));
+            if (hi - lo < 1) return null;
+
+            // ── 指標（目標/実測の積算、99点は実測側を目標寄与に置換）──
+            let drvIw = 0, tgtIw = 0, drvAsc = 0, tgtAsc = 0,
+                drvDist = 0, tgtDist = 0, drvEn = 0, tgtEn = 0;
+            // ── RMSSE（WOT=0 かつ GEAR=0 の点のみ）──
+            let sse = 0, cnt = 0;
+            // ── 燃費用の実測物理距離[m] ──
+            let physDistM = 0;
+            for (let i = lo; i <= hi; i++) {
+                const drv = use99[i] ? cTgt : cAct; // 99点は実測側も目標寄与を使う
+                drvIw   += drv.iw[i];   tgtIw   += cTgt.iw[i];
+                drvAsc  += drv.asc[i];  tgtAsc  += cTgt.asc[i];
+                drvDist += drv.dist[i]; tgtDist += cTgt.dist[i];
+                drvEn   += drv.energy[i]; tgtEn += cTgt.energy[i];
+
+                if (counted[i]) {
+                    const d = act[i] - tgt[i];
+                    if (isFinite(d)) { sse += d * d; cnt++; }
+                }
+                physDistM += (act[i] / 3.6) * dt;
+            }
+
+            const rmsse = cnt > 0 ? Math.sqrt(sse / cnt) : null;
+            const iwr   = pctDiff(drvIw,   tgtIw);
+            const ascr  = pctDiff(drvAsc,  tgtAsc);
+            const dr    = pctDiff(drvDist, tgtDist);
+
+            let er = null, eer = null;
+            if (rl && tgtEn > 0) {
+                er = pctDiff(drvEn, tgtEn);
+                if (er != null && dr != null && (1 + er / 100) !== 0) {
+                    eer = (1 - (1 + dr / 100) / (1 + er / 100)) * 100;
+                }
+            }
+
+            // ── 燃費（実測速度ベースの走行距離を使う）──
+            const distanceKm = physDistM / 1000;
+            let fuelL = null, fuelKmPerL = null, fuelLper100km = null;
+            if (fuelG) {
+                let vol = 0;
+                for (let i = lo; i < hi; i++) {
+                    const fr = fuelG[i];
+                    if (isFinite(fr)) vol += (fr / 3600) * dt; // L/h → L
+                }
+                fuelL = vol;
+                if (vol > 0 && distanceKm > 0) {
+                    fuelKmPerL    = distanceKm / vol;
+                    fuelLper100km = vol / distanceKm * 100;
+                }
+            }
+
+            return { rmsse, iwr, ascr, dr, er, eer, distanceKm, fuelL, fuelKmPerL, fuelLper100km };
+        }
+
         const total = windowMetrics(t0, t1);
         const phaseResults = (phases || []).map(p => ({
             name: p.name,
@@ -254,6 +351,8 @@
         DRIVE_INDEX_SAMPLE_HZ,
         resampleTrace,
         resampleTo1Hz,
+        preprocessSpeed,
+        centralAccel,
         detectCycle,
         computeMetrics,
     };
