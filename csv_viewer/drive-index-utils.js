@@ -8,6 +8,8 @@
  * 指標（実測トレース v / 目標トレース u を比較）:
  *   - RMSSE : 速度誤差のRMS [km/h]
  *   - IWR   : 慣性仕事の目標比偏差 [%]
+ *           （10Hz→速度5点移動平均×2→0.3m/s未満ゼロ化→中心差分で加速度→正の慣性仕事のみ積算。
+ *             WOT(アクセル開度≥95%)区間は実測ではなく目標車速を使う＝法規VBAと一致させる手順）
  *   - ASCR  : 絶対速度変化の目標比偏差 [%]（絶対加速度の時間積分）
  *   - DR    : 走行距離の目標比偏差 [%]
  *   - ER/EER: エネルギー/エネルギー経済の目標比偏差 [%]（走行抵抗A/B/Cと質量がある時のみ）
@@ -21,6 +23,8 @@
     const DRIVE_INDEX_SAMPLE_HZ = 10;
     const DRIVE_INDEX_SAMPLE_DT = 1 / DRIVE_INDEX_SAMPLE_HZ;
     const INERTIA_FACTOR = 1.015;
+    const IWR_SPEED_DEADBAND_MS = 0.3;  // IWRの慣性仕事算出時、この速度[m/s]未満は0にする
+    const WOT_THROTTLE_PCT = 95;        // アクセル開度[%]がこの値以上ならWOT（全開）扱い
 
     // ─────────────────────────────────────────────────────────────
     // 既知サイクルのレジストリ
@@ -112,11 +116,62 @@
         return (isFinite(a) && isFinite(b) && b !== 0) ? (a - b) / b * 100 : null;
     }
 
+    /** 中心5点の移動平均。両端はウィンドウを縮めて対称に取る（非数は除外）。 */
+    function movingAverage5(arr) {
+        const n = arr.length;
+        const out = new Array(n);
+        for (let i = 0; i < n; i++) {
+            let sum = 0, cnt = 0;
+            for (let k = i - 2; k <= i + 2; k++) {
+                if (k < 0 || k >= n) continue;
+                const v = arr[k];
+                if (isFinite(v)) { sum += v; cnt++; }
+            }
+            out[i] = cnt > 0 ? sum / cnt : NaN;
+        }
+        return out;
+    }
+
+    /**
+     * 慣性仕事（正値のみ）を法規VBA手順で算出する。
+     * 手順: km/h→m/s → 5点移動平均×2 → 0.3m/s未満をゼロ化 → 中心差分で加速度
+     *       （両端は前進/後退差分）→ 正の慣性仕事率 1.015·ETW·a·v のみを時間積分。
+     * @param {number[]} speedKmh 10Hzグリッドの車速[km/h]
+     * @param {number}   dt       区間幅[s]（=1/Hz）
+     * @param {number}   etw      等価慣性質量[kg]（無指定時は1）
+     * @returns {number} 正の慣性仕事の総和
+     */
+    function inertialWork(speedKmh, dt, etw) {
+        const KMH2MS = 1 / 3.6;
+        const n = speedKmh.length;
+        if (n < 2) return 0;
+        // 1. m/s化
+        let v = new Array(n);
+        for (let i = 0; i < n; i++) v[i] = speedKmh[i] * KMH2MS;
+        // 2. 5点移動平均 ×2
+        v = movingAverage5(movingAverage5(v));
+        // 3. 0.3 m/s 未満をゼロ化
+        for (let i = 0; i < n; i++) {
+            if (!isFinite(v[i]) || v[i] < IWR_SPEED_DEADBAND_MS) v[i] = 0;
+        }
+        // 4. 中心差分で加速度 → 正の慣性仕事のみ積算
+        let iw = 0;
+        for (let i = 0; i < n; i++) {
+            let a;
+            if (i === 0)          a = (v[1] - v[0]) / dt;            // 先頭は前進差分
+            else if (i === n - 1) a = (v[n - 1] - v[n - 2]) / dt;    // 末尾は後退差分
+            else                  a = (v[i + 1] - v[i - 1]) / (2 * dt); // 中心差分
+            const power = INERTIA_FACTOR * etw * a * v[i];          // 慣性仕事率
+            if (power > 0) iw += power * dt;                        // 正のみ積算
+        }
+        return iw;
+    }
+
     /**
      * 1つの時間窓（フェーズ）について指標を計算する。
      * target/actual/fuel は同じ10Hzグリッドの配列（速度km/h、燃料L/h）。
      */
-    function metricsForWindow(target, actual, fuel, roadLoad, dt = DRIVE_INDEX_SAMPLE_DT) {
+    function metricsForWindow(target, actual, fuel, roadLoad, dt = DRIVE_INDEX_SAMPLE_DT, throttle = null) {
         const N = Math.min(target.length, actual.length);
         if (N < 2) return null;
         const KMH2MS = 1 / 3.6;
@@ -129,11 +184,11 @@
         }
         const rmsse = cnt > 0 ? Math.sqrt(sse / cnt) : null;
 
-        // 1トレース分の 慣性仕事(IW)・絶対速度変化(ASC)・距離・牽引エネルギー を計算
+        // 1トレース分の 絶対速度変化(ASC)・距離・牽引エネルギー を計算（IWRは別途、法規手順で算出）
         const hasRL = !!roadLoad;
         const etw = hasRL && isFinite(roadLoad.mass) ? roadLoad.mass : 1;
         function traceWork(speedKmh) {
-            let iw = 0, asc = 0, dist = 0, energy = 0;
+            let asc = 0, dist = 0, energy = 0;
             for (let i = 0; i < N - 1; i++) {
                 const v0 = speedKmh[i]     * KMH2MS;
                 const v1 = speedKmh[i + 1] * KMH2MS;
@@ -141,9 +196,6 @@
                 const a = (v1 - v0) / dt;              // 加速度[m/s^2]
                 const dd = (v0 + v1) / 2 * dt;         // 距離増分[m]（台形）
                 dist += dd;
-
-                const inertialWork = INERTIA_FACTOR * etw * a * dd;
-                if (inertialWork > 0) iw += inertialWork;
                 asc += Math.abs(a) * dt;
 
                 if (hasRL) {
@@ -153,12 +205,27 @@
                     if (F > 0) energy += F * dd;        // 正の牽引仕事のみ[J]
                 }
             }
-            return { iw, asc, dist, energy };
+            return { asc, dist, energy };
         }
         const wv = traceWork(actual); // 実測（driven）
         const wu = traceWork(target); // 目標（target）
 
-        const iwr  = pctDiff(wv.iw,   wu.iw);
+        // ── IWR（法規VBA手順）──
+        // WOT(アクセル開度≥95%)区間は、実測の代わりに目標車速を使って慣性仕事を出す。
+        let drivenForIW = actual;
+        if (throttle) {
+            drivenForIW = new Array(N);
+            for (let i = 0; i < N; i++) {
+                const open = throttle[i];
+                drivenForIW[i] = (isFinite(open) && open >= WOT_THROTTLE_PCT) ? target[i] : actual[i];
+            }
+        } else {
+            drivenForIW = actual.slice(0, N);
+        }
+        const iwV = inertialWork(drivenForIW, dt, etw);
+        const iwU = inertialWork(target.slice(0, N), dt, etw);
+
+        const iwr  = pctDiff(iwV,     iwU);
         const ascr = pctDiff(wv.asc,  wu.asc);
         const dr   = pctDiff(wv.dist, wu.dist);
 
@@ -228,7 +295,7 @@
      * @returns {{ total, phases:[{name,...}] } | null}
      */
     function computeMetrics(opts) {
-        const { time, target, actual, fuelRate, phases, roadLoad } = opts || {};
+        const { time, target, actual, fuelRate, throttle, phases, roadLoad } = opts || {};
         if (!time || !target || !actual || time.length < 2) return null;
         const rl = normalizeRoadLoad(roadLoad);
 
@@ -236,7 +303,8 @@
             const tg = resampleTrace(time, target, start, end, DRIVE_INDEX_SAMPLE_HZ);
             const ac = resampleTrace(time, actual, start, end, DRIVE_INDEX_SAMPLE_HZ);
             const fu = fuelRate ? resampleTrace(time, fuelRate, start, end, DRIVE_INDEX_SAMPLE_HZ).values : null;
-            return metricsForWindow(tg.values, ac.values, fu, rl, tg.dt);
+            const th = throttle ? resampleTrace(time, throttle, start, end, DRIVE_INDEX_SAMPLE_HZ).values : null;
+            return metricsForWindow(tg.values, ac.values, fu, rl, tg.dt, th);
         }
 
         const t0 = time[0], t1 = time[time.length - 1];
@@ -252,8 +320,12 @@
     window.DriveIndex = {
         CYCLE_REGISTRY,
         DRIVE_INDEX_SAMPLE_HZ,
+        IWR_SPEED_DEADBAND_MS,
+        WOT_THROTTLE_PCT,
         resampleTrace,
         resampleTo1Hz,
+        movingAverage5,
+        inertialWork,
         detectCycle,
         computeMetrics,
     };
