@@ -15,7 +15,7 @@
  *
  * 注: 一般的な理論式ではなく「既存の社内Excel計算と数値一致する」ことを目的とする。
  *     目標・実測を10Hzグリッドに線形補間 → 各々を独立に前処理（5点移動平均×2 → 0.03m/s未満ゼロ化）
- *     → 中心差分加速度（端点0）・右端矩形距離（v·dt）で点ごとに積算する。
+ *     → 中心差分加速度（端点0）・右端矩形距離（v[i+1]·dt）で点ごとに積算する。
  *     WOT（アクセル開度AP≧95%）またはGEAR=99の点は実測側の積算に目標側の寄与を用い、
  *     RMSSEは WOTでなく かつ GEAR=0 の点のみ集計する。
  */
@@ -152,7 +152,7 @@
 
     /**
      * 1トレース分の「点ごとの寄与」を計算する。
-     *   dist[i]   : 右端矩形の距離増分 v[i]·dt
+     *   dist[i]   : 右端矩形の距離増分 v[i+1]·dt（区間 i→i+1 の右端速度）
      *   iw[i]     : 正の慣性仕事 1.015·mass·a[i]·dist[i]（負は0）
      *   asc[i]    : |a[i]|·dt（絶対速度変化）
      *   energy[i] : 正の牽引仕事 (A+B·V+C·V² + 1.015·mass·a)·dist[i]（負は0、走行抵抗がある時のみ）
@@ -162,7 +162,9 @@
         const iw = new Array(n), asc = new Array(n), dist = new Array(n), energy = new Array(n);
         for (let i = 0; i < n; i++) {
             const v = speedKmh[i], a = accel[i];
-            const dd = v * dt; // 右端矩形
+            // 右端矩形: 区間 i→i+1 の右端速度 v[i+1] を使う（社内Excel一致。末尾点は0）
+            const vNext = (i + 1 < n) ? speedKmh[i + 1] : 0;
+            const dd = vNext * dt;
             dist[i] = isFinite(dd) ? dd : 0;
             const w = INERTIA_FACTOR * mass * a * dist[i];
             iw[i] = isFinite(w) && w > 0 ? w : 0;
@@ -228,7 +230,7 @@
      *
      * 社内Excel手順への一致を最優先する:
      *   - 目標・実測を10Hzグリッドに補間後、各々を独立に前処理（5点移動平均×2→0.03m/s未満ゼロ）
-     *   - 加速度は前処理後速度の中心差分（端点0）、距離増分は右端矩形 v[i]·dt
+     *   - 加速度は前処理後速度の中心差分（端点0）、距離増分は右端矩形 v[i+1]·dt
      *   - 慣性仕事/牽引仕事/絶対速度変化は点ごとに算出
      *   - WOT（アクセル開度AP≧95%）またはGEAR=99の点では、実測側の積算に実測値ではなく
      *     目標値の寄与を使う（＝事前置換せず、最後の積算でのみ Wid↔Wit を切り替える）
@@ -307,7 +309,7 @@
                     const d = act[i] - tgt[i];
                     if (isFinite(d)) { sse += d * d; cnt++; }
                 }
-                physDistM += (act[i] / 3.6) * dt;
+                physDistM += cAct.dist[i] / 3.6; // 右端矩形距離(km/h·s)をm/s·s=mへ（指標と同じ距離定義）
             }
 
             const rmsse = cnt > 0 ? Math.sqrt(sse / cnt) : null;
