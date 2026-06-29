@@ -457,7 +457,9 @@ function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
 
     // --- 関数呼び出しの評価 ---
     function evalCall(name, argNodes) {
-        switch (name) {
+        // 関数名は大文字小文字を区別しない（Integral も integral も同じ）。
+        // 登録名はすべて小文字なので、照合前に小文字化しておく。
+        switch (String(name).toLowerCase()) {
             // ── 基本数学（要素ごと） ──
             case 'abs':   return mapFn(evalNode(argNodes[0]), Math.abs);
             case 'sqrt':  return mapFn(evalNode(argNodes[0]), Math.sqrt);
@@ -1734,23 +1736,21 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     await applyPendingSettings();
 
                     // 既存のCustom RAMがあれば新ファイルにも計算・追加する
-                    // .catchを.thenの前に置くことで、計算に失敗してもUI更新と保存は必ず行う
-                    // （asyncコールバック内のPromise拒否は外側のtry/catchでは捕捉されないため）
+                    // 各awaitに個別の.catchを付けることで、計算に失敗してもUI更新と保存は
+                    // 必ず行う（asyncコールバック内のPromise拒否は外側のtry/catchでは
+                    // 捕捉されないため、ここで握りつぶしてから後続処理に進む）
                     if (state.customRAMs.length > 0) {
-                        addCustomRAMsToFile(fileId)
-                            .catch(e => showError(`Custom RAMの計算に失敗: ${fileName}`, e.stack || e.message))
-                            .then(() => {
-                                updateUI();
-                                saveSettings();
-                                // ファイルが増えたのでUndo履歴を取り直す（追加前には戻せない）
-                                resetHistoryBaseline();
-                            });
-                    } else {
-                        updateUI();
-                        saveSettings();
-                        // ファイルが増えたのでUndo履歴を取り直す（追加前には戻せない）
-                        resetHistoryBaseline();
+                        await addCustomRAMsToFile(fileId)
+                            .catch(e => showError(`Custom RAMの計算に失敗: ${fileName}`, e.stack || e.message));
                     }
+                    // .trnファイルなら燃料解析用のCustom RAMを自動生成する
+                    // （Fuel_Rateチャンネルがある場合のみ。重複時はスキップ）
+                    await autoGenerateFuelRAMs(fileId)
+                        .catch(e => console.warn('[TRN auto RAM] 自動生成に失敗:', e));
+                    updateUI();
+                    saveSettings();
+                    // ファイルが増えたのでUndo履歴を取り直す（追加前には戻せない）
+                    resetHistoryBaseline();
                     // モード走行データ（目標・実測車速あり）ならドライビングインデックスを自動計算
                     computeDriveIndex().catch(e => console.warn('[DriveIndex] auto compute failed:', e));
                 } catch (e) {
@@ -2598,8 +2598,10 @@ function showDebugModal(fileId) {
 
 /** Extract RAM names referenced in an expression (組み込み関数名は除外) */
 function extractExprNames(expr) {
+    // 関数名（大文字小文字を問わず）は除外し、残りをチャンネル名として扱う。
+    // チャンネル名自体は大文字小文字を区別するので .map では元の表記を保つ。
     return tokenizeExpr(expr)
-        .filter(t => t.type === 'name' && !_builtinFuncNames.has(t.value))
+        .filter(t => t.type === 'name' && !_builtinFuncNames.has(t.value.toLowerCase()))
         .map(t => t.value);
 }
 
@@ -2961,6 +2963,64 @@ async function addCustomRAMsToFile(fileId) {
         const colDef = { id: colId, name: cr.name, unit: cr.unit || '', idx: -1, color, isCustom: true, isCrossFile: isCross };
         f.columns.unshift(colDef);
         f.colData[colId] = computeCustomExpr(cr.expr, f);
+    }
+}
+
+/**
+ * ファイルに指定名のチャンネルが存在するか（完全一致）。
+ * 式エンジンはカラム名を完全一致で照合するため、ここも完全一致で判定する。
+ */
+function fileHasChannel(f, name) {
+    return !!f && f.columns.some(c => c.name === name);
+}
+
+/**
+ * .trnファイル読み込み後に、燃料解析用のCustom RAMを自動生成する。
+ *
+ * 生成するもの（出力単位は cc・累積）:
+ *   - Integral_Fuel : メインの累積燃料消費量
+ *                     式 = integral(Fuel_Rate)/3.6
+ *   - delta_Fuel_sN : N番目のサブとメインの累積燃料差（サブの数だけ作る）
+ *                     式 = integral(Fuel_Rate - sN:Fuel_Rate)/3.6
+ *
+ * 「/3.6」の根拠:
+ *   Fuel_Rate の単位は L/h。Integral() は内部で時間刻み dt[秒] を掛けて積分するため、
+ *   Integral(Fuel_Rate) の単位は「L/h × 秒」になる。これを cc に直すには
+ *   ×1000（L→cc）÷3600（h→秒）= ÷3.6。Integral が dt を実データの時間軸から
+ *   読むので、サンプル間隔（0.1秒など）を式に書く必要はなく、サンプルレートが
+ *   変わっても正しい値になる。
+ *
+ * 既に同名RAMがある場合（リロード時の設定復元を含む）や、対象ファイルに
+ * Fuel_Rate チャンネルが無い場合はスキップする（壊れた全NaNのRAMを作らない）。
+ *
+ * @param {string} fileId 読み込みが完了したファイルのID
+ */
+async function autoGenerateFuelRAMs(fileId) {
+    const f = state.files[fileId];
+    // .trn 以外は対象外（auto生成はTRN形式の燃料データ前提）
+    if (!f || !isTrnFile(f.name)) return;
+
+    const FUEL = 'Fuel_Rate';            // .trnの燃料流量チャンネル名（単位 L/h）
+
+    // 1) メインの累積燃料 Integral_Fuel（メインにFuel_Rateがあり、未作成のときだけ）
+    const mainFile = getMainFile();
+    const integralName = '@Integral_Fuel';   // addCustomRAMが先頭に@を付けるため、判定も@付き
+    if (mainFile
+        && fileHasChannel(mainFile, FUEL)
+        && !state.customRAMs.some(cr => cr.name === integralName)) {
+        await addCustomRAM('Integral_Fuel', `integral(${FUEL})/3.6`, 'cc');
+    }
+
+    // 2) 各サブとの累積差 delta_Fuel_sN（サブの並び順1始まり: s1, s2, ...）
+    //    cross-ref の sN はサブの追加順インデックス（getSubFileIds順）に対応する。
+    const subIds = getSubFileIds();
+    for (let i = 0; i < subIds.length; i++) {
+        const sub = state.files[subIds[i]];
+        if (!fileHasChannel(sub, FUEL)) continue;   // Fuel_Rateの無いサブはスキップ
+        const n = i + 1;                            // s1, s2, ...
+        const deltaName = `@delta_Fuel_s${n}`;
+        if (state.customRAMs.some(cr => cr.name === deltaName)) continue;  // 重複スキップ
+        await addCustomRAM(`delta_Fuel_s${n}`, `integral(${FUEL} - s${n}:${FUEL})/3.6`, 'cc');
     }
 }
 
@@ -3610,8 +3670,8 @@ function evaluateExprForValidation(expr) {
             const nextIsOpen = (ti + 1 < tokens.length && tokens[ti + 1].type === 'op' && tokens[ti + 1].value === '(');
             if (t.type === 'name') {
                 if (nextIsOpen) {
-                    // 次が'('なので関数呼び出し → 関数名チェック
-                    if (!_builtinFuncNames.has(t.value)) {
+                    // 次が'('なので関数呼び出し → 関数名チェック（大文字小文字は区別しない）
+                    if (!_builtinFuncNames.has(t.value.toLowerCase())) {
                         errors.push(`"${t.value}" は未知の関数です`);
                     }
                 } else {
