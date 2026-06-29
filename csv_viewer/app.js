@@ -665,10 +665,12 @@ const state = {
     lineWidth:         1.0,    // 線の太さ（一括のデフォルト値）
     channelLineWidths: {},     // チャンネルごとの太さ上書き { channelName: width }。未指定はlineWidthを使う
     showMarkers:       false,  // データ点マーカー（丸印）を表示するか（全体ON/OFF）
+    renderEnabled:     true,    // チャート描画ON/OFF。falseならrenderChartは描画せずチャートを消す（データは保持）
     // ドライビングインデックス（モード走行の走行品質指標＋燃費）
     driveIndex: {
         channels:       { target: null, actual: null, fuel: null }, // 使用チャンネル名（自動検出＋手動上書き）
         cycleId:        null,  // 判別/選択したサイクルID（'nedc'等）。nullは未判別
+        autoDetectedOnce: false, // セッション内で初回データ読込時の自動サイクル判定を済ませたか（永続化しない）
         phaseOverride:  null,  // 手動編集したフェーズ [{name,start,end}]。nullなら自動境界
         roadLoadByFile: {},    // 走行抵抗係数・質量をファイル別に保持 { ファイル名: {A,B,C,mass} }（任意。揃えばER/EER算出）
         results:        [],    // ファイル別の計算結果 [{ fileId, fileName, role, result, ... }]（永続化しない）
@@ -907,6 +909,7 @@ const dom = {
     customSuggest:    $('custom-ram-suggest'),
     customValidation: $('custom-ram-validation'),
     monoColorBtn: $('mono-color-btn'),
+    renderToggleBtn: $('render-toggle-btn'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
     exportSettings: $('export-settings-btn'),
@@ -1751,8 +1754,11 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                         // ファイルが増えたのでUndo履歴を取り直す（追加前には戻せない）
                         resetHistoryBaseline();
                     }
-                    // モード走行データ（目標・実測車速あり）ならドライビングインデックスを自動計算
-                    computeDriveIndex().catch(e => console.warn('[DriveIndex] auto compute failed:', e));
+                    // モード走行データ（目標・実測車速あり）ならドライビングインデックスを自動計算。
+                    // 初回読込時に走行サイクルが自動判定されdi.cycleIdが変わり得るので、計算後に保存する。
+                    computeDriveIndex()
+                        .then(() => saveSettings())
+                        .catch(e => console.warn('[DriveIndex] auto compute failed:', e));
                 } catch (e) {
                     showError(`Failed to process time data: ${fileName}`, e.stack || e.message);
                 }
@@ -2272,6 +2278,8 @@ dom.clearBtn.addEventListener('click', () => {
     state.colorCtr      = 0;
     state.fileColors    = {};
     state.shiftFileId   = null;
+    // 次に読み込むデータで走行サイクルを再判定できるようフラグを戻す
+    state.driveIndex.autoDetectedOnce = false;
     // ファイルが無くなるのでUndo履歴も空にする（起点は積まない）
     CSVHistory.reset(appHistory);
     updateUndoRedoButtons();
@@ -3167,6 +3175,13 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
 
         // サイクル判別はファイルごと（手動 di.cycleId があれば全ファイルそれを優先）
         const det = window.DriveIndex.detectCycle(time, target);
+        // セッション内の初回データ読込時、判別できたら保存値（前回終了時のcycleId）を
+        // 上書きして判別結果を採用する。これにより前回MDCで終了→今回NEDCを読んだ場合に
+        // NEDCと判定される。手動選択はフラグが立った後なので以降は尊重される。
+        if (f.role === 'main' && !di.autoDetectedOnce && det.id) {
+            di.cycleId = det.id;
+            di.autoDetectedOnce = true;
+        }
         const effectiveId = di.cycleId || det.id;
         const phases = getEffectivePhases(effectiveId);
         const roadLoad = di.roadLoadByFile[f.name] || null; // 走行抵抗はファイル別（任意）
@@ -4493,7 +4508,34 @@ function getActiveGroups() {
 // 自動フィット時の実効行高さ（renderChartが更新、全体＋/−ボタンの起点に使う）
 let _lastAutoRow = null;
 
+// チャートオーバーレイの初期HTML（チャンネル未選択時の案内）。paused表示から戻す時に使う。
+const _defaultOverlayHTML = dom.overlay ? dom.overlay.innerHTML : '';
+function restoreDefaultOverlay() {
+    if (dom.overlay && dom.overlay.innerHTML !== _defaultOverlayHTML) {
+        dom.overlay.innerHTML = _defaultOverlayHTML;
+    }
+}
+// 描画OFF中のオーバーレイ（データは保持されている旨を表示）
+function showRenderPausedOverlay() {
+    if (!dom.overlay) return;
+    dom.overlay.innerHTML = `<i class='bx bx-hide icon-large' aria-hidden="true"></i>`
+        + `<p>描画OFF — データは保持されています</p>`
+        + `<p class="small">ツールバーの「描画 ON」で再表示します</p>`;
+    dom.overlay.classList.remove('hidden');
+}
+
 function renderChart() {
+    // 描画OFF中はチャートを消すだけ（state.files / selectedNames は保持＝データは残る）
+    if (!state.renderEnabled) {
+        if (state.chart) state.chart.clear();
+        removeArrangeOverlay();
+        showRenderPausedOverlay();
+        dom.resetBtn.disabled = true;
+        dom.exportPng.disabled = true;
+        dom.copyChart.disabled = true;
+        state.numGrids = 0;
+        return;
+    }
     if (!state.chart) initChart();
 
     // Preserve current X-axis dataZoom state before notMerge rebuild
@@ -4515,6 +4557,7 @@ function renderChart() {
     if (n === 0) {
         state.chart.clear();
         removeArrangeOverlay();
+        restoreDefaultOverlay();
         dom.overlay.classList.remove('hidden');
         dom.resetBtn.disabled = true;
         dom.exportPng.disabled = true;
@@ -5110,6 +5153,26 @@ function toggleMonoColor() {
     dom.monoColorBtn.classList.toggle('btn-active', state.monoColorMode);
     renderChart();
     saveSettings();
+}
+
+// ── 描画ON/OFF切り替え（データは保持したままチャートだけ消す） ──
+if (dom.renderToggleBtn) dom.renderToggleBtn.addEventListener('click', toggleRender);
+
+function toggleRender() {
+    state.renderEnabled = !state.renderEnabled;
+    updateRenderToggleButton();
+    renderChart(); // OFF→ガードがチャートを消す / ON→現在の選択で再描画
+}
+
+function updateRenderToggleButton() {
+    const btn = dom.renderToggleBtn;
+    if (!btn) return;
+    const on = state.renderEnabled;
+    btn.classList.toggle('btn-active', !on); // OFF中を強調表示
+    const icon = btn.querySelector('i');
+    if (icon) icon.className = on ? 'bx bx-show' : 'bx bx-hide';
+    const label = btn.querySelector('.render-toggle-label');
+    if (label) label.textContent = on ? '描画 ON' : '描画 OFF';
 }
 
 function toggleBoxZoom() { state.brushMode ? exitBoxZoom() : enterBoxZoom(); }
