@@ -5,10 +5,15 @@
     'use strict';
 
     // 現行の設定スキーマバージョン(app.jsのsaveSettingsが書き込む値と一致させること)
-    const SETTINGS_VERSION = 3;
+    const SETTINGS_VERSION = 4;
 
     // 配列であるべきキー(違う型が入っていたら該当キーだけ捨てる)
-    const ARRAY_KEYS = ['fileInfos', 'selectedNames', 'customRAMs', 'chartGroups', 'bitManualOff', 'mergedGroups'];
+    const ARRAY_KEYS = ['fileInfos', 'selectedNames', 'customRAMs', 'chartGroups', 'bitManualOff', 'mergedGroups', 'customModes'];
+
+    // 旧ドライビングインデックスのサイクルID読み替え（v3以前 → v4）。
+    //   'wltc3'（旧 WLTC 4-phase Class 3）→ 'wltc3b_4'。
+    //   'mdc'（内蔵廃止。独自モードで扱う）→ null（自動判別に戻す）。
+    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4', mdc: null };
     // プレーンオブジェクトであるべきキー
     const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights'];
 
@@ -48,6 +53,15 @@
 
         // v1/v2の旧形式(chartGroupsなし・mergedGroupsあり)は、app.js側の
         // restoreChartGroupsFromSettingsにmergedGroups用フォールバックがあるため変換不要
+
+        // v3以前のドライビングインデックスのサイクルIDを現行IDへ読み替える。
+        if (out.driveIndex && typeof out.driveIndex === 'object' && !Array.isArray(out.driveIndex)) {
+            const cid = out.driveIndex.cycleId;
+            if (cid != null && Object.prototype.hasOwnProperty.call(LEGACY_CYCLE_ID, cid)) {
+                out.driveIndex = { ...out.driveIndex, cycleId: LEGACY_CYCLE_ID[cid] };
+            }
+        }
+
         out._version = SETTINGS_VERSION;
 
         return {

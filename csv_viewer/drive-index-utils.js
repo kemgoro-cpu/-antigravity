@@ -23,37 +23,82 @@
     const INERTIA_FACTOR = 1.015;
 
     // ─────────────────────────────────────────────────────────────
-    // 既知サイクルのレジストリ
+    // 既知サイクル（内蔵モード）のレジストリ
+    //   traceId  : drive-cycles-data.js (window.DriveCycleData) の目標車速トレースのキー
+    //   trimEnd  : トレースの打ち切り時間[s]（WLTC 3フェーズ版を 4フェーズ版から導出するため）
     //   total    : 総時間[s]（モード判別の主キー）
     //   maxSpeed : 最大目標車速[km/h]（補助・表示用）
     //   phases   : フェーズ境界 [{ name, start, end }]（秒）
+    //
+    // WLTC Class 3 は 3a/3b で同じフェーズ区切り（Low/Extra-High は共通、Medium/High の
+    // 車速波形のみクラス差）。3フェーズ版（日本国内型）は Extra-High を除いた Low+Medium+High。
     // ─────────────────────────────────────────────────────────────
+    const WLTC_LOW    = { name: 'Low',        start: 0,    end: 589  };
+    const WLTC_MED    = { name: 'Medium',     start: 589,  end: 1022 };
+    const WLTC_HIGH   = { name: 'High',       start: 1022, end: 1477 };
+    const WLTC_EXHIGH = { name: 'Extra-High', start: 1477, end: 1800 };
+    const wltcPhases3 = () => [{ ...WLTC_LOW }, { ...WLTC_MED }, { ...WLTC_HIGH }];
+    const wltcPhases4 = () => [{ ...WLTC_LOW }, { ...WLTC_MED }, { ...WLTC_HIGH }, { ...WLTC_EXHIGH }];
+
     const CYCLE_REGISTRY = [
         {
-            id: 'nedc', name: 'NEDC', total: 1180, maxSpeed: 120,
+            id: 'nedc', name: 'NEDC', traceId: 'nedc', total: 1180, maxSpeed: 120,
             phases: [
                 { name: 'Urban (UDC)',        start: 0,   end: 780  },
                 { name: 'Extra-Urban (EUDC)', start: 780, end: 1180 },
             ],
         },
+        // 判別時の既定優先のため、より一般的な 3b を先に置く（同一総時間の同点は先頭を採用）。
         {
-            id: 'wltc3', name: 'WLTC 4-phase (Class 3)', total: 1800, maxSpeed: 131.3,
-            phases: [
-                { name: 'Low',        start: 0,    end: 589  },
-                { name: 'Medium',     start: 589,  end: 1022 },
-                { name: 'High',       start: 1022, end: 1477 },
-                { name: 'Extra-High', start: 1477, end: 1800 },
-            ],
+            id: 'wltc3b_4', name: 'WLTC Class 3b (4フェーズ)', traceId: 'wltc_3b',
+            total: 1800, maxSpeed: 131.3, phases: wltcPhases4(),
         },
         {
-            id: 'mdc', name: 'MDC (Malaysia)', total: 1500, maxSpeed: 112,
-            // マレーシアMDCは公的に一意なフェーズ境界が定まっていないため暫定（全体のみ）。
-            // 実際の境界はモーダル上でユーザーが編集できる。
-            phases: [
-                { name: 'Total', start: 0, end: 1500 },
-            ],
+            id: 'wltc3b_3', name: 'WLTC Class 3b (3フェーズ)', traceId: 'wltc_3b', trimEnd: 1477,
+            total: 1477, maxSpeed: 97.4, phases: wltcPhases3(),
+        },
+        {
+            id: 'wltc3a_4', name: 'WLTC Class 3a (4フェーズ)', traceId: 'wltc_3a',
+            total: 1800, maxSpeed: 131.3, phases: wltcPhases4(),
+        },
+        {
+            id: 'wltc3a_3', name: 'WLTC Class 3a (3フェーズ)', traceId: 'wltc_3a', trimEnd: 1477,
+            total: 1477, maxSpeed: 97.4, phases: wltcPhases3(),
         },
     ];
+
+    // 旧サイクルIDの読み替え（設定マイグレーション・後方互換用）。
+    // 旧 'wltc3'（= WLTC 4-phase Class 3）→ 'wltc3b_4'。'mdc' は内蔵廃止（独自モードで扱う）。
+    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4' };
+
+    /** 旧サイクルIDを現行IDへ読み替える（未知IDはそのまま返す）。 */
+    function resolveCycleId(id) {
+        return (id && LEGACY_CYCLE_ID[id]) || id;
+    }
+
+    /**
+     * サイクルID から目標車速トレース { time:[s], speed:[km/h] } を返す。
+     * 内蔵サイクルは window.DriveCycleData から取得（trimEnd を適用）。
+     * 独自モードは customModes 配列内の { id, trace:{time,speed} } を返す。
+     * 見つからなければ null。
+     * @param {string} cycleId
+     * @param {Array}  [customModes] ユーザー定義モードの配列
+     */
+    function getCycleTrace(cycleId, customModes) {
+        const id = resolveCycleId(cycleId);
+        const c = CYCLE_REGISTRY.find(x => x.id === id);
+        if (c && c.traceId) {
+            const data = (typeof window !== 'undefined') ? window.DriveCycleData : null;
+            return data ? data.trace(c.traceId, c.trimEnd) : null;
+        }
+        if (customModes && customModes.length) {
+            const m = customModes.find(x => x.id === id);
+            if (m && m.trace && Array.isArray(m.trace.time) && Array.isArray(m.trace.speed)) {
+                return { time: m.trace.time.slice(), speed: m.trace.speed.slice() };
+            }
+        }
+        return null;
+    }
 
     /** 線形補間（二分探索）。timeArr は昇順前提。範囲外は端値でクランプ。 */
     function interp1(timeArr, valArr, t) {
@@ -194,13 +239,16 @@
      * @returns {{ id, name, phases, confidence, total, maxSpeed }}
      *   未判別時は id=null / phases=[] を返す（呼び出し側は全体のみ表示する）。
      */
-    function detectCycle(timeArr, targetSpeedArr) {
+    function detectCycle(timeArr, speedArr) {
         if (!timeArr || timeArr.length < 2) return null;
         const total = timeArr[timeArr.length - 1] - timeArr[0];
         let maxSpeed = 0;
-        for (let i = 0; i < targetSpeedArr.length; i++) {
-            const v = targetSpeedArr[i];
-            if (isFinite(v) && v > maxSpeed) maxSpeed = v;
+        // speedArr（実測 or 目標車速）は省略可。あれば最高車速を補助情報として算出。
+        if (speedArr) {
+            for (let i = 0; i < speedArr.length; i++) {
+                const v = speedArr[i];
+                if (isFinite(v) && v > maxSpeed) maxSpeed = v;
+            }
         }
         // 総時間が最も近い候補を選ぶ（許容差±5%以内なら採用）
         let best = null, bestErr = Infinity;
@@ -220,26 +268,40 @@
 
     /**
      * 指標と燃費を「全体＋フェーズ別」で計算する。
+     *
+     * 目標と実測は別々の時間軸を持てる（目標＝法規トレースの 0..N 秒、実測＝計測CSVの時間軸）。
+     * 各窓 [start,end] で目標・実測・燃料をそれぞれ自前の時間軸から10Hzグリッドへ補間して比較する。
+     * 全体窓は目標トレース（＝法規サイクル）の範囲を用いる。
+     *
      * @param {object} opts
-     *   time, target, actual : 同じ時間軸の配列（actual/targetは速度km/h）
-     *   fuelRate             : 実測Fuel_Rate配列[L/h]（省略可）
-     *   phases               : [{name,start,end}]（省略/空なら全体のみ）
-     *   roadLoad             : {A,B,C,mass}（省略可。揃っていればER/EERを計算）
+     *   target, actual : 速度配列[km/h]
+     *   time           : 目標・実測共通の時間軸[s]（旧API。targetTime/actualTime省略時のフォールバック）
+     *   targetTime     : 目標の時間軸[s]（省略時 time）
+     *   actualTime     : 実測の時間軸[s]（省略時 time）
+     *   fuelRate       : 実測Fuel_Rate配列[L/h]（省略可）
+     *   fuelTime       : 燃料の時間軸[s]（省略時 actualTime→time）
+     *   phases         : [{name,start,end}]（省略/空なら全体のみ）
+     *   roadLoad       : {A,B,C,mass}（省略可。揃っていればER/EERを計算）
      * @returns {{ total, phases:[{name,...}] } | null}
      */
     function computeMetrics(opts) {
-        const { time, target, actual, fuelRate, phases, roadLoad } = opts || {};
-        if (!time || !target || !actual || time.length < 2) return null;
+        const { time, target, actual, fuelRate, phases, roadLoad,
+                targetTime, actualTime, fuelTime } = opts || {};
+        const tTime = targetTime || time;
+        const aTime = actualTime || time;
+        const fTime = fuelTime || actualTime || time;
+        if (!target || !actual || !tTime || !aTime || tTime.length < 2 || aTime.length < 2) return null;
         const rl = normalizeRoadLoad(roadLoad);
 
         function windowMetrics(start, end) {
-            const tg = resampleTrace(time, target, start, end, DRIVE_INDEX_SAMPLE_HZ);
-            const ac = resampleTrace(time, actual, start, end, DRIVE_INDEX_SAMPLE_HZ);
-            const fu = fuelRate ? resampleTrace(time, fuelRate, start, end, DRIVE_INDEX_SAMPLE_HZ).values : null;
+            const tg = resampleTrace(tTime, target, start, end, DRIVE_INDEX_SAMPLE_HZ);
+            const ac = resampleTrace(aTime, actual, start, end, DRIVE_INDEX_SAMPLE_HZ);
+            const fu = fuelRate ? resampleTrace(fTime, fuelRate, start, end, DRIVE_INDEX_SAMPLE_HZ).values : null;
             return metricsForWindow(tg.values, ac.values, fu, rl, tg.dt);
         }
 
-        const t0 = time[0], t1 = time[time.length - 1];
+        // 全体窓は法規サイクル（目標トレース）の範囲。旧API（共通時間軸）では time と一致。
+        const t0 = tTime[0], t1 = tTime[tTime.length - 1];
         const total = windowMetrics(t0, t1);
         const phaseResults = (phases || []).map(p => ({
             name: p.name,
@@ -251,9 +313,12 @@
 
     window.DriveIndex = {
         CYCLE_REGISTRY,
+        LEGACY_CYCLE_ID,
         DRIVE_INDEX_SAMPLE_HZ,
         resampleTrace,
         resampleTo1Hz,
+        resolveCycleId,
+        getCycleTrace,
         detectCycle,
         computeMetrics,
     };

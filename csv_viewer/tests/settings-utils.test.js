@@ -36,18 +36,35 @@ function testOldFormatMigrated() {
 // 型が壊れたキーだけ削除され、正常なキーは残ること
 function testBrokenKeysDropped() {
     const result = CSVSettings.migrateSettings({
-        _version: 3,
+        _version: CSVSettings.SETTINGS_VERSION,
         selectedNames: 'broken',   // 配列であるべき → 削除
         yRanges: [],               // オブジェクトであるべき → 削除
         channelAliases: { A: ['B'] }, // 正常 → 残る
+        customModes: 'broken',        // 配列であるべき → 削除
         sidebarWidth: 320,            // 検証対象外のキー → そのまま
     });
     assert.equal(result.ok, true);
     assert.equal(result.reason, 'current');
     assert.equal(result.settings.selectedNames, undefined);
     assert.equal(result.settings.yRanges, undefined);
+    assert.equal(result.settings.customModes, undefined);
     assert.deepEqual(result.settings.channelAliases, { A: ['B'] });
     assert.equal(result.settings.sidebarWidth, 320);
+}
+
+// v3以前のドライビングインデックスのサイクルIDが現行IDへ読み替えられること
+function testDriveIndexCycleIdMigrated() {
+    const r1 = CSVSettings.migrateSettings({ _version: 3, driveIndex: { cycleId: 'wltc3', channels: {} } });
+    assert.equal(r1.ok, true);
+    assert.equal(r1.settings.driveIndex.cycleId, 'wltc3b_4');   // 旧 WLTC 4-phase → 3b 4フェーズ
+    assert.deepEqual(r1.settings.driveIndex.channels, {});      // 他のキーは保持
+
+    const r2 = CSVSettings.migrateSettings({ _version: 3, driveIndex: { cycleId: 'mdc' } });
+    assert.equal(r2.settings.driveIndex.cycleId, null);         // 内蔵廃止MDC → 自動判別
+
+    // 現行IDはそのまま
+    const r3 = CSVSettings.migrateSettings({ _version: CSVSettings.SETTINGS_VERSION, driveIndex: { cycleId: 'nedc' } });
+    assert.equal(r3.settings.driveIndex.cycleId, 'nedc');
 }
 
 // 入力オブジェクトを破壊しないこと(コピーして返す)
@@ -62,6 +79,7 @@ testInvalidInput();
 testNewerVersionRejected();
 testOldFormatMigrated();
 testBrokenKeysDropped();
+testDriveIndexCycleIdMigrated();
 testInputNotMutated();
 
 console.log('settings-utils tests passed');
