@@ -141,6 +141,23 @@ function distKm(speed) {
     approx(result.dr, 0, 1e-9);
 }
 
+// ── 時間整合: モード前後に余分データがあっても開始位置を検出できる ──
+{
+    // 目標: 0..4秒の山型。実測: 前に5秒・後ろに5秒のアイドル(0)を付けて埋め込む。
+    const targetTime = [0, 1, 2, 3, 4], targetSpeed = [0, 10, 20, 10, 0];
+    const mt = [], ms = [];
+    for (let t = 0; t <= 14; t++) { mt.push(t); ms.push((t >= 5 && t <= 9) ? targetSpeed[t - 5] : 0); }
+
+    const al = DriveIndex.alignActualToCycle(mt, ms, targetTime, targetSpeed);
+    approx(al.start, 5, 1e-6);       // サイクル開始＝実測5秒を検出
+    approx(al.rmse, 0, 1e-6);        // 完全一致
+
+    // 整合結果で目標を実測時間軸へ写像 → 余分データは窓外で無視され rmsse≈0
+    const ttM = targetTime.map(t => al.offset + t);
+    const r = DriveIndex.computeMetrics({ targetTime: ttM, target: targetSpeed, actualTime: mt, actual: ms }).total;
+    approx(r.rmsse, 0, 1e-6);
+}
+
 // ── フェーズ別計算（燃費）: wltc3b_4 の4フェーズ ──
 {
     const wltc = DriveIndex.CYCLE_REGISTRY.find(c => c.id === 'wltc3b_4');

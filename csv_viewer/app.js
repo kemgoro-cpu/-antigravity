@@ -676,6 +676,8 @@ const state = {
         cycleId:        null,  // 選択した走行モードID（'nedc'/'wltc3b_4'等、独自モードID）。nullは未選択（自動判別）
         phaseOverride:  null,  // 手動編集したフェーズ [{name,start,end}]。nullなら自動境界
         roadLoadByFile: {},    // 走行抵抗係数・質量をファイル別に保持 { ファイル名: {A,B,C,mass} }（任意。揃えばER/EER算出）
+        autoAlign:      true,  // 実測の前後余分データを自動整合（車速波形でサイクル開始位置を検出）するか
+        alignByFile:    {},    // サイクル開始/終了の手動上書き { ファイル名: {start, end} }（秒・文字列。空なら自動整合）
         results:        [],    // ファイル別の計算結果 [{ fileId, fileName, role, result, ... }]（永続化しない）
         lastResult:     null,  // メインの計算結果（ツールバーボタン表示用。永続化しない）
     },
@@ -3174,6 +3176,26 @@ function getEffectivePhases(effectiveId) {
 }
 
 /**
+ * 実測車速に最も一致する走行モードを、各モードのトレースとの整合RMSEで選ぶ。
+ * 前後に余分データがあっても（総時間で判定する detectCycle と違い）正しく判別できる。
+ * @returns {{ id, name, align }|null}
+ */
+function pickBestCycleByAlignment(mTime, mActual) {
+    if (!mTime || !mActual || mTime.length < 2) return null;
+    const mDur = mTime[mTime.length - 1] - mTime[0];
+    let best = null, bestRmse = Infinity;
+    for (const mode of allDriveModes()) {
+        const tr = window.DriveIndex.getCycleTrace(mode.id, state.customModes);
+        if (!tr || tr.time.length < 2) continue;
+        const Tdur = tr.time[tr.time.length - 1] - tr.time[0];
+        if (Tdur > mDur * 1.02) continue; // サイクルが実測より長いモードは対象外
+        const al = window.DriveIndex.alignActualToCycle(mTime, mActual, tr.time, tr.speed, { coarse: 150, fine: 60 });
+        if (al.rmse < bestRmse) { bestRmse = al.rmse; best = { id: mode.id, name: mode.name, align: al }; }
+    }
+    return best;
+}
+
+/**
  * 実測車速チャンネルと走行モードが揃えば指標・燃費を計算し state.driveIndex に格納する。
  * 目標車速は原則「選択モードの法規トレース」を使う（di.channels.target にCSV列名がある場合のみその列を目標にする）。
  * @returns {Promise<object|null>}
@@ -3199,10 +3221,27 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     // 解決結果を state に反映（永続化・モーダル表示用）
     di.channels = { target: targetName || null, actual: actualName || null, fuel: fuelName || null };
 
-    // 実効モードID: 手動選択（旧ID読み替え込み） > 実測データ長からの自動判別。
-    //   判別は時間軸の総長だけで足りるので実測車速の列ロードは不要。
-    const detMain = window.DriveIndex.detectCycle(mainFile.timeData, null);
-    const effectiveId = window.DriveIndex.resolveCycleId(di.cycleId) || (detMain && detMain.id) || null;
+    // モード判別と整合に使うため、メインの実測車速を先にロードする。
+    const mainActualCol = resolveColumnForFile(mainFile, actualName);
+    if (mainActualCol) await loadColumnsForFile(getMainFileId(), [mainActualCol.name]);
+    const mainActual = mainActualCol ? mainFile.colData[mainActualCol.id] : null;
+
+    // 実効モードID: 手動選択 > （自動整合ON時）車速ベストフィット > 総時間判別。
+    //   前後に余分データがあると総時間判別は外れるため、自動整合ONなら波形ベストフィットで判別する。
+    //   ただし重い全モード照合はモーダル再計算時のみ（autoDetect=false）。ファイル読込の自動計算は軽い総時間判別に留める。
+    const explicitId = window.DriveIndex.resolveCycleId(di.cycleId);
+    let effectiveId, detName;
+    if (explicitId) {
+        effectiveId = explicitId; detName = '—';
+    } else if (di.autoAlign && mainActual && !autoDetect) {
+        const best = pickBestCycleByAlignment(mainFile.timeData, mainActual);
+        effectiveId = best ? best.id : null;
+        detName = best ? best.name : '未判別';
+    } else {
+        const det = window.DriveIndex.detectCycle(mainFile.timeData, null);
+        effectiveId = det ? det.id : null;
+        detName = det ? det.name : '未判別';
+    }
 
     // 目標の供給源: CSV列名があればその列、なければ選択モードの法規トレース。
     const useModeTrace = !targetName;
@@ -3215,6 +3254,9 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         updateDriveIndexButton();
         return null;
     }
+
+    const traceT0  = modeTrace ? modeTrace.time[0] : 0;
+    const cycleDur = modeTrace ? (modeTrace.time[modeTrace.time.length - 1] - traceT0) : 0;
 
     // メイン＋全サブを順に計算する。サブはチャンネル名を別名解決（resolveColumnForFile）。
     const results = [];
@@ -3251,28 +3293,50 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             continue;
         }
 
-        // 実測の時間軸: モードトレースを目標にする時は cycle 時間に合わせて offset を加える
-        //   （サブの基準時刻 = 計測時刻 + offset。メインは offset=0）。CSV列モードでは同一ファイル内なので無補正。
-        const off = f.offset || 0;
-        const actualTime = (useModeTrace && off) ? Float64Array.from(f.timeData, t => t + off) : f.timeData;
-
         const phases   = getEffectivePhases(effectiveId);
         const roadLoad = di.roadLoadByFile[f.name] || null; // 走行抵抗はファイル別（任意）
 
-        entry.result = window.DriveIndex.computeMetrics({
-            targetTime: useModeTrace ? modeTrace.time  : f.timeData,
-            target:     useModeTrace ? modeTrace.speed : f.colData[tCol.id],
-            actualTime,
-            actual,
-            fuelTime:   actualTime,
-            fuelRate:   fuel,
-            phases, roadLoad,
-        });
+        let metricsOpts, alignInfo = null;
+        if (useModeTrace) {
+            // サイクル開始/終了を決める: 手動上書き > 自動整合 > データ先頭。
+            const man = di.alignByFile[f.name] || {};
+            const manStart = parseFloat(man.start), manEnd = parseFloat(man.end);
+            let start, autoStart = null, alignRmse = null;
+            if (isFinite(manStart)) {
+                start = manStart;                                   // 手動入力の開始時刻
+            } else if (di.autoAlign) {
+                const al = window.DriveIndex.alignActualToCycle(f.timeData, actual, modeTrace.time, modeTrace.speed);
+                start = al.start; autoStart = al.start; alignRmse = al.rmse; // 車速波形で自動整合
+            } else {
+                start = f.timeData[0];                              // 整合なし: データ先頭＝サイクル開始
+            }
+            const end   = isFinite(manEnd) ? manEnd : (start + cycleDur);
+            const scale = cycleDur > 0 ? (end - start) / cycleDur : 1;
+            // 目標トレース・フェーズ境界を実測の時間軸へ写像（前後の余分データは窓外なので無視される）
+            const targetTimeM = modeTrace.time.map(t => start + (t - traceT0) * scale);
+            const phasesM = phases.map(p => ({ name: p.name, start: start + p.start * scale, end: start + p.end * scale }));
+            metricsOpts = {
+                targetTime: targetTimeM, target: modeTrace.speed,
+                actualTime: f.timeData, actual, fuelTime: f.timeData, fuelRate: fuel,
+                phases: phasesM, roadLoad,
+            };
+            alignInfo = { start, end, auto: !isFinite(manStart) && di.autoAlign, autoStart, rmse: alignRmse };
+        } else {
+            // CSV列を目標にする従来モード（同一ファイル・同一時間軸。整合なし）
+            metricsOpts = {
+                targetTime: f.timeData, target: f.colData[tCol.id],
+                actualTime: f.timeData, actual, fuelTime: f.timeData, fuelRate: fuel,
+                phases, roadLoad,
+            };
+        }
+
+        entry.result = window.DriveIndex.computeMetrics(metricsOpts);
         entry.effectiveId  = effectiveId;
         entry.cycleName    = cycleNameOf(effectiveId);
-        entry.detectedName = detMain ? detMain.name : '未判別';
-        entry.detectedId   = detMain ? detMain.id : null;
+        entry.detectedName = detName;
+        entry.detectedId   = effectiveId;
         entry.targetSource = useModeTrace ? 'mode' : 'channel';
+        entry.align        = alignInfo;
         entry.channels     = { target: useModeTrace ? null : tCol.name, actual: aCol.name, fuel: fCol ? fCol.name : null };
         results.push(entry);
     }
@@ -3344,7 +3408,7 @@ function buildDriveIndexTable(result) {
  * ファイル別の計算結果をまとめて表示する。各ファイルに
  * 「見出し（ファイル名・Main/Subバッジ・判別サイクル）」「ファイル別走行抵抗入力」「指標表」を並べる。
  */
-function buildDriveIndexAllTables(results, roadLoadByFile) {
+function buildDriveIndexAllTables(results, roadLoadByFile, alignByFile) {
     if (!results || !results.length) {
         return `<p class="di-empty">計算するには「走行モード」と「実測車速」チャンネルを選び、「再計算」を押してください。</p>`;
     }
@@ -3357,6 +3421,23 @@ function buildDriveIndexAllTables(results, roadLoadByFile) {
             <span class="di-file-role di-role-${entry.role}">${roleLabel}</span>
             <span class="di-file-cycle">${sub}</span>
         </div>`;
+        // ファイル別 サイクル切り出し入力（前後の余分データを除外）。モードトレース利用時のみ表示。
+        let alignInputs = '';
+        if (entry.align) {
+            const man = (alignByFile && alignByFile[entry.fullName]) || {};
+            const a = entry.align;
+            const phStart = a.autoStart != null ? `自動 ${a.autoStart.toFixed(1)}` : '0';
+            const phEnd   = `自動 ${a.end != null ? a.end.toFixed(1) : ''}`;
+            const note = a.auto
+                ? `自動整合: ${a.start.toFixed(1)}〜${a.end.toFixed(1)}秒を使用` + (a.rmse != null ? `（一致度RMSE ${a.rmse.toFixed(1)} km/h）` : '')
+                : `手動: ${a.start.toFixed(1)}〜${a.end.toFixed(1)}秒を使用`;
+            alignInputs = `<div class="di-align di-file-align" data-file="${esc(entry.fullName)}">
+                <span class="di-rl-title">サイクル切り出し（前後の余分データ除外・空欄=自動整合）</span>
+                <label>開始[s]<input type="number" class="di-al-start" value="${esc(man.start || '')}" step="any" placeholder="${esc(phStart)}"></label>
+                <label>終了[s]<input type="number" class="di-al-end" value="${esc(man.end || '')}" step="any" placeholder="${esc(phEnd)}"></label>
+                <span class="di-align-note">${esc(note)}</span>
+            </div>`;
+        }
         // ファイル別 走行抵抗入力（data-file にフルネームを持たせ、再計算時に読み取る）
         const rlInputs = `<div class="di-roadload di-file-rl" data-file="${esc(entry.fullName)}">
             <span class="di-rl-title">走行抵抗（任意・ER/EER用）</span>
@@ -3368,7 +3449,7 @@ function buildDriveIndexAllTables(results, roadLoadByFile) {
         const body = entry.result
             ? buildDriveIndexTable(entry.result)
             : `<p class="di-empty">${esc(entry.reason || '計算できませんでした')}</p>`;
-        return `<div class="di-file-section">${head}${rlInputs}${body}</div>`;
+        return `<div class="di-file-section">${head}${alignInputs}${rlInputs}${body}</div>`;
     }).join('');
 }
 
@@ -3442,6 +3523,7 @@ function showDriveIndexModal() {
             <label>目標車速<select class="di-ch-target">${targetOpts(di.channels.target)}</select></label>
             <label>実測車速<select class="di-ch-actual">${speedOpts(di.channels.actual)}</select></label>
             <label>燃料流量<select class="di-ch-fuel">${fuelOpts(di.channels.fuel)}</select></label>
+            <label class="di-align-toggle"><input type="checkbox" class="di-auto-align" ${di.autoAlign ? 'checked' : ''}>前後の余分データを自動整合</label>
         </div>
         <details class="di-custom-modes">
             <summary>カスタムモードを追加（MDC等・時間-車速を貼り付け）</summary>
@@ -3577,7 +3659,7 @@ function showDriveIndexModal() {
 
     // 結果テーブル描画（ファイル別）
     const renderResult = () => {
-        modal.querySelector('.di-result').innerHTML = buildDriveIndexAllTables(di.results, di.roadLoadByFile);
+        modal.querySelector('.di-result').innerHTML = buildDriveIndexAllTables(di.results, di.roadLoadByFile, di.alignByFile);
     };
     renderResult();
 
@@ -3594,6 +3676,18 @@ function showDriveIndexModal() {
         });
     };
 
+    // 各ファイルのサイクル切り出し（開始/終了）入力を state.alignByFile に取り込む。
+    //   空欄なら手動上書きを解除（＝自動整合に戻す）。
+    const readAlignInputs = () => {
+        modal.querySelectorAll('.di-file-align').forEach(el => {
+            const key   = el.getAttribute('data-file');
+            const start = el.querySelector('.di-al-start').value.trim();
+            const end   = el.querySelector('.di-al-end').value.trim();
+            if (start === '' && end === '') delete di.alignByFile[key];
+            else di.alignByFile[key] = { start, end };
+        });
+    };
+
     // 再計算
     modal.querySelector('.di-recompute').addEventListener('click', async () => {
         di.cycleId = modal.querySelector('.di-cycle').value || null;
@@ -3602,7 +3696,9 @@ function showDriveIndexModal() {
             actual: modal.querySelector('.di-ch-actual').value || null,
             fuel:   modal.querySelector('.di-ch-fuel').value || null,
         };
+        di.autoAlign = modal.querySelector('.di-auto-align').checked;
         readRoadLoadInputs(); // ファイル別の走行抵抗を取り込む
+        readAlignInputs();    // ファイル別のサイクル切り出し（開始/終了）を取り込む
         // 編集フェーズが既定と同じなら override 解除（＝自動追従に戻す）
         const edited   = readPhaseRows();
         const defaults = registryPhasesOf(currentEffectiveId());
@@ -6053,6 +6149,8 @@ function collectSettings() {
             cycleId:        state.driveIndex.cycleId,
             phaseOverride:  state.driveIndex.phaseOverride,
             roadLoadByFile: state.driveIndex.roadLoadByFile,
+            autoAlign:      state.driveIndex.autoAlign,
+            alignByFile:    state.driveIndex.alignByFile,
         },
     };
 }
@@ -6338,6 +6436,8 @@ function applySettings(rawSettings) {
         if (d.cycleId !== undefined)       state.driveIndex.cycleId       = window.DriveIndex.resolveCycleId(d.cycleId);
         if (d.phaseOverride !== undefined) state.driveIndex.phaseOverride = d.phaseOverride;
         if (d.roadLoadByFile) state.driveIndex.roadLoadByFile = d.roadLoadByFile;
+        if (d.autoAlign !== undefined) state.driveIndex.autoAlign = d.autoAlign;
+        if (d.alignByFile) state.driveIndex.alignByFile = d.alignByFile;
     }
 
     // ファイルがまだ読み込まれていない場合は、残りの設定を保留する

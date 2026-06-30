@@ -803,6 +803,13 @@ input[type="text"]:focus {
 }
 .drive-index-modal select:focus, .drive-index-modal input:focus { border-color: var(--accent); }
 .di-roadload input { width: 92px; }
+/* サイクル切り出し（自動整合トグル＋ファイル別 開始/終了入力） */
+.di-align-toggle { flex-direction: row !important; align-items: center !important; gap: 5px !important; cursor: pointer; }
+.di-align-toggle input { margin: 0; }
+.di-align { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 8px; }
+.di-align label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--text-secondary); }
+.di-align input { width: 100px; }
+.di-align-note { font-size: 0.72rem; color: var(--text-secondary); align-self: center; }
 .di-phase-edit { margin: 10px 0; }
 .di-phase-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 4px; }
 .di-phase-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }

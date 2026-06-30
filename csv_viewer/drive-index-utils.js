@@ -144,6 +144,71 @@
         return resampleTrace(timeArr, valArr, startSec, endSec, 1);
     }
 
+    /**
+     * 実測車速を目標サイクルへ時間整合させる。
+     * 計測データはモード前後に余分なデータ（開始準備・終了後）を含むため、目標トレースが
+     * 実測のどこから始まるかを RMSE 最小化で探す。前後の余分データは窓外として無視される。
+     *
+     * @param {number[]} actualTime  実測の時間軸[s]
+     * @param {number[]} actualSpeed 実測車速[km/h]
+     * @param {number[]} targetTime  目標トレースの時間軸[s]（0..T 想定）
+     * @param {number[]} targetSpeed 目標車速[km/h]
+     * @param {object} [opts] { coarse, fine } 探索ステップ数
+     * @returns {{ offset:number, rmse:number, start:number }}
+     *   offset: targetTime に足すと実測時刻になる値（targetTimeMeasured = targetTime + offset）。
+     *   start : サイクル開始に対応する実測時刻（= targetTime[0] + offset）。
+     */
+    function alignActualToCycle(actualTime, actualSpeed, targetTime, targetSpeed, opts) {
+        opts = opts || {};
+        const nT = targetTime.length, nA = actualTime.length;
+        if (nT < 2 || nA < 2) return { offset: 0, rmse: Infinity, start: targetTime[0] || 0 };
+        const T0 = targetTime[0], T1 = targetTime[nT - 1];
+        const aT0 = actualTime[0], aT1 = actualTime[nA - 1];
+
+        // 照合は約1Hz相当に間引いて行う（探索を高速化）
+        const step = Math.max(1, Math.round(nT / 1800));
+        const tPts = [], tVals = [];
+        for (let i = 0; i < nT; i += step) { tPts.push(targetTime[i]); tVals.push(targetSpeed[i]); }
+
+        // offset の探索範囲: 目標窓 [T0+offset, T1+offset] が実測内に収まる範囲
+        const lo = aT0 - T0;
+        let hi = aT1 - T1;
+        if (hi < lo) hi = lo; // 実測がサイクルより短い→部分一致（範囲を1点に）
+
+        function rmseAt(offset) {
+            let sse = 0, n = 0;
+            for (let i = 0; i < tPts.length; i++) {
+                const m = tPts[i] + offset;            // 対応する実測時刻
+                if (m < aT0 || m > aT1) continue;      // 範囲外はスキップ
+                const d = interp1(actualTime, actualSpeed, m) - tVals[i];
+                if (isFinite(d)) { sse += d * d; n++; }
+            }
+            // 重なりが少なすぎる候補は不利にする（端で少数点だけ一致するのを防ぐ）
+            return n >= tPts.length * 0.5 ? Math.sqrt(sse / n) : Infinity;
+        }
+
+        const span = hi - lo;
+        let bestOff = lo, bestRmse = rmseAt(lo);
+        if (span > 0) {
+            const COARSE = opts.coarse || 300;
+            for (let s = 1; s <= COARSE; s++) {
+                const off = lo + span * (s / COARSE);
+                const r = rmseAt(off);
+                if (r < bestRmse) { bestRmse = r; bestOff = off; }
+            }
+            // 細探索（粗ステップ幅の前後）
+            const fineW = span / COARSE * 2;
+            const FINE = opts.fine || 200;
+            for (let s = 0; s <= FINE; s++) {
+                const off = bestOff - fineW + (2 * fineW) * (s / FINE);
+                if (off < lo - 1e-9 || off > hi + 1e-9) continue;
+                const r = rmseAt(off);
+                if (r < bestRmse) { bestRmse = r; bestOff = off; }
+            }
+        }
+        return { offset: bestOff, rmse: bestRmse, start: T0 + bestOff };
+    }
+
     /** 走行抵抗の入力を数値化。A/B/C/mass が全て有効数値ならオブジェクト、不足ならnull。 */
     function normalizeRoadLoad(rl) {
         if (!rl) return null;
@@ -319,6 +384,7 @@
         resampleTo1Hz,
         resolveCycleId,
         getCycleTrace,
+        alignActualToCycle,
         detectCycle,
         computeMetrics,
     };
