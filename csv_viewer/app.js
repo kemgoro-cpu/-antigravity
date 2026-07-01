@@ -3167,12 +3167,24 @@ function cycleNameOf(id) {
     return m ? m.name : '未判別';
 }
 
-/** 計算に使う実効フェーズを返す（手動編集 > モード既定 > 空） */
+/**
+ * 計算に使う実効フェーズを返す（手動編集 > モード既定 > 空）。
+ * 手動編集(phaseOverride)は「別モードを表示していた時に編集して保存されたまま」の場合があり得るため、
+ * その終了時刻が現在の実効モードの既定終了時刻と大きく食い違う（5%または5秒を超える差）場合は
+ * 古い編集とみなして無視し、既定フェーズに戻す。
+ */
 function getEffectivePhases(effectiveId) {
     const di = state.driveIndex;
-    if (di.phaseOverride && di.phaseOverride.length) return di.phaseOverride;
     const m = driveModeById(effectiveId);
-    return (m && m.phases) ? m.phases : [];
+    const defaults = (m && m.phases) ? m.phases : [];
+    if (di.phaseOverride && di.phaseOverride.length) {
+        const expectedEnd = defaults.length ? defaults[defaults.length - 1].end : null;
+        const overrideEnd = di.phaseOverride[di.phaseOverride.length - 1].end;
+        const mismatch = expectedEnd != null && isFinite(overrideEnd)
+            && Math.abs(overrideEnd - expectedEnd) > Math.max(expectedEnd * 0.05, 5);
+        if (!mismatch) return di.phaseOverride;
+    }
+    return defaults;
 }
 
 /**
@@ -3226,21 +3238,25 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     if (mainActualCol) await loadColumnsForFile(getMainFileId(), [mainActualCol.name]);
     const mainActual = mainActualCol ? mainFile.colData[mainActualCol.id] : null;
 
-    // 実効モードID: 手動選択 > （自動整合ON時）車速ベストフィット > 総時間判別。
-    //   前後に余分データがあると総時間判別は外れるため、自動整合ONなら波形ベストフィットで判別する。
-    //   ただし重い全モード照合はモーダル再計算時のみ（autoDetect=false）。ファイル読込の自動計算は軽い総時間判別に留める。
+    // 実効モードID: 手動選択 > 総時間判別（軽量・高速） > （それで一致しなければ）車速ベストフィット。
+    //   前後に余分データがあると総時間判別は外れるため、その場合のみ波形ベストフィットにフォールバックする。
+    //   ファイル読込時の自動計算でもフォールバックを行う（ここを省略すると「前後に余分データがある
+    //   ファイルはファイルを開いただけでは認識されない」という本末転倒になるため）。
     const explicitId = window.DriveIndex.resolveCycleId(di.cycleId);
     let effectiveId, detName;
     if (explicitId) {
         effectiveId = explicitId; detName = '—';
-    } else if (di.autoAlign && mainActual && !autoDetect) {
-        const best = pickBestCycleByAlignment(mainFile.timeData, mainActual);
-        effectiveId = best ? best.id : null;
-        detName = best ? best.name : '未判別';
     } else {
         const det = window.DriveIndex.detectCycle(mainFile.timeData, null);
-        effectiveId = det ? det.id : null;
-        detName = det ? det.name : '未判別';
+        if (det && det.id) {
+            effectiveId = det.id; detName = det.name;
+        } else if (di.autoAlign && mainActual) {
+            const best = pickBestCycleByAlignment(mainFile.timeData, mainActual);
+            effectiveId = best ? best.id : null;
+            detName = best ? best.name : '未判別';
+        } else {
+            effectiveId = null; detName = '未判別';
+        }
     }
 
     // 目標の供給源: CSV列名があればその列、なければ選択モードの法規トレース。
@@ -3310,7 +3326,9 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             } else {
                 start = f.timeData[0];                              // 整合なし: データ先頭＝サイクル開始
             }
-            const end   = isFinite(manEnd) ? manEnd : (start + cycleDur);
+            // 終了時刻は開始より後でなければならない（逆転入力は無視して既定=start+cycleDurに戻す）。
+            const manEndInvalid = isFinite(manEnd) && manEnd <= start;
+            const end   = (isFinite(manEnd) && !manEndInvalid) ? manEnd : (start + cycleDur);
             const scale = cycleDur > 0 ? (end - start) / cycleDur : 1;
             // 目標トレース・フェーズ境界を実測の時間軸へ写像（前後の余分データは窓外なので無視される）
             const targetTimeM = modeTrace.time.map(t => start + (t - traceT0) * scale);
@@ -3320,7 +3338,11 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
                 actualTime: f.timeData, actual, fuelTime: f.timeData, fuelRate: fuel,
                 phases: phasesM, roadLoad,
             };
-            alignInfo = { start, end, auto: !isFinite(manStart) && di.autoAlign, autoStart, rmse: alignRmse };
+            alignInfo = {
+                start, end, auto: !isFinite(manStart) && di.autoAlign, autoStart, rmse: alignRmse,
+                manEndInvalid,                          // 終了時刻の入力が無視されたか（開始以前だった）
+                scaled: cycleDur > 0 && Math.abs(scale - 1) > 0.02, // フェーズ境界を比例配分で補正したか
+            };
         } else {
             // CSV列を目標にする従来モード（同一ファイル・同一時間軸。整合なし）
             metricsOpts = {
@@ -3426,11 +3448,18 @@ function buildDriveIndexAllTables(results, roadLoadByFile, alignByFile) {
         if (entry.align) {
             const man = (alignByFile && alignByFile[entry.fullName]) || {};
             const a = entry.align;
-            const phStart = a.autoStart != null ? `自動 ${a.autoStart.toFixed(1)}` : '0';
-            const phEnd   = `自動 ${a.end != null ? a.end.toFixed(1) : ''}`;
-            const note = a.auto
-                ? `自動整合: ${a.start.toFixed(1)}〜${a.end.toFixed(1)}秒を使用` + (a.rmse != null ? `（一致度RMSE ${a.rmse.toFixed(1)} km/h）` : '')
-                : `手動: ${a.start.toFixed(1)}〜${a.end.toFixed(1)}秒を使用`;
+            const phStart = a.autoStart != null ? `自動 ${diFmtNum(a.autoStart, 1)}` : '0';
+            const phEnd   = `自動 ${a.end != null ? diFmtNum(a.end, 1) : ''}`;
+            // rmseが無限大（実測データがサイクルより大幅に短く、重なりが乏しい）の場合は
+            // 数値をそのまま出さず、信頼度が低い旨を文章で伝える。
+            const rmseNote = (a.rmse == null) ? ''
+                : !isFinite(a.rmse) ? '（実測データがサイクルより大幅に短く、整合の信頼度が低い可能性があります）'
+                : `（一致度RMSE ${diFmtNum(a.rmse, 1)} km/h）`;
+            let note = a.auto
+                ? `自動整合: ${diFmtNum(a.start, 1)}〜${diFmtNum(a.end, 1)}秒を使用` + rmseNote
+                : `手動: ${diFmtNum(a.start, 1)}〜${diFmtNum(a.end, 1)}秒を使用`;
+            if (a.manEndInvalid) note += '（終了時刻が開始以前だったため入力を無視しました）';
+            if (a.scaled) note += '（フェーズ境界を比例配分で補正）';
             alignInputs = `<div class="di-align di-file-align" data-file="${esc(entry.fullName)}">
                 <span class="di-rl-title">サイクル切り出し（前後の余分データ除外・空欄=自動整合）</span>
                 <label>開始[s]<input type="number" class="di-al-start" value="${esc(man.start || '')}" step="any" placeholder="${esc(phStart)}"></label>
@@ -3618,13 +3647,22 @@ function showDriveIndexModal() {
                 <button class="di-cm-del" data-id="${esc(m.id)}" title="削除">×</button>
             </div>`;
         }).join('');
-        cmListEl.querySelectorAll('.di-cm-del').forEach(b => b.addEventListener('click', () => {
+        cmListEl.querySelectorAll('.di-cm-del').forEach(b => b.addEventListener('click', async () => {
             const id = b.getAttribute('data-id');
+            const wasSelected = window.DriveIndex.resolveCycleId(di.cycleId) === id;
             state.customModes = (state.customModes || []).filter(m => m.id !== id);
-            if (window.DriveIndex.resolveCycleId(di.cycleId) === id) di.cycleId = null; // 選択中なら自動に戻す
+            if (wasSelected) di.cycleId = null; // 選択中なら自動に戻す
             saveSettings();
             renderCustomModeList();
             refreshCycleSelect();
+            // 削除したモードを選択中だった場合、結果・フェーズ編集欄が古いモードの表示のまま
+            // 残らないよう、自動判別で再計算してから両方を再描画する
+            // （<select>のvalueをJSで代入しても'change'イベントは発火しないため、明示的な更新が必要）。
+            if (wasSelected) {
+                await computeDriveIndex({ autoDetect: false });
+                renderResult();
+                renderPhaseRows(getEffectivePhases(currentEffectiveId()));
+            }
         }));
     };
     renderCustomModeList();
@@ -3643,10 +3681,19 @@ function showDriveIndexModal() {
     modal.querySelector('.di-cm-add').addEventListener('click', () => {
         const name = cmNameEl.value.trim();
         if (!name) { cmMsgEl.textContent = 'モード名を入力してください'; cmMsgEl.className = 'di-cm-msg error'; return; }
+        state.customModes = state.customModes || [];
+        if (state.customModes.some(m => m.name === name)) {
+            cmMsgEl.textContent = `「${name}」は既に存在します。別の名前にしてください`;
+            cmMsgEl.className = 'di-cm-msg error';
+            return;
+        }
         const r = parseTimeSpeedText(cmDataEl.value);
         if (!r.ok) { cmMsgEl.textContent = r.error; cmMsgEl.className = 'di-cm-msg error'; return; }
-        const id = 'cm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        state.customModes = state.customModes || [];
+        // ID衝突（Date.now()+乱数が同一ミリ秒で偶然一致）を避けるため、既存IDと重複しないことを確認する
+        let id;
+        do {
+            id = 'cm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        } while (state.customModes.some(m => m.id === id));
         state.customModes.push({ id, name, trace: r.trace, phases: [] });
         saveSettings();
         renderCustomModeList();
@@ -6433,7 +6480,12 @@ function applySettings(rawSettings) {
     if (s.driveIndex) {
         const d = s.driveIndex;
         if (d.channels)      state.driveIndex.channels      = d.channels;
-        if (d.cycleId !== undefined)       state.driveIndex.cycleId       = window.DriveIndex.resolveCycleId(d.cycleId);
+        if (d.cycleId !== undefined) {
+            // 孤立ID対策: 復元先が内蔵レジストリにも復元済みカスタムモードにも無ければ、
+            // ドロップダウン表示（自動判別）と内部状態がずれてしまうため null（自動）に戻す。
+            const resolved = window.DriveIndex.resolveCycleId(d.cycleId);
+            state.driveIndex.cycleId = driveModeById(resolved) ? resolved : null;
+        }
         if (d.phaseOverride !== undefined) state.driveIndex.phaseOverride = d.phaseOverride;
         if (d.roadLoadByFile) state.driveIndex.roadLoadByFile = d.roadLoadByFile;
         if (d.autoAlign !== undefined) state.driveIndex.autoAlign = d.autoAlign;

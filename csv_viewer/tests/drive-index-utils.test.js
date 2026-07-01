@@ -77,6 +77,32 @@ function distKm(speed) {
     assert.ok(ned.time.length >= 1180);
 }
 
+// ── getCycleTrace: カスタムモード（独自定義の時間-車速トレース）の取得 ──
+{
+    const customModes = [
+        { id: 'cm_test1', name: 'MDC test', trace: { time: [0, 1, 2, 3], speed: [0, 10, 20, 0] } },
+    ];
+    // 内蔵レジストリを経由せず customModes から取得できる
+    const t = DriveIndex.getCycleTrace('cm_test1', customModes);
+    assert.ok(t);
+    assert.deepStrictEqual(t.time, [0, 1, 2, 3]);
+    assert.deepStrictEqual(t.speed, [0, 10, 20, 0]);
+
+    // 未知のID（内蔵にもcustomModesにも無い）は null
+    assert.strictEqual(DriveIndex.getCycleTrace('does_not_exist', customModes), null);
+    assert.strictEqual(DriveIndex.getCycleTrace('cm_test1', []), null);          // customModesが空なら見つからない
+    assert.strictEqual(DriveIndex.getCycleTrace('cm_test1', undefined), null);   // customModes省略時も安全にnull
+
+    // 壊れたエントリ（trace形状が不正）は無視されnullを返す（例外を投げない）
+    const broken = [{ id: 'cm_broken', name: 'X', trace: { time: [0, 1] } }]; // speed が無い
+    assert.strictEqual(DriveIndex.getCycleTrace('cm_broken', broken), null);
+
+    // 内蔵IDが優先され、customModesの同名IDでは上書きされない
+    const shadow = [{ id: 'nedc', name: 'fake', trace: { time: [0, 1], speed: [0, 1] } }];
+    const real = DriveIndex.getCycleTrace('nedc', shadow);
+    assert.ok(real.time.length > 2); // 本物のNEDCトレース（2点のfakeではない）
+}
+
 // ── 3a と 3b: Low/Extra-High 共通、Medium/High 差分 ──
 {
     const a = DriveIndex.getCycleTrace('wltc3a_4');
