@@ -10,10 +10,17 @@
     // 配列であるべきキー(違う型が入っていたら該当キーだけ捨てる)
     const ARRAY_KEYS = ['fileInfos', 'selectedNames', 'customRAMs', 'chartGroups', 'bitManualOff', 'mergedGroups', 'customModes'];
 
-    // 旧ドライビングインデックスのサイクルID読み替え（v3以前 → v4）。
-    //   'wltc3'（旧 WLTC 4-phase Class 3）→ 'wltc3b_4'。
-    //   'mdc'（内蔵廃止。独自モードで扱う）→ null（自動判別に戻す）。
-    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4', mdc: null };
+    // 旧ドライビングインデックスのサイクルID読み替えマップ（v3以前 → v4）。
+    // 単一情報源は drive-index-utils.js の DriveIndex.LEGACY_CYCLE_ID
+    // （'wltc3' → 'wltc3b_4'、内蔵廃止の 'mdc' → null＝自動判別に戻す）。
+    // index.html では settings-utils.js が drive-index-utils.js より先に読み込まれるため、
+    // モジュール初期化時ではなく migrateSettings 実行時に遅延参照する。
+    function getLegacyCycleIdMap() {
+        if (typeof module !== 'undefined' && module.exports) {
+            return require('./drive-index-utils.js').LEGACY_CYCLE_ID;
+        }
+        return root.DriveIndex.LEGACY_CYCLE_ID;
+    }
     // プレーンオブジェクトであるべきキー
     const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights'];
 
@@ -56,9 +63,10 @@
 
         // v3以前のドライビングインデックスのサイクルIDを現行IDへ読み替える。
         if (out.driveIndex && typeof out.driveIndex === 'object' && !Array.isArray(out.driveIndex)) {
+            const legacyMap = getLegacyCycleIdMap();
             const cid = out.driveIndex.cycleId;
-            if (cid != null && Object.prototype.hasOwnProperty.call(LEGACY_CYCLE_ID, cid)) {
-                out.driveIndex = { ...out.driveIndex, cycleId: LEGACY_CYCLE_ID[cid] };
+            if (cid != null && Object.prototype.hasOwnProperty.call(legacyMap, cid)) {
+                out.driveIndex = { ...out.driveIndex, cycleId: legacyMap[cid] };
             }
         }
 

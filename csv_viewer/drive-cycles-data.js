@@ -13,10 +13,12 @@
  *   Class 3a 総距離 ≈ 23.19 km（Medium/High が 3b より低い。Low と ExtraHigh は 3a/3b 共通）。
  *   NEDC 総距離 ≈ 11.01 km（UDC4.058 / EUDC6.955）、最高車速 120 km/h。
  *
- * window.DriveCycleData.trace(key, trimEndSec?) が { time:[], speed:[] } を返す。
+ * DriveCycleData.trace(key, trimEndSec?) が { time:[], speed:[] } を返す。
  *   trimEndSec を渡すと t<=trimEndSec で打ち切る（WLTC 3フェーズ版を 1477 秒で導出するのに使う）。
+ *
+ * parser-utils.jsと同じUMDパターン: ブラウザでは root.DriveCycleData、Nodeでは module.exports。
  */
-(function () {
+(function (root) {
     'use strict';
 
     // 1Hz 車速[km/h]をカンマ区切り文字列で保持（ファイルを小さく保つ）。ロード時に数値配列へ展開。
@@ -52,5 +54,11 @@
         return { time, speed };
     }
 
-    window.DriveCycleData = { keys: Object.keys(SPEED), trace };
-})();
+    const api = { keys: Object.keys(SPEED), trace };
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = api;
+    } else {
+        root.DriveCycleData = api;
+    }
+})(typeof globalThis !== 'undefined' ? globalThis : this);

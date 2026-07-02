@@ -67,6 +67,23 @@ function testDriveIndexCycleIdMigrated() {
     assert.equal(r3.settings.driveIndex.cycleId, 'nedc');
 }
 
+// 旧サイクルIDの読み替えが単一情報源(DriveIndex.LEGACY_CYCLE_ID)と一致すること。
+// settings-utilsは同マップを直接参照する設計なので、このテストは参照配線の退行
+// （二重定義への逆戻り・マップ変更漏れ）を検知する
+function testLegacyCycleIdConsistency() {
+    const DriveIndex = require('../drive-index-utils.js');
+    const entries = Object.entries(DriveIndex.LEGACY_CYCLE_ID);
+    assert.ok(entries.length > 0, 'LEGACY_CYCLE_IDが空');
+    for (const [oldId, newId] of entries) {
+        const r = CSVSettings.migrateSettings({ _version: 3, driveIndex: { cycleId: oldId } });
+        assert.equal(r.ok, true);
+        assert.equal(
+            r.settings.driveIndex.cycleId, newId,
+            `旧ID '${oldId}' は '${newId}' へ読み替えられるべき`
+        );
+    }
+}
+
 // 入力オブジェクトを破壊しないこと(コピーして返す)
 function testInputNotMutated() {
     const input = { selectedNames: 'broken' };
@@ -80,6 +97,7 @@ testNewerVersionRejected();
 testOldFormatMigrated();
 testBrokenKeysDropped();
 testDriveIndexCycleIdMigrated();
+testLegacyCycleIdConsistency();
 testInputNotMutated();
 
 console.log('settings-utils tests passed');

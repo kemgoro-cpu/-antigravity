@@ -1377,6 +1377,13 @@ function showChartGroupModal(groupId) {
 // File drag-drop & input
 // ─────────────────────────────────────────────────────────────
 
+// ドロップゾーン外（チャート領域など）へのD&Dでブラウザがファイルへページ遷移し、
+// 読み込み済みの全状態が消えるのを防ぐ（B3対策）。
+// preventDefaultは伝播を止めないため、dropZoneのハンドラや
+// ArrangeモードのパネルD&D（updateArrangeOverlay内）とは干渉しない。
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
 dom.dropZone.addEventListener('dragover', e => { e.preventDefault(); dom.dropZone.classList.add('dragover'); });
 dom.dropZone.addEventListener('dragleave', () => dom.dropZone.classList.remove('dragover'));
 dom.dropZone.addEventListener('drop', e => {
@@ -1504,6 +1511,13 @@ async function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     const trn = isTrnFile(file.name);
     const requestedEncoding = getRequestedEncoding();
+    // ヘッダー行のヒントはパース開始時点のSettings値をファイルごとに固定する（B4対策）。
+    // 検出結果はUI表示としてdom.nameRow/unitRowへ書き戻されるため、並行パース中に
+    // DOMから読み直すと他ファイルの検出値に汚染される。以降のチェーンはこの値だけを使う。
+    const headerHints = {
+        nameRow: parseInt(dom.nameRow.value, 10) - 1,
+        unitRow: parseInt(dom.unitRow.value, 10) - 1,
+    };
     const parseJob = createParseJob(file.name, 'Detecting encoding...');
     let encoding = 'utf-8';
     try {
@@ -1533,7 +1547,7 @@ async function parseCSV(file) {
                 skipEmptyLines: true,
             });
             // 変換済みテキストを保持するため、fileの代わりにconvertedを渡す
-            onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding, requestedEncoding, parseJob);
+            onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding, requestedEncoding, parseJob, headerHints);
         } catch (e) {
             finishParseJob(parseJob);
             showError(`TRN parse failed: ${file.name}`, e.stack || e.message);
@@ -1550,7 +1564,7 @@ async function parseCSV(file) {
                 preview: 50,
                 complete: res => {
                     try {
-                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding, requestedEncoding, parseJob);
+                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding, requestedEncoding, parseJob, headerHints);
                     } catch (e) {
                         finishParseJob(parseJob);
                         showError(`Header parse failed: ${file.name}`, e.stack || e.message);
@@ -1568,11 +1582,13 @@ async function parseCSV(file) {
     }
 }
 
-function detectHeaderRows(raw) {
+function detectHeaderRows(raw, hints) {
+    // hints（parseCSV開始時に固定したSettings値）があればそれを使う。
+    // DOMからの読み取りはhints無しで呼ばれた場合のフォールバックのみ（B4対策）。
     return detectHeaderRowsBase(
         raw,
-        parseInt(dom.nameRow.value, 10) - 1,
-        parseInt(dom.unitRow.value, 10) - 1
+        Number.isInteger(hints?.nameRow) ? hints.nameRow : parseInt(dom.nameRow.value, 10) - 1,
+        Number.isInteger(hints?.unitRow) ? hints.unitRow : parseInt(dom.unitRow.value, 10) - 1
     );
 }
 
@@ -1601,14 +1617,14 @@ function describeHeaderParseIssue(raw, nameRow, unitRow, dataStart) {
  * Extracts column metadata and stores File reference for lazy loading.
  * Does NOT load any column data yet — only time data is loaded via streaming.
  */
-function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodingMode, parseJob) {
+function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodingMode, parseJob, headerHints) {
     if (parseJob?.cancelled) {
         finishParseJob(parseJob);
         showWarning(`読み込みをキャンセルしました: ${fileName}`);
         return;
     }
 
-    const { nameRow, unitRow } = detectHeaderRows(raw);
+    const { nameRow, unitRow } = detectHeaderRows(raw, headerHints);
     const dataStart = Math.max(nameRow, unitRow >= 0 ? unitRow : nameRow) + 1;
 
     const parseIssue = describeHeaderParseIssue(raw, nameRow, unitRow, dataStart);
@@ -1618,6 +1634,8 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
         return;
     }
 
+    // 検出結果のUI表示のみ。パース処理はheaderHints経由で受け渡すため、
+    // この書き戻し値が他ファイルのパースに影響することはない（B4対策）
     dom.nameRow.value = nameRow + 1;
     if (unitRow >= 0) dom.unitRow.value = unitRow + 1;
 
@@ -1662,8 +1680,6 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
         return;
     }
 
-    const hasMain   = Object.values(state.files).some(f => f.role === 'main');
-    const role      = hasMain ? 'sub' : 'main';
     const shortName = fileName.length > 22 ? fileName.slice(0, 20) + '…' : fileName;
 
     // Phase 2: Stream-parse to extract ONLY time data (no column values yet)
@@ -1711,6 +1727,14 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     }
                     const timeData = new Float64Array(timeChunks.length);
                     for (let i = 0; i < timeChunks.length; i++) timeData[i] = timeChunks[i];
+
+                    // ロール決定はstate.filesへの挿入直前に同期で行う（B1対策）。
+                    // ヘッダーパース時（Phase 1）に決めると、複数ファイル同時ドロップで
+                    // どちらも「Main不在」を見て両方Mainになる競合が起きる。
+                    // completeコールバックはイベントループで1件ずつ直列に走るため、
+                    // ここで判定→直後に挿入すれば競合しない。
+                    const hasMain = Object.values(state.files).some(f => f.role === 'main');
+                    const role    = hasMain ? 'sub' : 'main';
 
                     state.files[fileId] = {
                         name: fileName, shortName, columns, timeData,
@@ -2365,8 +2389,9 @@ function renderFileList() {
         const badgeTitle = isMain
             ? 'Main file — 右クリックで色変更'
             : `Sub file (s${subNum}) — クリックでMain切替 / 右クリックで色変更\nCustom RAM式で s${subNum}:チャンネル名 と書くと参照できます`;
-        // ファイル色をバッジの背景色に反映
-        const fColor = state.fileColors[fid] || '#6366f1';
+        // ファイル色をバッジの背景色に反映。
+        // 値はapplySettingsで#RRGGBB検証済みだが、多層防御として出力側もesc()を通す
+        const fColor = esc(state.fileColors[fid] || '#6366f1');
         const encodingLabel = f.headerInfo?.encodingMode === 'auto'
             ? `Auto:${f.headerInfo.encoding}`
             : (f.headerInfo?.encoding || '');
@@ -6458,8 +6483,20 @@ function applySettings(rawSettings) {
         }
     }
 
-    // Y軸範囲を復元
-    if (s.yRanges) state.yRanges = s.yRanges;
+    // Y軸範囲を復元。インポートJSON由来のオブジェクトを参照代入すると以後の編集が
+    // 設定オブジェクトと同一実体を書き換えてしまうため、エントリごとにコピーする（B6対策）。
+    // 形式が { min, max } でないエントリは捨てる
+    if (s.yRanges) {
+        const cleaned = {};
+        for (const [name, r] of Object.entries(s.yRanges)) {
+            if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+            cleaned[name] = {
+                min: r.min != null ? String(r.min) : '',
+                max: r.max != null ? String(r.max) : '',
+            };
+        }
+        state.yRanges = cleaned;
+    }
     if (s.channelAliases) state.channelAliases = { ...s.channelAliases };
 
     // 単色モード設定を復元
@@ -6467,7 +6504,16 @@ function applySettings(rawSettings) {
         state.monoColorMode = s.monoColorMode;
         dom.monoColorBtn.classList.toggle('btn-active', state.monoColorMode);
     }
-    if (s.fileColors) state.fileColors = s.fileColors;
+    // ファイル色を復元。参照代入を避けてコピーし、#RRGGBB形式でない値は
+    // インポートJSONで任意文字列を注入できてしまうため捨てる（B6+S1対策）。
+    // 捨てられたファイルはデフォルト色（renderFileListの'#6366f1'）にフォールバックする
+    if (s.fileColors) {
+        const cleaned = {};
+        for (const [fid, color] of Object.entries(s.fileColors)) {
+            if (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)) cleaned[fid] = color;
+        }
+        state.fileColors = cleaned;
+    }
 
     // カスタム走行モード（時間-車速トレース）を復元
     if (Array.isArray(s.customModes)) {

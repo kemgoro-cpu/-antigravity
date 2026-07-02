@@ -3,7 +3,7 @@
  * 走行サイクル（モード走行）データの「ドライビングインデックス」（SAE J2951系）と
  * 燃費を計算する純粋関数群。DOM や app の状態に依存しない（＝単体テストしやすい）。
  *
- * window.DriveIndex として公開する。
+ * parser-utils.jsと同じUMDパターン: ブラウザでは root.DriveIndex、Nodeでは module.exports。
  *
  * 指標（実測トレース v / 目標トレース u を比較）:
  *   - RMSSE : 速度誤差のRMS [km/h]
@@ -15,8 +15,14 @@
  *
  * 注: SAE J2951 / WLTP の公開手順に合わせ、目標・実測を10Hzグリッドに線形補間してから計算する。
  */
-(function () {
+(function (root) {
     'use strict';
+
+    // 目標車速トレースデータ(drive-cycles-data.js)。
+    // Nodeではrequire、ブラウザではグローバル参照（index.htmlでcycles→indexの順に読み込む）
+    const DriveCycleData = (typeof module !== 'undefined' && module.exports)
+        ? require('./drive-cycles-data.js')
+        : (root.DriveCycleData || null);
 
     const DRIVE_INDEX_SAMPLE_HZ = 10;
     const DRIVE_INDEX_SAMPLE_DT = 1 / DRIVE_INDEX_SAMPLE_HZ;
@@ -24,7 +30,7 @@
 
     // ─────────────────────────────────────────────────────────────
     // 既知サイクル（内蔵モード）のレジストリ
-    //   traceId  : drive-cycles-data.js (window.DriveCycleData) の目標車速トレースのキー
+    //   traceId  : drive-cycles-data.js (DriveCycleData) の目標車速トレースのキー
     //   trimEnd  : トレースの打ち切り時間[s]（WLTC 3フェーズ版を 4フェーズ版から導出するため）
     //   total    : 総時間[s]（モード判別の主キー）
     //   maxSpeed : 最大目標車速[km/h]（補助・表示用）
@@ -67,18 +73,24 @@
         },
     ];
 
-    // 旧サイクルIDの読み替え（設定マイグレーション・後方互換用）。
-    // 旧 'wltc3'（= WLTC 4-phase Class 3）→ 'wltc3b_4'。'mdc' は内蔵廃止（独自モードで扱う）。
-    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4' };
+    // 旧サイクルIDの読み替えマップ（設定マイグレーション・後方互換用）。単一情報源はここ。
+    // settings-utils.jsのマイグレーションもこのマップを参照する（v3以前 → v4）。
+    //   'wltc3'（旧 WLTC 4-phase Class 3）→ 'wltc3b_4'。
+    //   'mdc'（内蔵廃止。独自モードで扱う）→ null（保存設定のcycleIdを自動判別に戻す）。
+    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4', mdc: null };
 
-    /** 旧サイクルIDを現行IDへ読み替える（未知IDはそのまま返す）。 */
+    /**
+     * 旧サイクルIDを現行IDへ読み替える（未知IDはそのまま返す）。
+     * null読み替え（mdc等の廃止ID）は「現行IDが存在しない」ことを意味するため、
+     * 実行時解決では素通しになる（呼び出し側のレジストリ照合でnullに落ちる）。
+     */
     function resolveCycleId(id) {
         return (id && LEGACY_CYCLE_ID[id]) || id;
     }
 
     /**
      * サイクルID から目標車速トレース { time:[s], speed:[km/h] } を返す。
-     * 内蔵サイクルは window.DriveCycleData から取得（trimEnd を適用）。
+     * 内蔵サイクルは DriveCycleData（drive-cycles-data.js）から取得（trimEnd を適用）。
      * 独自モードは customModes 配列内の { id, trace:{time,speed} } を返す。
      * 見つからなければ null。
      * @param {string} cycleId
@@ -88,8 +100,7 @@
         const id = resolveCycleId(cycleId);
         const c = CYCLE_REGISTRY.find(x => x.id === id);
         if (c && c.traceId) {
-            const data = (typeof window !== 'undefined') ? window.DriveCycleData : null;
-            return data ? data.trace(c.traceId, c.trimEnd) : null;
+            return DriveCycleData ? DriveCycleData.trace(c.traceId, c.trimEnd) : null;
         }
         if (customModes && customModes.length) {
             const m = customModes.find(x => x.id === id);
@@ -376,7 +387,7 @@
         return { total, phases: phaseResults, hasRoadLoad: !!rl };
     }
 
-    window.DriveIndex = {
+    const api = {
         CYCLE_REGISTRY,
         LEGACY_CYCLE_ID,
         DRIVE_INDEX_SAMPLE_HZ,
@@ -388,4 +399,10 @@
         detectCycle,
         computeMetrics,
     };
-})();
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = api;
+    } else {
+        root.DriveIndex = api;
+    }
+})(typeof globalThis !== 'undefined' ? globalThis : this);
