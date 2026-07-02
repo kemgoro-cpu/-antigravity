@@ -14,6 +14,7 @@ csv_viewer/
 ├─ settings-utils.js   … 設定のバージョンチェック・マイグレーション（同上）
 ├─ history-utils.js    … Undo/Redo統合履歴のロジック（同上）
 ├─ layout-utils.js     … フォントプリセット・グリッド高さ配分（同上）
+├─ chart-options-utils.js … チャートのEChartsオプション構築ヘルパー（同上）
 ├─ drive-index-utils.js … ドライビングインデックス（走行モード判定）のロジック（同上）
 ├─ drive-cycles-data.js … 標準走行モード（NEDC / WLTC等）の目標車速データ
 ├─ styles.css
@@ -134,7 +135,7 @@ Main と Sub で同じ物理値なのにチャンネル名が違う場合、Chan
 
 ## 開発メモ
 
-ブラウザ不要のユーティリティテスト（全5本: parser / settings / history / layout / drive-index）は
+ブラウザ不要のユーティリティテスト（全6本: parser / settings / history / layout / chart-options / drive-index）は
 `csv_viewer/` で次のコマンドを実行すると一括で走ります（1本でも失敗すると非0終了）。
 
 ```bash
@@ -142,7 +143,7 @@ npm test
 ```
 
 従来どおり `node tests/<name>.test.js` で1本ずつ実行することもできます
-（parser-utils / settings-utils / history-utils / layout-utils / drive-index-utils）。
+（parser-utils / settings-utils / history-utils / layout-utils / chart-options-utils / drive-index-utils）。
 
 構文チェック:
 
@@ -152,6 +153,7 @@ node --check parser-utils.js
 node --check settings-utils.js
 node --check history-utils.js
 node --check layout-utils.js
+node --check chart-options-utils.js
 node --check drive-index-utils.js
 node --check drive-cycles-data.js
 ```

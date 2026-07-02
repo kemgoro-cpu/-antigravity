@@ -1,5 +1,12 @@
 ﻿'use strict';
 
+// M9: 全体をIIFEで包み、app.js内部の関数・変数（数百個）をグローバルスコープへ
+// 漏らさない。function宣言のhoistingはIIFEスコープ内でそのまま維持される。
+// テスト（Playwrightスモーク）とコンソールデバッグに必要な最小限だけを
+// ファイル末尾の window.__csvViewerDebug で明示的に公開する。
+// （本文のインデントは差分を最小にするため意図的に変えていない）
+(function () {
+
 // ─────────────────────────────────────────────────────────────
 // Error notification system
 // ─────────────────────────────────────────────────────────────
@@ -755,21 +762,10 @@ const L = {
 // チューニング用定数（挙動を調整するときはここを変える）
 // ─────────────────────────────────────────────────────────────
 
-// Bitチャンネルのグリッド高さの重み（通常グリッド = 1.0 に対する比率）
-const BIT_WEIGHT = 0.33;
-// Y軸ズームスライダー1本あたりの水平方向の占有幅(px)
-const ZOOM_GAP = 12;
-// プロット幅がこの値(px)を下回ったら「Y軸が多すぎる」警告を出す
-const NARROW_PLOT_WARN_PX = 260;
-// EChartsのプログレッシブ描画: 1フレームで描く点数 / 有効になるデータ点数のしきい値
-const SERIES_PROGRESSIVE = 400;
-const SERIES_PROGRESSIVE_THRESHOLD = 3000;
-// データ点マーカー（Show Markers ON時の丸印）のサイズ(px)
-const MARKER_SYMBOL_SIZE = 4;
-// markAreaでY範囲外の帯をグリッド端まで塗るための「事実上無限遠」の係数とオフセット
-// （EChartsのmarkAreaはInfinityを受け付けないため十分大きい値で代用する）
-const MARK_AREA_FAR_SCALE  = 100;
-const MARK_AREA_FAR_OFFSET = 1e9;
+// チャート描画（renderChart）系の定数は chart-options-utils.js の
+// CSVChartOptions.CONSTANTS が単一情報源（BIT_WEIGHT / ZOOM_GAP /
+// NARROW_PLOT_WARN_PX / SERIES_PROGRESSIVE(_THRESHOLD) / MARKER_SYMBOL_SIZE /
+// MARK_AREA_FAR_SCALE / MARK_AREA_FAR_OFFSET）。値を変えるときはそちらを編集する。
 // Custom RAM式サジェストの最大表示件数
 const SUGGEST_MAX_ITEMS = 15;
 // 設定保存(saveSettings)のdebounce時間(ms)
@@ -5036,13 +5032,9 @@ function renderChart() {
     const gapPx  = L.gapPx;
 
     // Bitチャンネルのグリッドは通常の1/3の高さにする
-    // まず各グリッドの「重み」を計算（Bit = BIT_WEIGHT, 通常 = 1.0）
-    const gridWeights = order.map(name => {
-        const grp = groups.get(name);
-        // マージグリッドの全チャンネルがBitなら狭くする
-        const allBit = grp.mergedNames.every(n => state.bitChannels.has(n));
-        return allBit ? BIT_WEIGHT : 1.0;
-    });
+    // 各グリッドの「重み」（Bit = BIT_WEIGHT, 通常 = 1.0）を純粋関数で計算
+    const gridWeights = CSVChartOptions.computeGridWeights(
+        order.map(gid => groups.get(gid).mergedNames), state.bitChannels);
 
     // グリッド高さの配分（layout-utils.jsの純粋関数）。
     // rowHeightPx/個別上書きが未設定なら従来どおりコンテナに収まる自動配分、
@@ -5075,32 +5067,18 @@ function renderChart() {
     const series   = [], dataZooms = [];
 
     // Compute global time range across all loaded files (including offsets)
-    let globalXMin = Infinity, globalXMax = -Infinity;
-    for (const f of Object.values(state.files)) {
-        if (!f.timeData || f.timeData.length === 0) continue;
-        const off = f.offset || 0;
-        const lo  = f.timeData[0] + off;
-        const hi  = f.timeData[f.timeData.length - 1] + off;
-        if (lo < globalXMin) globalXMin = lo;
-        if (hi > globalXMax) globalXMax = hi;
-    }
-    if (!isFinite(globalXMin)) { globalXMin = 0; globalXMax = 1; }
+    const { min: globalXMin, max: globalXMax } = CSVChartOptions.computeGlobalXRange(
+        Object.values(state.files)
+            .filter(f => f.timeData && f.timeData.length > 0)
+            .map(f => ({ first: f.timeData[0], last: f.timeData[f.timeData.length - 1], offset: f.offset || 0 })));
 
     const AXIS_GAP = DL.axisGap; // フォントに連動(大きいフォントで軸同士が重ならないように)
-    const groupLayouts = order.map(groupId => {
-        const axisCount = Math.max(groups.get(groupId).axes.length, 1);
-        const leftCount = Math.ceil(axisCount / 2);
-        const rightCount = Math.floor(axisCount / 2);
-        return {
-            left: DL.gridLeft + Math.max(0, leftCount - 1) * AXIS_GAP,
-            right: Math.max(L.gridRight, 68) + Math.max(0, rightCount - 1) * AXIS_GAP + axisCount * ZOOM_GAP,
-            axisCount,
-        };
-    });
-    const xSliderLeft = Math.max(...groupLayouts.map(layout => layout.left));
-    const xSliderRight = Math.max(...groupLayouts.map(layout => layout.right));
+    const groupLayouts = CSVChartOptions.computeGroupLayouts(
+        order.map(groupId => Math.max(groups.get(groupId).axes.length, 1)),
+        { gridLeft: DL.gridLeft, gridRight: L.gridRight, axisGap: AXIS_GAP });
+    const { left: xSliderLeft, right: xSliderRight } = CSVChartOptions.computeSliderBounds(groupLayouts);
     const narrowPlotWidth = state.chart.getWidth() - xSliderLeft - xSliderRight;
-    const warningKey = narrowPlotWidth < NARROW_PLOT_WARN_PX ? `${Math.max(...groupLayouts.map(l => l.axisCount))}:${Math.round(narrowPlotWidth)}` : '';
+    const warningKey = CSVChartOptions.deriveNarrowWarningKey(narrowPlotWidth, groupLayouts.map(l => l.axisCount));
     if (warningKey && state.axisLayoutWarningKey !== warningKey) {
         state.axisLayoutWarningKey = warningKey;
         showWarning('Y軸が多いため描画領域が狭くなっています', 'Overlay Settings で軸を共有すると表示幅を広げられます。');
@@ -5108,35 +5086,16 @@ function renderChart() {
         state.axisLayoutWarningKey = '';
     }
 
-    // X-axis slider (bottom, all grids linked)
+    // X-axis slider (bottom, all grids linked) + inside zoom (scroll + pan)
     const xStart = savedXZoom ? savedXZoom.start : 0;
     const xEnd   = savedXZoom ? savedXZoom.end   : 100;
-    dataZooms.push({
-        type: 'slider',
-        xAxisIndex: order.map((_, i) => i),
-        start: xStart, end: xEnd,
-        bottom: 8, height: 28,
+    dataZooms.push(...CSVChartOptions.buildXDataZooms({
+        gridCount: n, start: xStart, end: xEnd,
         left: xSliderLeft, right: xSliderRight,
-        borderColor: T.border,
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        fillerColor: 'rgba(99,102,241,0.18)',
-        handleStyle: { color: T.accent, borderColor: T.accent },
-        textStyle: { color: T.dim, fontSize: F.slider },
-        dataBackground: {
-            lineStyle: { color: 'rgba(99,102,241,0.4)', width: 1 },
-            areaStyle: { color: 'rgba(99,102,241,0.07)' },
-        },
-    });
-
-    // X-axis inside zoom (scroll + pan) — pan disabled in shift mode
-    dataZooms.push({
-        type: 'inside',
-        xAxisIndex: order.map((_, i) => i),
-        start: xStart, end: xEnd,
-        zoomOnMouseWheel:  true,
-        moveOnMouseMove:   !state.shiftMode && !state.arrangeMode,
-        moveOnMouseWheel:  false,
-    });
+        theme: T, sliderFontSize: F.slider,
+        // シフト/Arrangeモード中はドラッグパンを無効化する
+        panEnabled: !state.shiftMode && !state.arrangeMode,
+    }));
 
     const yAxisIndexByGroup = new Map();
     let _cumulativeTop = topPx;
@@ -5147,92 +5106,56 @@ function renderChart() {
         _cumulativeTop += gridH + gapPx;
         const layout = groupLayouts[i];
 
-        const isBitGrid = grp.mergedNames.every(nm => state.bitChannels.has(nm));
-
         grids.push({
             left: layout.left, right: layout.right,
             top: pct(topPxI), height: pct(gridH),
             containLabel: false,
         });
 
-        xAxes.push({
-            gridIndex: i,
-            type: 'value',
-            axisLabel: {
-                show: i === n - 1,
-                color: T.dim, fontSize: F.label,
-                formatter: v => v % 1 === 0 ? v.toString() : v.toFixed(1),
-            },
-            axisTick:  { show: i === n - 1, lineStyle: { color: T.axis } },
-            axisLine:  { show: true, lineStyle: { color: T.axis } },
-            splitLine: { show: true, lineStyle: { color: T.grid } },
+        xAxes.push(CSVChartOptions.buildXAxisOption({
+            gridIndex: i, isLast: i === n - 1,
             min: globalXMin, max: globalXMax,
-        });
+            fontSize: F.label, theme: T,
+        }));
 
-        const yValFmt = v => {
-            if (v === 0) return '0';
-            const a = Math.abs(v);
-            if (a >= 1e6)  return (v / 1e6).toFixed(1) + 'M';
-            if (a >= 1e3)  return (v / 1e3).toFixed(1) + 'k';
-            if (a >= 1)    return v.toFixed(1);
-            if (a >= 0.01) return v.toPrecision(2);
-            return v.toExponential(1);
-        };
         const axisIndexMap = new Map();
         const axisSpecs = new Map();
         grp.axes.forEach((axis, axisOrder) => {
             const assignedNames = grp.channels.filter(ch => ch.axisId === axis.id).map(ch => ch.name);
             if (!assignedNames.length) return;
-            const representative = assignedNames.includes(axis.representative) ? axis.representative : assignedNames[0];
-            const rangeSpec = state.yRanges[representative] ?? {};
-            const axisIsBit = assignedNames.every(name => state.bitChannels.has(name));
-            const yMinParsed = axisIsBit ? -0.2 : parseFloat(rangeSpec.min);
-            const yMaxParsed = axisIsBit ? 1.2 : parseFloat(rangeSpec.max);
-            const hasYMin = !isNaN(yMinParsed);
-            const hasYMax = !isNaN(yMaxParsed);
-            const position = axisOrder % 2 === 0 ? 'left' : 'right';
-            const offset = Math.floor(axisOrder / 2) * AXIS_GAP;
+            // 代表チャンネル・Y範囲・左右位置の解決（純粋関数）
+            const axisSpec = CSVChartOptions.computeAxisSpec({
+                assignedNames,
+                preferredRepresentative: axis.representative,
+                yRanges: state.yRanges,
+                bitChannels: state.bitChannels,
+                axisOrder,
+                axisGap: AXIS_GAP,
+            });
             const units = getAxisDisplayUnit(getChartGroupById(groupId), axis.id);
-            const yLabelName = assignedNames.join(' / ');
-            const yLabel = units ? `${yLabelName}  (${units})` : yLabelName;
             const yAxisIndex = yAxes.length;
             axisIndexMap.set(axis.id, yAxisIndex);
-            axisSpecs.set(axis.id, { representative, yMinParsed, yMaxParsed, hasYMin, hasYMax });
+            axisSpecs.set(axis.id, axisSpec);
 
-            yAxes.push({
+            yAxes.push(CSVChartOptions.buildYAxisOption({
                 gridIndex: i,
-                type: 'value',
-                position,
-                offset,
-                name: yLabel,
-                nameLocation: 'middle',
+                axisSpec,
+                assignedNames,
+                units,
+                axisOrder,
                 nameGap: DL.nameGap,
-                nameTextStyle: { color: T.dim, fontSize: F.name, fontWeight: 500 },
-                // 軸名(回転表示)がグリッド高さを超えると上下のチャートのラベルと
-                // 重なるため、収まらない分は「…」で自動的に切り詰める(ECharts 5.5組み込み)
-                nameTruncate: { maxWidth: CSVLayout.truncateMaxWidth(gridH), ellipsis: '…' },
-                min: hasYMin ? yMinParsed : undefined,
-                max: hasYMax ? yMaxParsed : undefined,
-                scale: !hasYMin && !hasYMax,
-                axisLabel: { color: T.dim, fontSize: F.label, width: DL.labelWidth, overflow: 'truncate', formatter: yValFmt },
-                axisPointer: { show: false },
-                axisTick: { lineStyle: { color: T.axis } },
-                axisLine: { show: true, lineStyle: { color: T.axis } },
-                splitLine: { show: axisOrder === 0, lineStyle: { color: T.grid } },
-            });
+                nameFontSize: F.name,
+                labelFontSize: F.label,
+                labelWidth: DL.labelWidth,
+                nameTruncateMaxWidth: CSVLayout.truncateMaxWidth(gridH),
+                theme: T,
+            }));
 
-            dataZooms.push({
-                type: 'slider', yAxisIndex: [yAxisIndex],
-                start: 0, end: 100,
-                right: L.yZoomRight + axisOrder * ZOOM_GAP, top: pct(topPxI),
-                height: pct(gridH), width: 9,
-                borderColor: 'transparent',
-                backgroundColor: 'rgba(255,255,255,0.04)',
-                fillerColor: 'rgba(255,255,255,0.1)',
-                handleStyle: { color: 'rgba(255,255,255,0.3)', borderColor: 'rgba(255,255,255,0.2)' },
-                showDetail: false, showDataShadow: false,
-                textStyle: { color: 'transparent', fontSize: 0 },
-            });
+            dataZooms.push(CSVChartOptions.buildYSliderZoom({
+                yAxisIndex, axisOrder,
+                top: pct(topPxI), height: pct(gridH),
+                yZoomRight: L.yZoomRight,
+            }));
         });
         yAxisIndexByGroup.set(groupId, axisIndexMap);
 
@@ -5240,98 +5163,38 @@ function renderChart() {
         grp.series.forEach(s => {
             const yAxisIndex = axisIndexMap.get(s.axisId);
             if (yAxisIndex === undefined) return;
-            const axisSpec = axisSpecs.get(s.axisId);
             const isFirstForAxis = !firstSeriesByAxis.has(s.axisId);
             firstSeriesByAxis.add(s.axisId);
-            const { yMinParsed, yMaxParsed, hasYMin, hasYMax } = axisSpec;
-            const markArea = (isFirstForAxis && (hasYMin || hasYMax)) ? {
-                silent: true,
-                data: [
-                    ...(hasYMax ? [[{ yAxis: yMaxParsed }, { yAxis: yMaxParsed * MARK_AREA_FAR_SCALE + MARK_AREA_FAR_OFFSET }]] : []),
-                    ...(hasYMin ? [[{ yAxis: -(Math.abs(yMinParsed) * MARK_AREA_FAR_SCALE + MARK_AREA_FAR_OFFSET) }, { yAxis: yMinParsed }]] : []),
-                ],
-                itemStyle: { color: 'rgba(255,80,50,0.07)' },
-            } : undefined;
-
-            const markLine = (isFirstForAxis && (hasYMin || hasYMax)) ? {
-                silent: true,
-                symbol: 'none',
-                data: [
-                    ...(hasYMax ? [{ yAxis: yMaxParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▲ ${yMaxParsed}`, fontSize: F.label - 1, color: 'rgba(255,120,60,0.8)', position: 'insideStartTop' } }] : []),
-                    ...(hasYMin ? [{ yAxis: yMinParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▼ ${yMinParsed}`, fontSize: F.label - 1, color: 'rgba(255,120,60,0.8)', position: 'insideStartBottom' } }] : []),
-                ],
-            } : undefined;
-
-            series.push({
-                id:         s.id,
-                name:       s.label,
-                type:       'line',
+            // markArea / markLine（Y範囲の帯と境界線）はbuildSeriesOption内で
+            // 「軸ごとの最初のシリーズ」にだけ付与される
+            series.push(CSVChartOptions.buildSeriesOption(s, {
                 xAxisIndex: i,
                 yAxisIndex,
-                data:       s.data,
-                showSymbol: state.showMarkers,
-                symbolSize: MARKER_SYMBOL_SIZE,
-                sampling:   dom.sampling.value || false,
-                progressive: SERIES_PROGRESSIVE,
-                progressiveThreshold: SERIES_PROGRESSIVE_THRESHOLD,
-                clip:       true,
-                lineStyle:  { width: state.channelLineWidths[s.channelName] ?? state.lineWidth, color: s.color, type: s.dash ? [6, 4] : 'solid' },
-                itemStyle:  { color: s.color },
-                emphasis:   { disabled: true },
-                ...(markArea ? { markArea } : {}),
-                ...(markLine ? { markLine } : {}),
-            });
+                isFirstForAxis,
+                axisSpec: axisSpecs.get(s.axisId),
+                showMarkers: state.showMarkers,
+                sampling: dom.sampling.value || false,
+                lineWidth: state.channelLineWidths[s.channelName] ?? state.lineWidth,
+                labelFontSize: F.label,
+            }));
         });
     });
 
+    // 全グリッド共通の静的オプション（axisPointer / tooltipの見た目 / brush）は純粋関数で構築
+    const baseOption = CSVChartOptions.buildBaseChartOption();
+    // tooltip formatterだけはモジュール状態（_lastTooltipParams / updatePerGridLabels /
+    // フォント設定）に依存するためrenderChart側で注入する
+    baseOption.tooltip.formatter = params => {
+        if (!params || !params.length) return '';
+        _lastTooltipParams = params;
+        updatePerGridLabels();
+        const t = params[0].axisValue;
+        const tStr = typeof t === 'number' ? t.toFixed(3) : String(t);
+        return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:#818cf8;font-weight:600">t = ${tStr} s</span>`;
+    };
+
     state.chart.setOption({
-        animation:       false,
-        backgroundColor: 'transparent',
-        legend:          { show: false },  // sidebar acts as legend
-
-        // Global axis pointer — links vertical crosshair across ALL grids
-        axisPointer: {
-            link:  [{ xAxisIndex: 'all' }],
-            label: { show: false },
-            triggerOn: 'mousemove',
-        },
-
-        tooltip: {
-            show: true,
-            trigger: 'axis',
-            axisPointer: {
-                type: 'line',
-                lineStyle: { color: 'rgba(255,255,255,0.35)', type: 'solid', width: 1 },
-                animation: false,
-                snap: true,
-            },
-            backgroundColor: 'rgba(12,14,20,0.45)',
-            extraCssText: [
-                'backdrop-filter:blur(8px)',
-                '-webkit-backdrop-filter:blur(8px)',
-                'border:1px solid rgba(255,255,255,0.08)',
-                'border-radius:6px',
-                'box-shadow:0 4px 16px rgba(0,0,0,0.35)',
-                'padding:4px 8px',
-                'pointer-events:none',
-            ].join(';'),
-            confine: true,
-            formatter: params => {
-                if (!params || !params.length) return '';
-                _lastTooltipParams = params;
-                updatePerGridLabels();
-                const t = params[0].axisValue;
-                const tStr = typeof t === 'number' ? t.toFixed(3) : String(t);
-                return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:#818cf8;font-weight:600">t = ${tStr} s</span>`;
-            },
-        },
-
-        brush: {
-            xAxisIndex: 'all', brushLink: 'all', toolbox: [],
-            throttleType: 'debounce', throttleDelay: 80,
-            outOfBrush: { colorAlpha: 0.05 },
-        },
-
+        ...baseOption,
         grid:     grids,
         xAxis:    xAxes,
         yAxis:    yAxes,
@@ -6909,3 +6772,23 @@ const _savedSettings = loadSettings();
 if (_savedSettings) {
     applySettings(_savedSettings);
 }
+
+// ─────────────────────────────────────────────────────────────
+// テスト/デバッグ用の公開面（M9）
+// ─────────────────────────────────────────────────────────────
+// IIFE化によりapp.js内部はグローバルへ一切漏れない。Playwrightスモークテストと
+// 開発時のコンソールデバッグに必要な最小限だけをこの名前空間で公開する。
+// アプリ本体のコードがこの名前空間に依存してはいけない（公開は一方通行）。
+window.__csvViewerDebug = {
+    state,
+    getChartImageDataURL,
+    buildPresetSettings,
+    saveCurrentPreset,
+    T,
+    renderChart,
+    parseExprToAST,
+    evaluateAST,
+    esc,
+};
+
+})();
