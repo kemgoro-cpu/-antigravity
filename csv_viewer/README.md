@@ -14,7 +14,13 @@ csv_viewer/
 ├─ settings-utils.js   … 設定のバージョンチェック・マイグレーション（同上）
 ├─ history-utils.js    … Undo/Redo統合履歴のロジック（同上）
 ├─ layout-utils.js     … フォントプリセット・グリッド高さ配分（同上）
+├─ drive-index-utils.js … ドライビングインデックス（走行モード判定）のロジック（同上）
+├─ drive-cycles-data.js … 標準走行モード（NEDC / WLTC等）の目標車速データ
 ├─ styles.css
+├─ package.json        … npm test 用（依存ライブラリなし）
+├─ scripts/
+│   ├─ run-tests.js       … 全テストを順次実行するランナー（npm test の実体）
+│   └─ generate_nedc.js   … NEDCサンプルTRN生成スクリプト（開発用）
 ├─ tests/              … Nodeで実行する単体テスト
 └─ lib/                … 同梱ライブラリ（ECharts, PapaParse等）
 ```
@@ -128,32 +134,41 @@ Main と Sub で同じ物理値なのにチャンネル名が違う場合、Chan
 
 ## 開発メモ
 
-ブラウザ不要のユーティリティテストは次のコマンドで実行できます。
+ブラウザ不要のユーティリティテスト（全5本: parser / settings / history / layout / drive-index）は
+`csv_viewer/` で次のコマンドを実行すると一括で走ります（1本でも失敗すると非0終了）。
 
 ```bash
-rtk node tests/parser-utils.test.js
-rtk node tests/settings-utils.test.js
-rtk node tests/history-utils.test.js
-rtk node tests/layout-utils.test.js
+npm test
 ```
+
+従来どおり `node tests/<name>.test.js` で1本ずつ実行することもできます
+（parser-utils / settings-utils / history-utils / layout-utils / drive-index-utils）。
 
 構文チェック:
 
 ```bash
-rtk node --check app.js
-rtk node --check parser-utils.js
-rtk node --check settings-utils.js
-rtk node --check history-utils.js
+node --check app.js
+node --check parser-utils.js
+node --check settings-utils.js
+node --check history-utils.js
+node --check layout-utils.js
+node --check drive-index-utils.js
+node --check drive-cycles-data.js
 ```
+
+同梱サンプル `NEDC_sample_A/B/C.trn` は `node scripts/generate_nedc.js` で再生成できます。
+乱数はシード固定（mulberry32）のため出力は決定的で、何度実行しても同じ内容になります。
+出力先は省略時 `csv_viewer/` 直下（コミット済みサンプルを上書き）で、
+`node scripts/generate_nedc.js <出力ディレクトリ>` で変更できます。
 
 設定の保存形式（`_version`）を変更するときは、`settings-utils.js` の
 `SETTINGS_VERSION` とマイグレーション処理、テストを必ずセットで更新してください。
 
 ## 同梱ライブラリ
 
-| ライブラリ | 用途 |
-|---|---|
-| ECharts | チャート描画 |
-| PapaParse | CSV パース |
-| Inter / Roboto Mono | UI フォント |
-| Boxicons | アイコン |
+| ライブラリ | バージョン | 用途 |
+|---|---|---|
+| ECharts | 5.5.0 | チャート描画 |
+| PapaParse | 5.4.1 | CSV パース |
+| Inter / Roboto Mono | 不明（同梱ファイルにバージョン記録なし） | UI フォント |
+| Boxicons | 不明（同梱ファイルにバージョン記録なし） | アイコン |
