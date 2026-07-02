@@ -3,6 +3,72 @@
 開発を引き継ぐ人（人間・AIエージェント問わず）向けの正確な変更記録。
 コミット単位の詳細は `git log` も参照のこと。
 
+## 2026-07-02: 改善バックログ全面実施（Claude Code実施）
+
+全体コードレビューで作成した `IMPROVEMENT_BACKLOG.md`（29タスク）を7フェーズで実施。
+各タスクの詳細・見送り理由はバックログ冒頭の「実施状況」を参照。コミット: `0973dd1`〜`ff0f928`。
+
+### 新規ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `package.json` + `scripts/run-tests.js` | `npm test` で全テスト一括実行（失敗時は非0終了） |
+| `chart-options-utils.js` | チャートオプション構築の純粋関数群（UMD、グローバル名 `CSVChartOptions`）。描画系定数 `CONSTANTS` の単一情報源 |
+| `tests/chart-options-utils.test.js` | 16ケース。テストは計6本になった |
+
+移動: `generate_nedc.js` → `scripts/`（シード付き乱数化で出力が決定的に）
+
+### 挙動が変わった修正（バグ修正）
+
+1. **複数ファイル同時ドロップのMainロール競合**: ロール判定を `state.files` 挿入直前
+   （Phase 2 completeコールバック内）へ移動。CSV経路の非同期パースで両方Mainになる競合を解消
+2. **`.trn` のスペース入りチャンネル名**: 区切りを「パイプ/タブ/連続2個以上の空白」に変更
+   （`parser-utils.js` の `convertWhitespaceToTabs`）。既存サンプル3本の変換結果はバイト一致
+3. **ゾーン外ドロップでの全状態消失**: windowレベルの `dragover`/`drop` ガードを追加
+4. **並行パース中のヘッダー検出値汚染**: 行ヒントをパース開始時に固定し引数で受け渡し。
+   `dom.nameRow` への書き戻しはUI表示専用になった
+5. **`LEGACY_CYCLE_ID` の二重定義**: `drive-index-utils.js` を単一情報源に統一（`mdc: null` が正）。
+   settings-utils は読み込み順の都合で `migrateSettings` 実行時に遅延参照する
+6. **設定インポートの参照代入**: `applySettings` の `yRanges`/`fileColors` をコピー+形式検証に。
+   `fileColors` は `#RRGGBB` 検証（不正値は破棄しデフォルト色へ）
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **チャート描画系の定数（`BIT_WEIGHT` 等）は `chart-options-utils.js` の `CONSTANTS` を編集する**
+  （app.js側に重複定義を作らないこと）
+- **app.jsはIIFEで包まれている**。トップレベルの関数・変数はwindowへ漏れない。
+  テスト/コンソールから触る必要があるものは末尾の `window.__csvViewerDebug` に追加する
+  （現在: state / getChartImageDataURL / buildPresetSettings / saveCurrentPreset / T /
+  renderChart / parseExprToAST / evaluateAST / esc）
+- **テーマ色は `styles.css` の `:root` トークンが単一情報源**。ECharts用の実値は起動時に
+  `cssVar()` で解決（`T` 定数）。PNG背景も `--bg-main` に追従する
+- **ユーザー向け文言は日本語が主言語**（READMEの言語ポリシー参照）。トーストは
+  `showToast(kind, message, detail, ttl)` に一本化済み（showError等は薄いラッパー）
+- **モーダルは `createModal(contentHtml, opts)` で作る**（`setupModalA11y` を直接呼ばない）。
+  例外は独自機構の `showAlignChannelModal` のみ
+- **`updatePerGridLabels` はrender時スナップショット（`_lastRenderedLookup`）だけを参照する**。
+  ホバー経路に `columns.find` 等の線形検索を書き戻さないこと
+- **式パーサ**: ネスト深度上限 `EXPR_MAX_DEPTH = 200`。関数のarityは
+  `_builtinFuncArity`（`CUSTOM_RAM_FUNCTIONS` から導出）で検証時にチェックされる
+- **プリセット保存**は件数上限 `PRESET_MAX_COUNT = 20`・サイズ上限
+  `PRESET_MAX_JSON_CHARS`（約2MB）で保護されている
+
+### 意図的な見送り（理由付き）
+
+- **PF1（点配列キャッシュ）**: 実測で `getActiveGroups` はrender時間140.3msのうち2.4ms（1.7%）。
+  `setOption` が支配的でキャッシュ無効化リスクに見合わない（2026-06-11の見送り判断を実測で追認）
+- **U5（メッセージカタログへの全集約）**: 文字列の大半が状態と密結合のテンプレートリテラルで
+  コスト過大。言語ポリシーのREADME明文化で代替（翻訳要件が出たら再検討）
+
+### 検証済み事項（2026-07-02時点）
+
+- `npm test` 6本合格、`node --check` 全JSクリーン
+- Playwrightスモーク（フェーズごとに実施）: 2ファイル同時読込のMain/Sub判定、
+  モーダル群の開閉・Escape・フォーカストラップ、トースト上限・aria-live、
+  ホバー値のリファクタ前後一致（3位置×5グリッド×2ファイル）、
+  `getOption()` 構造スナップショットのM1/M9前後byte一致、
+  IIFE化後のwindow漏れゼロ（218名）、プリセット上限動作
+
 ## 2026-06-11 (3): チャート縦幅調整・チャンネル名表示改善・フォントサイズ設定（Claude Code実施）
 
 ### 新規ファイル
