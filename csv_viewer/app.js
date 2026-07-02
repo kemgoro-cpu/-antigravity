@@ -1033,7 +1033,18 @@ function initChart() {
         backgroundColor: 'transparent',
         renderer: 'canvas',
     });
-    window.addEventListener('resize', () => state.chart.resize());
+    // windowリサイズはrAFでスロットル（フレームに1回）。
+    // ツールチップ表示中にresizeするとECharts内部で「offsetWidth of null」
+    // エラーが出るため、renderChartと同様に先にhideTipをdispatchする
+    let _resizeRafId = null;
+    window.addEventListener('resize', () => {
+        if (_resizeRafId !== null) return;
+        _resizeRafId = requestAnimationFrame(() => {
+            _resizeRafId = null;
+            state.chart.dispatchAction({ type: 'hideTip' });
+            state.chart.resize();
+        });
+    });
     state.chart.on('brushEnd', onBrushEnd);
 
     dom.chartEl.addEventListener('mouseleave', () => {
@@ -4220,7 +4231,13 @@ function showCustomRAMHelp() {
     modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
-dom.colSearch.addEventListener('input', renderColumnList);
+// チャンネル検索はキーストロークごとにリスト全体を再構築するため、150msでdebounceする。
+// プログラムからの renderColumnList() 直接呼び出しは従来どおり即時実行される。
+let _colSearchTimer = null;
+dom.colSearch.addEventListener('input', () => {
+    clearTimeout(_colSearchTimer);
+    _colSearchTimer = setTimeout(renderColumnList, 150);
+});
 
 function renderColumnList() {
     dom.colList.innerHTML = '';
@@ -4946,6 +4963,7 @@ function renderChart() {
 
     const active = getActiveGroups();
     _lastRenderedGroups = active; // ホバー時のラベル更新用スナップショット
+    _lastRenderedLookup = buildHoverLookup(active); // ホバー時の線形検索回避用（PF2）
     const { groups, order } = active;
     const n = order.length;
 
@@ -5389,6 +5407,45 @@ let _lastTooltipParams = null;
 // キャッシュ無効化ロジックなしで常に描画内容と一致したデータが得られる。
 let _lastRenderedGroups = null;
 
+// ホバー経路の参照スナップショット（_lastRenderedGroups方式の拡張）。
+// updatePerGridLabels内の columns.find / getSubFileIds / resolveColumnForFile は
+// チャンネルごとの線形検索なので、描画時にMap化して保存しホバー時は参照のみにする。
+// 状態変更（エイリアス・ファイル構成含む）は必ずrenderChartを通るため無効化不要。
+let _lastRenderedLookup = null;
+
+/**
+ * updatePerGridLabelsが必要とする参照をまとめたスナップショットを構築する。
+ * renderChartから描画のたびに呼ばれる。
+ * @param {{groups: Map, order: string[]}} active getActiveGroups() の結果
+ * @returns {{mainFile: object|null, colByName: Map, subIds: string[], subColByName: Map}}
+ *   colByName    … メインファイルの チャンネル名 → カラムレコード
+ *   subColByName … サブファイルID → (チャンネル名 → 解決済みカラムレコード)
+ */
+function buildHoverLookup(active) {
+    const mainFile = getMainFile() || null;
+    const subIds = getSubFileIds();
+    const colByName = new Map();
+    const subColByName = new Map(subIds.map(id => [id, new Map()]));
+    if (mainFile) {
+        for (const gid of active.order) {
+            const grp = active.groups.get(gid);
+            if (!grp) continue;
+            for (const chName of grp.mergedNames) {
+                if (!colByName.has(chName)) {
+                    colByName.set(chName, mainFile.columns.find(c => c.name === chName) || null);
+                }
+                for (const subId of subIds) {
+                    const m = subColByName.get(subId);
+                    if (!m.has(chName)) {
+                        m.set(chName, resolveColumnForFile(state.files[subId], chName) || null);
+                    }
+                }
+            }
+        }
+    }
+    return { mainFile, colByName, subIds, subColByName };
+}
+
 function fmtVal(v) {
     const a = Math.abs(v);
     if (a >= 1e4)   return v.toFixed(0);
@@ -5409,7 +5466,11 @@ function updatePerGridLabels() {
     const xVal = params[0].axisValue;
     if (xVal == null || isNaN(xVal)) return;
 
-    const mainFile = getMainFile();
+    // renderChartが保存した参照スナップショットを使う（PF2）。
+    // ここで getMainFile / columns.find / getSubFileIds / resolveColumnForFile を
+    // 呼び直すと毎mousemoveで線形検索が走るため、参照のみにする
+    const lookup = _lastRenderedLookup;
+    const mainFile = lookup && lookup.mainFile;
     if (!mainFile) return;
 
     // Build one label per grid, with values from ALL channels and files
@@ -5430,7 +5491,7 @@ function updatePerGridLabels() {
             const yAxisIndex = state.yAxisIndexByGroup?.get(grp.id)?.get(assignment?.axisId);
             if (yAxisIndex === undefined) continue;
             // Main file
-            const mc = mainFile.columns.find(c => c.name === chName);
+            const mc = lookup.colByName.get(chName);
             if (mc && mainFile.colData[mc.id]) {
                 const val = interpolate(mainFile.timeData, mainFile.colData[mc.id], xVal);
                 if (!isNaN(val)) {
@@ -5439,9 +5500,9 @@ function updatePerGridLabels() {
             }
 
             // Sub files
-            for (const subId of getSubFileIds()) {
+            for (const subId of lookup.subIds) {
                 const sf = state.files[subId];
-                const sc = resolveColumnForFile(sf, chName);
+                const sc = lookup.subColByName.get(subId).get(chName);
                 if (!sc || !sf.colData[sc.id]) continue;
                 const subT = xVal - (sf.offset || 0);
                 const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
