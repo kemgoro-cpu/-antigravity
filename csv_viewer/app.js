@@ -177,6 +177,54 @@ function setupModalA11y(overlay, modalEl) {
     }, 0);
 }
 
+/**
+ * モーダル共通の生成ヘルパー（M2: モーダル生成の共通化）。
+ * overlay(#app-modal-overlay) + モーダル本体(.app-modal)を生成して body に追加し、
+ * setupModalA11y（role/フォーカストラップ/Esc/フォーカス復帰）を仕込む。
+ * overlay の ID を全モーダルで共有することで、同時に開くモーダルは常に1つになる
+ * （既存モーダルが開いていれば先に閉じる）。
+ *
+ * @param {string} contentHtml  モーダル本体の innerHTML。後から流し込む場合は '' でよい
+ * @param {object} opts
+ *   - modalClass: '.app-modal' に追加するクラス（幅などの個別調整用）
+ *   - labelledBy: aria-labelledby に設定するタイトル要素の ID
+ *   - closeOnOverlayClick: overlay の余白クリックで閉じるか（既定 true）。
+ *     閉じる前に独自処理（Promise の resolve 等）が必要なモーダルは
+ *     false を渡して自前でリスナーを登録すること
+ * @returns {{overlay: HTMLElement, modal: HTMLElement, close: Function}}
+ *   close は overlay を DOM から外すだけ。リスナー解除とフォーカス復帰は
+ *   setupModalA11y 内の MutationObserver が overlay の除去を検知して行う
+ */
+function createModal(contentHtml, opts = {}) {
+    document.getElementById('app-modal-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'app-modal-overlay';
+    overlay.className = 'app-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'app-modal' + (opts.modalClass ? ' ' + opts.modalClass : '');
+    if (opts.labelledBy) modal.setAttribute('aria-labelledby', opts.labelledBy);
+    modal.innerHTML = contentHtml;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
+
+    const close = () => overlay.remove();
+    if (opts.closeOnOverlayClick !== false) {
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    }
+    return { overlay, modal, close };
+}
+
+// Debug / Custom RAMヘルプ / ショートカットの3モーダル共通の「閉じる」フッター。
+// インライン onclick は CSP 対応のため使わない（S3）。
+// createModal 呼び出し後に .modal-close-btn へ close をバインドすること
+const MODAL_CLOSE_FOOTER =
+    '<div style="text-align:right;margin-top:12px;"><button class="modal-close-btn" '
+    + 'style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>';
+
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
@@ -1116,14 +1164,7 @@ function isInYAxisArea(clientX, region = null) {
 
 function showOverlayAxisModal(targetGroup, sourceName) {
     return new Promise(resolve => {
-        document.getElementById('app-modal-overlay')?.remove();
         const sourceUnit = getMainColumn(sourceName)?.unit || '';
-        const overlay = document.createElement('div');
-        overlay.id = 'app-modal-overlay';
-        overlay.className = 'app-modal-overlay';
-
-        const modal = document.createElement('div');
-        modal.className = 'app-modal axis-choice-modal';
         const axisButtons = targetGroup.axes.map(axis => {
             const unit = getAxisDisplayUnit(targetGroup, axis.id) || 'unitなし';
             const names = targetGroup.channels.filter(ch => ch.axisId === axis.id).map(ch => ch.name).join(', ');
@@ -1131,20 +1172,21 @@ function showOverlayAxisModal(targetGroup, sourceName) {
                 <strong>${esc(unit)}</strong><span>${esc(names)}</span>
             </button>`;
         }).join('');
-        modal.innerHTML = `
+        const { overlay, modal, close } = createModal(`
             <h3 id="axis-choice-title">Y軸の割り当て</h3>
             <p><strong>${esc(sourceName)}</strong>${sourceUnit ? ` (${esc(sourceUnit)})` : ''} を重ねます。</p>
             <div class="axis-choice-list">${axisButtons}</div>
             <button class="axis-choice-btn new-axis" data-axis-id="__new__">
                 <strong><i class='bx bx-plus'></i> 新しいY軸</strong><span>独立したスケールで表示</span>
             </button>
-            <div class="modal-actions"><button class="btn-secondary axis-choice-cancel">キャンセル</button></div>`;
-        modal.setAttribute('aria-labelledby', 'axis-choice-title');
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        setupModalA11y(overlay, modal);
+            <div class="modal-actions"><button class="btn-secondary axis-choice-cancel">キャンセル</button></div>`, {
+            modalClass: 'axis-choice-modal',
+            labelledBy: 'axis-choice-title',
+            // overlayクリックは閉じるだけでなく resolve(null) も必要なので自前で登録する
+            closeOnOverlayClick: false,
+        });
 
-        const finish = value => { overlay.remove(); resolve(value); };
+        const finish = value => { close(); resolve(value); };
         modal.querySelectorAll('[data-axis-id]').forEach(btn => {
             btn.addEventListener('click', () => finish(btn.dataset.axisId));
         });
@@ -1362,14 +1404,6 @@ setupGridResizeDrag();
 function showChartGroupModal(groupId) {
     const group = getChartGroupById(groupId);
     if (!group) return;
-    document.getElementById('app-modal-overlay')?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.className = 'app-modal-overlay';
-    const modal = document.createElement('div');
-    modal.className = 'app-modal chart-group-modal';
-    modal.setAttribute('aria-labelledby', 'chart-group-title');
-
     const axisOptions = group.axes.map(axis => {
         const unit = getAxisDisplayUnit(group, axis.id) || 'unitなし';
         return `<option value="${esc(axis.id)}">${esc(unit)} / ${esc(axis.representative)}</option>`;
@@ -1380,13 +1414,13 @@ function showChartGroupModal(groupId) {
             <select class="chart-group-axis-select">${axisOptions}<option value="__new__">+ 新しいY軸</option></select>
             <button class="btn-secondary btn-icon chart-group-detach" title="独立チャートへ分離"><i class='bx bx-unlink'></i></button>
         </div>`).join('');
-    modal.innerHTML = `
+    const { modal, close } = createModal(`
         <h3 id="chart-group-title">Overlay Settings</h3>
         <div class="chart-group-rows">${rows}</div>
-        <div class="modal-actions"><button class="btn-primary chart-group-done">完了</button></div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+        <div class="modal-actions"><button class="btn-primary chart-group-done">完了</button></div>`, {
+        modalClass: 'chart-group-modal',
+        labelledBy: 'chart-group-title',
+    });
 
     modal.querySelectorAll('.chart-group-row').forEach(row => {
         const name = row.dataset.channel;
@@ -1398,7 +1432,7 @@ function showChartGroupModal(groupId) {
                 const axis = createChartAxis(name, getMainColumn(name)?.unit || '');
                 group.axes.push(axis);
                 assignment.axisId = axis.id;
-                overlay.remove();
+                close();
                 cleanupChartGroup(group);
                 renderChart();
                 saveSettings();
@@ -1409,19 +1443,18 @@ function showChartGroupModal(groupId) {
             cleanupChartGroup(group);
             renderChart();
             saveSettings();
-            overlay.remove();
+            close();
             showChartGroupModal(group.id);
         });
         row.querySelector('.chart-group-detach').addEventListener('click', () => {
             if (detachChannelToStandalone(group.id, name)) {
-                overlay.remove();
+                close();
                 renderChart();
                 saveSettings();
             }
         });
     });
-    modal.querySelector('.chart-group-done').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    modal.querySelector('.chart-group-done').addEventListener('click', close);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1446,6 +1479,8 @@ dom.fileInput.addEventListener('change', e => {
     if (e.target.files.length) handleFiles(e.target.files);
     dom.fileInput.value = '';
 });
+// Browse Files ボタン → 非表示の file input を開く（S3: インラインonclickの排除）
+$('browse-files-btn')?.addEventListener('click', () => dom.fileInput.click());
 
 // 対応するファイル拡張子（.csv と .trn）
 const SUPPORTED_EXTENSIONS = ['.csv', '.trn'];
@@ -2652,25 +2687,12 @@ function showDebugModal(fileId) {
     }
 
     // --- モーダル表示 ---
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
     // aria-labelledby でスクリーンリーダーがモーダルのタイトルを読み上げられるようにする
-    modal.setAttribute('aria-labelledby', 'debug-modal-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:640px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
-        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+    const { modal, close } = createModal(html + MODAL_CLOSE_FOOTER, {
+        modalClass: 'debug-modal',
+        labelledBy: 'debug-modal-title',
+    });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3129,15 +3151,8 @@ function renderCustomRAMList() {
 function showCustomRAMEditModal(id) {
     const cr = state.customRAMs.find(item => item.id === id);
     if (!cr) return;
-    document.getElementById('app-modal-overlay')?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.className = 'app-modal-overlay';
-    const modal = document.createElement('div');
-    modal.className = 'app-modal custom-unit-modal';
-    modal.setAttribute('aria-labelledby', 'custom-edit-title');
     // 名前は読み取り専用（識別子のため変更不可）。式と単位を編集できる
-    modal.innerHTML = `
+    const { modal, close } = createModal(`
         <h3 id="custom-edit-title">Custom RAM を編集</h3>
         <p class="custom-edit-name">${esc(cr.name)}<span class="custom-edit-hint">（名前は変更できません）</span></p>
         <label class="custom-edit-label">式</label>
@@ -3148,16 +3163,15 @@ function showCustomRAMEditModal(id) {
         <div class="modal-actions">
             <button class="btn-secondary custom-edit-cancel">キャンセル</button>
             <button class="btn-primary custom-edit-save">保存</button>
-        </div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+        </div>`, {
+        modalClass: 'custom-unit-modal',
+        labelledBy: 'custom-edit-title',
+    });
 
     const exprInput = modal.querySelector('.custom-edit-expr-input');
     const unitInput = modal.querySelector('.custom-edit-unit-input');
     const vEl       = modal.querySelector('.custom-edit-validation');
     const saveBtn   = modal.querySelector('.custom-edit-save');
-    const close = () => overlay.remove();
 
     // 式入力をライブ検証（追加フォームと同じ evaluateExprForValidation を共用）
     let vTimer = null;
@@ -3183,7 +3197,6 @@ function showCustomRAMEditModal(id) {
         if (saved) close();
         else runValidate();        // 失敗時はボタンの有効/無効を戻す
     });
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 dom.customAdd.addEventListener('click', () => {
@@ -3590,14 +3603,6 @@ function showDriveIndexModal() {
     const di = state.driveIndex;
     const REG = window.DriveIndex.CYCLE_REGISTRY;
 
-    document.getElementById('app-modal-overlay')?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.className = 'app-modal-overlay';
-    const modal = document.createElement('div');
-    modal.className = 'app-modal drive-index-modal';
-    modal.setAttribute('aria-labelledby', 'drive-index-title');
-
     const colNames  = mainFile.columns.filter(c => !c.isCustom).map(c => c.name);
     const speedOpts = sel => colNames.map(n => `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join('');
     const fuelOpts  = sel => `<option value="" ${!sel ? 'selected' : ''}>（なし）</option>`
@@ -3620,7 +3625,7 @@ function showDriveIndexModal() {
     };
     const detName = di.lastResult ? di.lastResult.detectedName : '—';
 
-    modal.innerHTML = `
+    const { modal, close } = createModal(`
         <h3 id="drive-index-title"><i class='bx bx-tachometer'></i> Driving Index（モード走行品質・燃費）</h3>
         <p class="di-detected">自動判別: <strong>${esc(detName)}</strong>　<span class="di-note">目標車速は選択モードの法規トレースを使用。走行抵抗はファイルごとに各表の上で入力できます</span></p>
         <div class="di-controls">
@@ -3650,11 +3655,10 @@ function showDriveIndexModal() {
         <div class="modal-actions">
             <button class="btn-secondary di-close">閉じる</button>
             <button class="btn-primary di-recompute"><i class='bx bx-refresh'></i> 再計算</button>
-        </div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
-    const close = () => overlay.remove();
+        </div>`, {
+        modalClass: 'drive-index-modal',
+        labelledBy: 'drive-index-title',
+    });
 
     // ── フェーズ編集行 ──
     const phaseRowsEl = modal.querySelector('.di-phase-rows');
@@ -3835,7 +3839,6 @@ function showDriveIndexModal() {
     });
 
     modal.querySelector('.di-close').addEventListener('click', close);
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 // ツールバーの Driving Index ボタン → 詳細モーダルを開く
@@ -4209,23 +4212,12 @@ function showCustomRAMHelp() {
     html += `</div>`;
 
     // モーダル表示
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
     // aria-labelledby でスクリーンリーダーがモーダルのタイトルを読み上げられるようにする
-    modal.setAttribute('aria-labelledby', 'custom-ram-help-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:520px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
-        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+    const { modal, close } = createModal(html + MODAL_CLOSE_FOOTER, {
+        modalClass: 'custom-ram-help-modal',
+        labelledBy: 'custom-ram-help-title',
+    });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
 dom.colSearch.addEventListener('input', renderColumnList);
@@ -4437,19 +4429,11 @@ function showChannelMapModal(mainName) {
     const mainCol = mainFile.columns.find(c => c.name === mainName);
     if (!mainCol) return;
 
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.setAttribute('aria-labelledby', 'channel-map-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:680px;width:92%;max-height:82vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
+    // 内容は render() が後から流し込むため contentHtml は空でよい
+    const { modal, close } = createModal('', {
+        modalClass: 'channel-map-modal',
+        labelledBy: 'channel-map-title',
+    });
 
     const render = (filterText = '') => {
         const aliases = getChannelAliases(mainName);
@@ -4517,11 +4501,10 @@ function showChannelMapModal(mainName) {
                 render(input.value);
             });
         });
-        modal.querySelector('#alias-close-btn').addEventListener('click', () => overlay.remove());
+        modal.querySelector('#alias-close-btn').addEventListener('click', close);
     };
 
     render();
-    setupModalA11y(overlay, modal);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -5865,25 +5848,11 @@ function showShortcutsModal() {
     }
     html += `</table>`;
 
-    // 既存モーダルがあれば閉じる
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.setAttribute('aria-labelledby', 'shortcuts-modal-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
-        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+    const { modal, close } = createModal(html + MODAL_CLOSE_FOOTER, {
+        modalClass: 'shortcuts-modal',
+        labelledBy: 'shortcuts-modal-title',
+    });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
 // ツールバーの ? ボタン（追加予定）からもモーダルを開けるようにする

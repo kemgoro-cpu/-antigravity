@@ -788,6 +788,14 @@ input[type="text"]:focus {
 .app-modal p { margin: 0 0 14px; color: var(--text-secondary); font-size: 0.78rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
+/* 旧 style.cssText 直書きだったモーダルの寸法・角丸を維持する修飾クラス（M2でクラス方式へ統一） */
+.debug-modal           { width: auto; max-width: 640px; max-height: 80vh; border-radius: 10px; }
+.custom-ram-help-modal { width: auto; max-width: 520px; max-height: 80vh; border-radius: 10px; }
+.channel-map-modal     { width: 92%;  max-width: 680px; border-radius: 10px; }
+.shortcuts-modal       { width: auto; max-width: 480px; max-height: 80vh; border-radius: 10px; }
+/* 上記モーダルの h3 はインラインで font-size を持たないため、従来どおりブラウザ既定サイズを維持 */
+.debug-modal h3, .custom-ram-help-modal h3, .channel-map-modal h3, .shortcuts-modal h3 { font-size: 1.17em; }
+
 /* Custom RAM 編集モーダル（式・単位） */
 .custom-edit-name { font-size: 0.9rem !important; color: var(--text-primary) !important; font-weight: 600; }
 .custom-edit-hint { margin-left: 8px; font-size: 0.72rem; color: var(--text-secondary); font-weight: 400; }
