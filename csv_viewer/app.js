@@ -16,6 +16,11 @@ const TOAST_KINDS = {
 // 同時に表示するトーストの上限。超えたら最古のものから消す
 const TOAST_MAX_VISIBLE = 5;
 
+// トーストの自動消去までの時間(ms)。エラーは読む時間を長めに確保する
+const TOAST_TTL_ERROR   = 15000;
+const TOAST_TTL_WARNING = 9000;
+const TOAST_TTL_SUCCESS = 3000;
+
 /**
  * トースト通知の共通実装。showError / showWarning / showExportToast の本体。
  * @param {'error'|'warning'|'success'} kind  種類（色・細部の見た目を決める）
@@ -68,13 +73,12 @@ function showError(message, detail) {
     const entry = { time: new Date().toLocaleTimeString(), message, detail: detail || '' };
     _errorLog.push(entry);
     console.error(`[CSV Viewer] ${message}`, detail || '');
-    // Auto-dismiss after 15 seconds
-    showToast('error', message, detail, 15000);
+    showToast('error', message, detail, TOAST_TTL_ERROR);
 }
 
 function showWarning(message, detail) {
     console.warn(`[CSV Viewer] ${message}`, detail || '');
-    showToast('warning', message, detail, 9000);
+    showToast('warning', message, detail, TOAST_TTL_WARNING);
 }
 
 // Catch all unhandled errors
@@ -715,11 +719,23 @@ function evaluateExpr(expr, getVal) {
     return evalNode(ast);
 }
 
-// Actual hex values — ECharts does NOT understand CSS variables
+/**
+ * styles.css の :root で定義されたCSS変数を読み取る（未定義・空なら fallback）。
+ * EChartsはCSS変数を解釈しないため、チャートへ渡す色は起動時にここで実値へ解決する。
+ */
+function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+}
+
+// チャート用テーマ色。styles.css の :root トークンを単一情報源とし、起動時に解決する
+// （grid / axis はCSS側に対応トークンがないためJS側の実値のまま）
 const T = {
-    text:   '#f0f0f0',
-    dim:    '#a0a5b1',
-    border: 'rgba(255,255,255,0.08)',
+    text:   cssVar('--text-primary',   '#f0f0f0'),
+    dim:    cssVar('--text-secondary', '#a0a5b1'),
+    border: cssVar('--border',         'rgba(255,255,255,0.08)'),
+    accent: cssVar('--accent',         '#6366f1'),
+    bgMain: cssVar('--bg-main',        '#0f1115'),  // PNGエクスポートの背景色
     grid:   'rgba(255,255,255,0.05)',
     axis:   'rgba(255,255,255,0.15)',
 };
@@ -734,6 +750,34 @@ const L = {
     yZoomW:     16,
     yZoomRight: 6,
 };
+
+// ─────────────────────────────────────────────────────────────
+// チューニング用定数（挙動を調整するときはここを変える）
+// ─────────────────────────────────────────────────────────────
+
+// Bitチャンネルのグリッド高さの重み（通常グリッド = 1.0 に対する比率）
+const BIT_WEIGHT = 0.33;
+// Y軸ズームスライダー1本あたりの水平方向の占有幅(px)
+const ZOOM_GAP = 12;
+// プロット幅がこの値(px)を下回ったら「Y軸が多すぎる」警告を出す
+const NARROW_PLOT_WARN_PX = 260;
+// EChartsのプログレッシブ描画: 1フレームで描く点数 / 有効になるデータ点数のしきい値
+const SERIES_PROGRESSIVE = 400;
+const SERIES_PROGRESSIVE_THRESHOLD = 3000;
+// データ点マーカー（Show Markers ON時の丸印）のサイズ(px)
+const MARKER_SYMBOL_SIZE = 4;
+// markAreaでY範囲外の帯をグリッド端まで塗るための「事実上無限遠」の係数とオフセット
+// （EChartsのmarkAreaはInfinityを受け付けないため十分大きい値で代用する）
+const MARK_AREA_FAR_SCALE  = 100;
+const MARK_AREA_FAR_OFFSET = 1e9;
+// Custom RAM式サジェストの最大表示件数
+const SUGGEST_MAX_ITEMS = 15;
+// 設定保存(saveSettings)のdebounce時間(ms)
+const SAVE_DEBOUNCE_MS = 500;
+// Custom RAM式ライブ検証のdebounce時間(ms)（追加フォーム・編集モーダル共通）
+const VALIDATE_DEBOUNCE_MS = 300;
+// チャンネル検索のdebounce時間(ms)
+const SEARCH_DEBOUNCE_MS = 150;
 
 // ─────────────────────────────────────────────────────────────
 // State
@@ -3195,7 +3239,7 @@ function showCustomRAMEditModal(id) {
     };
     exprInput.addEventListener('input', () => {
         clearTimeout(vTimer);
-        vTimer = setTimeout(runValidate, 300);
+        vTimer = setTimeout(runValidate, VALIDATE_DEBOUNCE_MS);
     });
     runValidate();           // 初期表示（既存式のプレビューを出す）
     exprInput.focus();
@@ -3912,7 +3956,7 @@ function buildSuggestions(partial) {
         }
     }
 
-    return results.slice(0, 15); // 最大15件
+    return results.slice(0, SUGGEST_MAX_ITEMS);
 }
 
 let _suggestIdx = -1; // サジェストのアクティブインデックス
@@ -4012,7 +4056,7 @@ dom.customExpr.addEventListener('keydown', e => {
 let _validateTimer = null;
 const _validateDebounce = () => {
     clearTimeout(_validateTimer);
-    _validateTimer = setTimeout(validateCustomExpr, 300);
+    _validateTimer = setTimeout(validateCustomExpr, VALIDATE_DEBOUNCE_MS);
 };
 
 /**
@@ -4231,12 +4275,12 @@ function showCustomRAMHelp() {
     modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
-// チャンネル検索はキーストロークごとにリスト全体を再構築するため、150msでdebounceする。
+// チャンネル検索はキーストロークごとにリスト全体を再構築するため、SEARCH_DEBOUNCE_MSでdebounceする。
 // プログラムからの renderColumnList() 直接呼び出しは従来どおり即時実行される。
 let _colSearchTimer = null;
 dom.colSearch.addEventListener('input', () => {
     clearTimeout(_colSearchTimer);
-    _colSearchTimer = setTimeout(renderColumnList, 150);
+    _colSearchTimer = setTimeout(renderColumnList, SEARCH_DEBOUNCE_MS);
 });
 
 function renderColumnList() {
@@ -4992,8 +5036,7 @@ function renderChart() {
     const gapPx  = L.gapPx;
 
     // Bitチャンネルのグリッドは通常の1/3の高さにする
-    // まず各グリッドの「重み」を計算（Bit = 0.33, 通常 = 1.0）
-    const BIT_WEIGHT = 0.33;
+    // まず各グリッドの「重み」を計算（Bit = BIT_WEIGHT, 通常 = 1.0）
     const gridWeights = order.map(name => {
         const grp = groups.get(name);
         // マージグリッドの全チャンネルがBitなら狭くする
@@ -5044,7 +5087,6 @@ function renderChart() {
     if (!isFinite(globalXMin)) { globalXMin = 0; globalXMax = 1; }
 
     const AXIS_GAP = DL.axisGap; // フォントに連動(大きいフォントで軸同士が重ならないように)
-    const ZOOM_GAP = 12;
     const groupLayouts = order.map(groupId => {
         const axisCount = Math.max(groups.get(groupId).axes.length, 1);
         const leftCount = Math.ceil(axisCount / 2);
@@ -5058,7 +5100,7 @@ function renderChart() {
     const xSliderLeft = Math.max(...groupLayouts.map(layout => layout.left));
     const xSliderRight = Math.max(...groupLayouts.map(layout => layout.right));
     const narrowPlotWidth = state.chart.getWidth() - xSliderLeft - xSliderRight;
-    const warningKey = narrowPlotWidth < 260 ? `${Math.max(...groupLayouts.map(l => l.axisCount))}:${Math.round(narrowPlotWidth)}` : '';
+    const warningKey = narrowPlotWidth < NARROW_PLOT_WARN_PX ? `${Math.max(...groupLayouts.map(l => l.axisCount))}:${Math.round(narrowPlotWidth)}` : '';
     if (warningKey && state.axisLayoutWarningKey !== warningKey) {
         state.axisLayoutWarningKey = warningKey;
         showWarning('Y軸が多いため描画領域が狭くなっています', 'Overlay Settings で軸を共有すると表示幅を広げられます。');
@@ -5078,7 +5120,7 @@ function renderChart() {
         borderColor: T.border,
         backgroundColor: 'rgba(255,255,255,0.03)',
         fillerColor: 'rgba(99,102,241,0.18)',
-        handleStyle: { color: '#6366f1', borderColor: '#6366f1' },
+        handleStyle: { color: T.accent, borderColor: T.accent },
         textStyle: { color: T.dim, fontSize: F.slider },
         dataBackground: {
             lineStyle: { color: 'rgba(99,102,241,0.4)', width: 1 },
@@ -5205,8 +5247,8 @@ function renderChart() {
             const markArea = (isFirstForAxis && (hasYMin || hasYMax)) ? {
                 silent: true,
                 data: [
-                    ...(hasYMax ? [[{ yAxis: yMaxParsed }, { yAxis: yMaxParsed * 100 + 1e9 }]] : []),
-                    ...(hasYMin ? [[{ yAxis: -(Math.abs(yMinParsed) * 100 + 1e9) }, { yAxis: yMinParsed }]] : []),
+                    ...(hasYMax ? [[{ yAxis: yMaxParsed }, { yAxis: yMaxParsed * MARK_AREA_FAR_SCALE + MARK_AREA_FAR_OFFSET }]] : []),
+                    ...(hasYMin ? [[{ yAxis: -(Math.abs(yMinParsed) * MARK_AREA_FAR_SCALE + MARK_AREA_FAR_OFFSET) }, { yAxis: yMinParsed }]] : []),
                 ],
                 itemStyle: { color: 'rgba(255,80,50,0.07)' },
             } : undefined;
@@ -5228,10 +5270,10 @@ function renderChart() {
                 yAxisIndex,
                 data:       s.data,
                 showSymbol: state.showMarkers,
-                symbolSize: 4,
+                symbolSize: MARKER_SYMBOL_SIZE,
                 sampling:   dom.sampling.value || false,
-                progressive: 400,
-                progressiveThreshold: 3000,
+                progressive: SERIES_PROGRESSIVE,
+                progressiveThreshold: SERIES_PROGRESSIVE_THRESHOLD,
                 clip:       true,
                 lineStyle:  { width: state.channelLineWidths[s.channelName] ?? state.lineWidth, color: s.color, type: s.dash ? [6, 4] : 'solid' },
                 itemStyle:  { color: s.color },
@@ -6102,7 +6144,7 @@ function getChartImageDataURL() {
     return state.chart.getDataURL({
         type: 'png',
         pixelRatio: 2,                     // 高解像度（Retina対応）
-        backgroundColor: '#0f1115',         // ダークテーマの背景色
+        backgroundColor: T.bgMain,          // ダークテーマの背景色（styles.css の --bg-main に追従）
     });
 }
 
@@ -6149,7 +6191,7 @@ function exportChartAsPNG() {
     link.click();
     document.body.removeChild(link);
 
-    showExportToast('PNG saved', fileName);
+    showExportToast('PNGを保存しました', fileName);
 }
 
 /**
@@ -6169,7 +6211,7 @@ async function copyChartToClipboard() {
         await navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blob })
         ]);
-        showExportToast('Copied!', 'チャート画像をクリップボードにコピーしました');
+        showExportToast('コピーしました', 'チャート画像をクリップボードにコピーしました');
     } catch (e) {
         // file:// で開いている場合やHTTPSでない場合はここに来る
         console.error('[CSV Viewer] Clipboard write failed:', e);
@@ -6185,8 +6227,8 @@ async function copyChartToClipboard() {
  * エラー通知とは別に、短い緑色のフィードバックを出す。
  */
 function showExportToast(title, detail) {
-    // 3秒で自動的に消える（成功通知なので短めに）
-    showToast('success', title, detail, 3000);
+    // 成功通知なので短めに自動消去する
+    showToast('success', title, detail, TOAST_TTL_SUCCESS);
 }
 
 // ボタンのクリックイベントを登録
@@ -6199,6 +6241,11 @@ dom.copyChart.addEventListener('click', copyChartToClipboard);
 
 const STORAGE_KEY = 'csvViewer_settings';
 const PRESETS_STORAGE_KEY = 'csvViewer_presets';
+
+// プリセットの保存上限。localStorage quota(約5MB)超過で既存プリセットまで
+// 巻き込んで失われる前に、保存時点で件数と合計サイズの両方を保護する
+const PRESET_MAX_COUNT = 20;                    // 保存できるプリセットの最大件数
+const PRESET_MAX_JSON_CHARS = 2 * 1024 * 1024;  // 全プリセットのJSON文字列長の上限（約2MB相当）
 
 function serializeChartGroups() {
     return state.chartGroups.map(group => ({
@@ -6224,7 +6271,7 @@ let _storageWarnShown = false;
 let _saveSettingsTimer = null;
 
 /**
- * 設定保存を予約する（500msのdebounce）。
+ * 設定保存を予約する（SAVE_DEBOUNCE_MS のdebounce）。
  * 約18箇所から呼ばれるため、連続操作のたびにJSON.stringifyを即時実行しないようまとめる。
  * 実際の書き込みは saveSettingsNow が行う。
  * @param {string|null} coalesceKey Undo履歴の連続操作統合キー（カラーピッカー等の
@@ -6235,7 +6282,7 @@ function saveSettings(coalesceKey = null) {
     // （debounce後だと「操作直後のCtrl+Z」で最後の操作が履歴に無い事故が起きる）
     recordHistory(coalesceKey);
     clearTimeout(_saveSettingsTimer);
-    _saveSettingsTimer = setTimeout(flushSettingsSave, 500);
+    _saveSettingsTimer = setTimeout(flushSettingsSave, SAVE_DEBOUNCE_MS);
 }
 
 /**
@@ -6416,13 +6463,21 @@ function loadPresets() {
     }
 }
 
-function savePresets(presets) {
+/**
+ * プリセット一式をlocalStorageへ書き込む。
+ * @param {object} presets 全プリセット（name → 設定）
+ * @param {string|null} json シリアライズ済みJSON（呼び出し側でサイズ判定に使った文字列を再利用する）
+ * @returns {boolean} 書き込みに成功したか
+ */
+function savePresets(presets, json = null) {
     try {
-        localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+        localStorage.setItem(PRESETS_STORAGE_KEY, json ?? JSON.stringify(presets));
+        return true;
     } catch (e) {
         // 容量超過時に例外がそのまま飛ぶと「Unhandled error」トーストになり原因が分かりにくい
         showError('プリセットを保存できませんでした',
             'ブラウザの保存領域(localStorage)に書き込めません。容量超過の可能性があります。\n' + (e.message || String(e)));
+        return false;
     }
 }
 
@@ -6446,8 +6501,26 @@ function saveCurrentPreset() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const presets = loadPresets();
+
+    // 件数上限: 新規追加のみ制限する（既存名の上書きは常に許可）
+    const isNew = !Object.prototype.hasOwnProperty.call(presets, trimmed);
+    if (isNew && Object.keys(presets).length >= PRESET_MAX_COUNT) {
+        showWarning(`プリセットは最大${PRESET_MAX_COUNT}件までです`,
+            '不要なプリセットを削除してから保存してください。');
+        return;
+    }
+
     presets[trimmed] = buildPresetSettings();
-    savePresets(presets);
+
+    // サイズ上限: quota超過の例外で既存プリセットごと保存が失われる前に拒否する
+    const json = JSON.stringify(presets);
+    if (json.length > PRESET_MAX_JSON_CHARS) {
+        showWarning('プリセットの合計サイズが上限(約2MB)を超えるため保存できません',
+            '不要なプリセットを削除するか、選択チャンネル数を減らしてから保存してください。');
+        return;
+    }
+
+    if (!savePresets(presets, json)) return; // quota超過等（savePresets内でエラー表示済み）
     renderPresetSelect();
     if (dom.presetSelect) dom.presetSelect.value = trimmed;
     showExportToast('プリセットを保存しました', trimmed);
