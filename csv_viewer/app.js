@@ -6,50 +6,75 @@
 
 const _errorLog = []; // { time, message, detail }
 
+// トーストの種類ごとの見た目定義（色・細部だけが違い、構造は共通）
+const TOAST_KINDS = {
+    error:   { bg: '#2d1216', border: '#f43f5e', text: '#fda4af', title: '#fb7185', detail: '#f9a8b8', titlePrefix: '⚠ ', titleMargin: 4, detailScroll: true, timestamp: true, alert: true },
+    warning: { bg: '#2a1f0c', border: '#f59e0b', text: '#fcd34d', title: '#fbbf24', detail: '#fde68a', titlePrefix: '',   titleMargin: 4, detailScroll: true },
+    success: { bg: '#122d1b', border: '#22c55e', text: '#86efac', title: '#4ade80', detail: '#86efac', titlePrefix: '',   titleMargin: 2, detailScroll: false },
+};
+
+// 同時に表示するトーストの上限。超えたら最古のものから消す
+const TOAST_MAX_VISIBLE = 5;
+
+/**
+ * トースト通知の共通実装。showError / showWarning / showExportToast の本体。
+ * @param {'error'|'warning'|'success'} kind  種類（色・細部の見た目を決める）
+ * @param {string} message  タイトル行
+ * @param {string} [detail] 詳細行（省略可）
+ * @param {number} ttl      自動消去までのミリ秒
+ */
+function showToast(kind, message, detail, ttl) {
+    const k = TOAST_KINDS[kind] || TOAST_KINDS.error;
+
+    let container = document.getElementById('error-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'error-toast-container';
+        // スクリーンリーダーに新着トーストを読み上げさせる（エラーは各トースト側の role="alert" で即時通知）
+        container.setAttribute('role', 'status');
+        container.setAttribute('aria-live', 'polite');
+        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
+        document.body.appendChild(container);
+    }
+
+    // 表示上限: 不正ファイルの一括ドロップ等で画面が埋まらないようにする
+    while (container.children.length >= TOAST_MAX_VISIBLE) {
+        container.firstElementChild.remove();
+    }
+
+    const toast = document.createElement('div');
+    // スライドインはCSSクラス側で prefers-reduced-motion をガード（styles.css参照）
+    toast.className = 'toast-slide-in';
+    toast.style.cssText = `background:${k.bg};border:1px solid ${k.border};border-radius:8px;padding:12px 16px;color:${k.text};font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;`;
+    // エラーは assertive 相当で即時読み上げ
+    if (k.alert) toast.setAttribute('role', 'alert');
+
+    let html = `<div style="font-weight:600;margin-bottom:${k.titleMargin}px;color:${k.title};">${k.titlePrefix}${esc(message)}</div>`;
+    if (detail) {
+        const detailExtra = k.detailScroll ? 'word-break:break-all;max-height:80px;overflow:auto;' : '';
+        html += `<div style="font-size:11px;color:${k.detail};opacity:0.85;${detailExtra}">${esc(String(detail))}</div>`;
+    }
+    if (k.timestamp) {
+        html += `<div style="font-size:10px;color:#888;margin-top:4px;">${new Date().toLocaleTimeString()} — click to dismiss</div>`;
+    }
+    toast.innerHTML = html;
+    toast.addEventListener('click', () => toast.remove());
+    container.appendChild(toast);
+
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, ttl);
+}
+
 function showError(message, detail) {
     const entry = { time: new Date().toLocaleTimeString(), message, detail: detail || '' };
     _errorLog.push(entry);
     console.error(`[CSV Viewer] ${message}`, detail || '');
-
-    // Create toast notification
-    let container = document.getElementById('error-toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'error-toast-container';
-        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
-        document.body.appendChild(container);
-    }
-
-    const toast = document.createElement('div');
-    toast.style.cssText = 'background:#2d1216;border:1px solid #f43f5e;border-radius:8px;padding:12px 16px;color:#fda4af;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
-    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;color:#fb7185;">⚠ ${esc(message)}</div>`
-        + (detail ? `<div style="font-size:11px;color:#f9a8b8;opacity:0.85;word-break:break-all;max-height:80px;overflow:auto;">${esc(String(detail))}</div>` : '')
-        + `<div style="font-size:10px;color:#888;margin-top:4px;">${entry.time} — click to dismiss</div>`;
-    toast.addEventListener('click', () => toast.remove());
-    container.appendChild(toast);
-
     // Auto-dismiss after 15 seconds
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 15000);
+    showToast('error', message, detail, 15000);
 }
 
 function showWarning(message, detail) {
     console.warn(`[CSV Viewer] ${message}`, detail || '');
-
-    let container = document.getElementById('error-toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'error-toast-container';
-        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
-        document.body.appendChild(container);
-    }
-
-    const toast = document.createElement('div');
-    toast.style.cssText = 'background:#2a1f0c;border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;color:#fcd34d;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
-    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;color:#fbbf24;">${esc(message)}</div>`
-        + (detail ? `<div style="font-size:11px;color:#fde68a;opacity:0.85;word-break:break-all;max-height:80px;overflow:auto;">${esc(String(detail))}</div>` : '');
-    toast.addEventListener('click', () => toast.remove());
-    container.appendChild(toast);
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 9000);
+    showToast('warning', message, detail, 9000);
 }
 
 // Catch all unhandled errors
@@ -198,7 +223,7 @@ function hslToHex(h, s, l) {
 
 // HTML-escape to safely insert text into innerHTML
 function esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -231,6 +256,15 @@ const CUSTOM_RAM_FUNCTIONS = [
 
 // 関数名のセット（パーサーが関数呼び出しか RAM名 かを区別するために使う）
 const _builtinFuncNames = new Set(CUSTOM_RAM_FUNCTIONS.map(f => f.name));
+
+// 関数名 → 必要な引数の個数（args定義から導出。式検証のarityチェックに使う）
+const _builtinFuncArity = new Map(
+    CUSTOM_RAM_FUNCTIONS.map(f => [f.name, f.args.split(',').length])
+);
+
+// 式のネスト深度の上限。再帰下降パーサなので、異常に深い式
+// （"((((...))))" 等）でスタックオーバーフローする前にエラーで打ち切る
+const EXPR_MAX_DEPTH = 200;
 
 /**
  * 式をトークン列に分割する。
@@ -291,6 +325,7 @@ function tokenizeExpr(expr) {
 function parseExprToAST(expr) {
     const tokens = tokenizeExpr(expr);
     let pos = 0;
+    let depth = 0; // 再帰の深さ（EXPR_MAX_DEPTH超過でエラー）
 
     function peek() { return pos < tokens.length ? tokens[pos] : null; }
     function next() { return tokens[pos++]; }
@@ -326,7 +361,20 @@ function parseExprToAST(expr) {
     }
 
     // factor = unary | '(' expr ')' | funcCall | number | ramName
+    // ネストの再帰（括弧・単項演算子・関数引数）はすべてここを通るため、
+    // 深度ガードはこの1箇所に置く（try/finallyで兄弟要素間の誤累積を防ぐ）
     function parseFactor() {
+        if (++depth > EXPR_MAX_DEPTH) {
+            throw new Error(`式のネストが深すぎます（上限${EXPR_MAX_DEPTH}）`);
+        }
+        try {
+            return parseFactorInner();
+        } finally {
+            depth--;
+        }
+    }
+
+    function parseFactorInner() {
         const t = peek();
         if (!t) return { type: 'num', value: NaN };
 
@@ -427,6 +475,9 @@ function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
 
     // --- ASTノードを再帰的に評価 ---
     function evalNode(node) {
+        // 引数不足の関数呼び出し（mavg(X) 等）で argNodes[1] が undefined のまま
+        // 渡ってきてもTypeErrorにせずNaN列に落とす（arity検証はUI側で行う）
+        if (!node) return fillConst(NaN);
         if (node.type === 'num') return fillConst(node.value);
         if (node.type === 'name') {
             const arr = getArray(node.value);
@@ -4016,13 +4067,38 @@ function evaluateExprForValidation(expr) {
         errors.push('式の構文エラー: ' + e.message);
     }
 
+    // 3. ASTを走査して関数の引数個数をチェック（mavg(X) のような引数不足を検出）
+    if (errors.length === 0) {
+        try {
+            const checkArity = (node) => {
+                if (!node || typeof node !== 'object') return;
+                if (node.type === 'call') {
+                    const fname = String(node.name).toLowerCase();
+                    const expected = _builtinFuncArity.get(fname);
+                    if (expected != null && node.args.length !== expected) {
+                        errors.push(`"${node.name}" は引数が${expected}個必要です（${node.args.length}個指定）`);
+                    }
+                    node.args.forEach(checkArity);
+                } else if (node.type === 'binop') {
+                    checkArity(node.left);
+                    checkArity(node.right);
+                } else if (node.type === 'unary') {
+                    checkArity(node.operand);
+                }
+            };
+            checkArity(parseExprToAST(expr));
+        } catch (e) {
+            errors.push('式の構文エラー: ' + e.message);
+        }
+    }
+
     if (errors.length > 0) {
         // 重複除去して最大3件表示
         const unique = [...new Set(errors)].slice(0, 3);
         return { ok: false, text: unique.join(' / '), cls: 'error' };
     }
 
-    // 3. 計算結果プレビュー（エラーがなければ）
+    // 4. 計算結果プレビュー（エラーがなければ）
     try {
         const vals = computeCustomExpr(expr, mainFile);
         let min = Infinity, max = -Infinity, sum = 0, cnt = 0;
@@ -6079,21 +6155,8 @@ async function copyChartToClipboard() {
  * エラー通知とは別に、短い緑色のフィードバックを出す。
  */
 function showExportToast(title, detail) {
-    let container = document.getElementById('error-toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'error-toast-container';
-        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
-        document.body.appendChild(container);
-    }
-    const toast = document.createElement('div');
-    toast.style.cssText = 'background:#122d1b;border:1px solid #22c55e;border-radius:8px;padding:12px 16px;color:#86efac;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
-    toast.innerHTML = `<div style="font-weight:600;margin-bottom:2px;color:#4ade80;">${esc(title)}</div>`
-        + `<div style="font-size:11px;color:#86efac;opacity:0.85;">${esc(detail)}</div>`;
-    toast.addEventListener('click', () => toast.remove());
-    container.appendChild(toast);
     // 3秒で自動的に消える（成功通知なので短めに）
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+    showToast('success', title, detail, 3000);
 }
 
 // ボタンのクリックイベントを登録

@@ -2,10 +2,15 @@
    Premium Dark Theme - CSV Chart Viewer
    ============================================= */
 
-/* トースト通知のスライドインアニメーション */
+/* トースト通知のスライドインアニメーション
+   OSの「視覚効果を減らす」設定（prefers-reduced-motion）ではアニメーションを
+   適用せず、トーストは瞬時に表示する */
 @keyframes slideIn {
     from { opacity: 0; transform: translateX(40px); }
     to   { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .toast-slide-in { animation: slideIn 0.3s ease; }
 }
 
 :root {

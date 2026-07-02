@@ -36,11 +36,11 @@
                 <div class="control-group">
                     <h3><i class='bx bx-cog' aria-hidden="true"></i> Settings</h3>
                     <div class="settings-grid">
-                        <label>Name Row:</label>
+                        <label for="name-row-idx">Name Row:</label>
                         <input type="number" id="name-row-idx" value="1" min="1">
-                        <label>Unit Row:</label>
+                        <label for="unit-row-idx">Unit Row:</label>
                         <input type="number" id="unit-row-idx" value="2" min="1">
-                        <label>Encoding:</label>
+                        <label for="encoding-mode">Encoding:</label>
                         <select id="encoding-mode" aria-label="CSV文字コード">
                             <option value="auto" selected>Auto</option>
                             <option value="utf-8">UTF-8</option>
@@ -72,10 +72,10 @@
                         <i class='bx bx-help-circle' id="custom-ram-help" title="使える関数の一覧を表示" role="button" tabindex="0" aria-label="使える関数の一覧を表示" style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
                     </h3>
                     <div class="custom-ram-form">
-                        <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input">
-                        <input type="text" id="custom-ram-unit" placeholder="Unit (optional)" class="custom-ram-input">
+                        <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input" aria-label="Custom RAM名">
+                        <input type="text" id="custom-ram-unit" placeholder="Unit (optional)" class="custom-ram-input" aria-label="Custom RAM単位（省略可）">
                         <div style="position:relative;flex:1;">
-                            <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off">
+                            <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off" aria-label="Custom RAM計算式">
                             <ul id="custom-ram-suggest" class="custom-ram-suggest"></ul>
                         </div>
                         <button id="custom-ram-add" class="btn-primary btn-sm">Add</button>
@@ -159,11 +159,11 @@
                     </label>
                     <label class="sampling-label" title="線の太さ">
                         <i class='bx bx-pulse' aria-hidden="true"></i>
-                        <input type="range" id="line-width-range" min="0.5" max="5" step="0.5" value="1.0" style="width:80px;">
+                        <input type="range" id="line-width-range" min="0.5" max="5" step="0.5" value="1.0" style="width:80px;" aria-label="線の太さ">
                         <span id="line-width-value">1.0</span>
                     </label>
                     <label class="sampling-label" title="データ点（マーカー）を表示">
-                        <input type="checkbox" id="show-markers-chk">
+                        <input type="checkbox" id="show-markers-chk" aria-label="データ点（マーカー）を表示">
                         <span style="font-size:12px;">点</span>
                     </label>
                     <div class="toolbar-sep"></div>
