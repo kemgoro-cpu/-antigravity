@@ -21,12 +21,54 @@
     --text-secondary: #a0a5b1;
     --accent:         #6366f1;
     --accent-hover:   #4f46e5;
+    --accent-soft:    #818cf8;  /* 見出し・ツールチップの強調色（暗背景で読める明るめアクセント） */
     --accent-dim:     rgba(99, 102, 241, 0.15);
     --danger:         #ef4444;
     --border:         rgba(255, 255, 255, 0.08);
+    --border-weak:    rgba(255, 255, 255, 0.05);
+    --border-strong:  rgba(255, 255, 255, 0.13);
+    --overlay-1:      rgba(255, 255, 255, 0.03);  /* ごく薄い面の塗り */
+    --overlay-2:      rgba(255, 255, 255, 0.06);  /* やや強い面の塗り */
+    --bg-input:       rgba(255, 255, 255, 0.04);
+    --scrollbar-thumb:       rgba(255, 255, 255, 0.1);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+    --tooltip-bg:     rgba(12, 14, 20, 0.6);
+    --tooltip-border: rgba(255, 255, 255, 0.12);
+    /* チャート（canvas描画）用トークン。app.jsがcssVar()で実値を解決して使う */
+    --chart-grid:      rgba(255, 255, 255, 0.05);
+    --chart-axis:      rgba(255, 255, 255, 0.15);
+    --chart-crosshair: rgba(255, 255, 255, 0.35);
     --radius-sm:      6px;
     --radius-md:      8px;
     --transition:     0.16s ease;
+}
+
+/* ライトテーマ: <html data-theme="light"> で全トークンを差し替える。
+   チャート色は app.js の refreshThemeColors() が切替時に再解決する */
+:root[data-theme="light"] {
+    --bg-main:        #f4f5f7;
+    --bg-surface:     #ffffff;
+    --bg-hover:       #e9ebf0;
+    --text-primary:   #1d2130;
+    --text-secondary: #5b6272;
+    --accent:         #4f46e5;
+    --accent-hover:   #4338ca;
+    --accent-soft:    #4f46e5;
+    --accent-dim:     rgba(79, 70, 229, 0.12);
+    --danger:         #dc2626;
+    --border:         rgba(15, 20, 40, 0.12);
+    --border-weak:    rgba(15, 20, 40, 0.07);
+    --border-strong:  rgba(15, 20, 40, 0.18);
+    --overlay-1:      rgba(15, 20, 40, 0.04);
+    --overlay-2:      rgba(15, 20, 40, 0.07);
+    --bg-input:       rgba(15, 20, 40, 0.05);
+    --scrollbar-thumb:       rgba(15, 20, 40, 0.2);
+    --scrollbar-thumb-hover: rgba(15, 20, 40, 0.32);
+    --tooltip-bg:     rgba(255, 255, 255, 0.8);
+    --tooltip-border: rgba(15, 20, 40, 0.15);
+    --chart-grid:      rgba(15, 20, 40, 0.07);
+    --chart-axis:      rgba(15, 20, 40, 0.25);
+    --chart-crosshair: rgba(15, 20, 40, 0.4);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -43,8 +85,8 @@ body {
 /* ── Scrollbar ────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ── Layout ───────────────────────────────── */
 .app-container { display: flex; height: 100%; }
@@ -164,12 +206,12 @@ body {
 
 /* ── Drop Zone ────────────────────────────── */
 .drop-zone {
-    border: 2px dashed rgba(255,255,255,0.15);
+    border: 2px dashed var(--border-strong);
     border-radius: var(--radius-md);
     padding: 18px 14px;
     text-align: center;
     transition: var(--transition);
-    background: rgba(255,255,255,0.02);
+    background: var(--overlay-1);
     cursor: pointer;
 }
 
@@ -200,7 +242,7 @@ body {
 .parse-job {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: rgba(255,255,255,0.03);
+    background: var(--overlay-1);
     padding: 6px 7px;
     font-size: 0.7rem;
 }
@@ -229,7 +271,7 @@ body {
     height: 3px;
     margin-top: 5px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.08);
+    background: var(--overlay-2);
     overflow: hidden;
 }
 .parse-job-bar > span {
@@ -292,7 +334,7 @@ body {
 }
 
 .role-sub {
-    background: rgba(255,255,255,0.06);
+    background: var(--overlay-2);
     color: var(--text-secondary);
     border: 1px solid var(--border);
 }
@@ -352,7 +394,7 @@ body {
     align-items: center;
     gap: 6px;
     padding: 4px 8px 5px 34px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .time-unit-label,
@@ -384,7 +426,7 @@ body {
     align-items: center;
     gap: 5px;
     padding: 4px 8px 7px 34px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .offset-label {
@@ -401,7 +443,7 @@ body {
 }
 
 .btn-auto {
-    background: rgba(255,255,255,0.05);
+    background: var(--overlay-2);
     border: 1px solid var(--border);
     color: var(--text-secondary);
     font-size: 0.7rem;
@@ -441,7 +483,7 @@ body {
 .parse-preview {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: rgba(255,255,255,0.03);
+    background: var(--overlay-1);
     padding: 8px;
     font-size: 0.72rem;
     color: var(--text-secondary);
@@ -614,9 +656,9 @@ input[type="text"]:focus {
     margin-left: auto;
     font-weight: 600;
     transition: var(--transition);
-    background: rgba(255,255,255,0.06);
+    background: var(--overlay-2);
     color: var(--text-secondary);
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid var(--border-strong);
 }
 .bit-badge.active {
     background: rgba(16,185,129,0.15);
@@ -634,7 +676,7 @@ input[type="text"]:focus {
     align-items: center;
     gap: 4px;
     padding: 3px 7px 5px 23px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .col-yrange-label {
@@ -662,7 +704,7 @@ input[type="text"]:focus {
     align-items: center;
     gap: 6px;
     padding: 1px 7px 2px 23px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .col-linewidth-label {
@@ -779,7 +821,7 @@ input[type="text"]:focus {
     padding: 20px 24px;
     color: var(--text-primary);
     background: #1a1d24;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
@@ -1011,7 +1053,7 @@ input[type="text"]:focus {
 }
 
 .alias-main {
-    background: rgba(255,255,255,0.04);
+    background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 9px 10px;
@@ -1074,7 +1116,7 @@ input[type="text"]:focus {
     overflow-y: auto;
 }
 .alias-candidate {
-    background: rgba(255,255,255,0.03);
+    background: var(--overlay-1);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -1126,7 +1168,7 @@ input[type="text"]:focus {
 }
 
 .btn-secondary:disabled { opacity: 0.35; cursor: not-allowed; }
-.btn-secondary:not(:disabled):hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.15); }
+.btn-secondary:not(:disabled):hover { background: var(--bg-hover); border-color: var(--border-strong); }
 
 .btn-secondary.btn-active {
     background: var(--accent-dim);

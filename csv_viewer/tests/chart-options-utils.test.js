@@ -312,6 +312,22 @@ function testBaseChartOption() {
     assert.equal(base.brush.throttleDelay, 80);
     // 呼び出しごとに新しいオブジェクト（呼び出し側のformatter注入が漏れない）
     assert.notEqual(CO.buildBaseChartOption().tooltip, base.tooltip);
+
+    // 引数なしはダークテーマの既定値
+    assert.equal(base.tooltip.axisPointer.lineStyle.color, 'rgba(255,255,255,0.35)');
+    assert.equal(base.tooltip.backgroundColor, 'rgba(12,14,20,0.45)');
+
+    // テーマ色を渡すとクロスヘア・ツールチップ背景/枠に反映される
+    const themed = CO.buildBaseChartOption({
+        theme: { crosshair: '#c1', tooltipBg: '#c2', tooltipBorder: '#c3' },
+    });
+    assert.equal(themed.tooltip.axisPointer.lineStyle.color, '#c1');
+    assert.equal(themed.tooltip.backgroundColor, '#c2');
+    assert.equal(themed.tooltip.extraCssText.includes('border:1px solid #c3'), true);
+    // 部分指定は残りが既定値のまま
+    const partial = CO.buildBaseChartOption({ theme: { crosshair: '#c9' } });
+    assert.equal(partial.tooltip.axisPointer.lineStyle.color, '#c9');
+    assert.equal(partial.tooltip.backgroundColor, 'rgba(12,14,20,0.45)');
 }
 
 testConstants();

@@ -379,9 +379,15 @@
      * 全グリッド共通の静的チャートオプション（グリッド・軸・シリーズ以外）を構築する。
      * tooltip.formatter はモジュール状態（ホバーラベル更新・フォント設定）に
      * 依存するため含まない — 呼び出し側（renderChart）が注入する。
+     * @param {object} [p] テーマ色の上書き（省略時はダークテーマの既定値）
+     * @param {{crosshair?:string, tooltipBg?:string, tooltipBorder?:string}} [p.theme]
      * @returns {object} setOptionに展開するベースオプション
      */
-    function buildBaseChartOption() {
+    function buildBaseChartOption(p) {
+        const t = (p && p.theme) || {};
+        const crosshair     = t.crosshair     || 'rgba(255,255,255,0.35)';
+        const tooltipBg     = t.tooltipBg     || 'rgba(12,14,20,0.45)';
+        const tooltipBorder = t.tooltipBorder || 'rgba(255,255,255,0.08)';
         return {
             animation:       false,
             backgroundColor: 'transparent',
@@ -399,15 +405,15 @@
                 trigger: 'axis',
                 axisPointer: {
                     type: 'line',
-                    lineStyle: { color: 'rgba(255,255,255,0.35)', type: 'solid', width: 1 },
+                    lineStyle: { color: crosshair, type: 'solid', width: 1 },
                     animation: false,
                     snap: true,
                 },
-                backgroundColor: 'rgba(12,14,20,0.45)',
+                backgroundColor: tooltipBg,
                 extraCssText: [
                     'backdrop-filter:blur(8px)',
                     '-webkit-backdrop-filter:blur(8px)',
-                    'border:1px solid rgba(255,255,255,0.08)',
+                    `border:1px solid ${tooltipBorder}`,
                     'border-radius:6px',
                     'box-shadow:0 4px 16px rgba(0,0,0,0.35)',
                     'padding:4px 8px',

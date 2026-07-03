@@ -735,17 +735,44 @@ function cssVar(name, fallback) {
     return v || fallback;
 }
 
-// チャート用テーマ色。styles.css の :root トークンを単一情報源とし、起動時に解決する
-// （grid / axis はCSS側に対応トークンがないためJS側の実値のまま）
-const T = {
-    text:   cssVar('--text-primary',   '#f0f0f0'),
-    dim:    cssVar('--text-secondary', '#a0a5b1'),
-    border: cssVar('--border',         'rgba(255,255,255,0.08)'),
-    accent: cssVar('--accent',         '#6366f1'),
-    bgMain: cssVar('--bg-main',        '#0f1115'),  // PNGエクスポートの背景色
-    grid:   'rgba(255,255,255,0.05)',
-    axis:   'rgba(255,255,255,0.15)',
-};
+// チャート用テーマ色。styles.css の :root トークンを単一情報源とし、
+// 起動時とテーマ切替時（applyTheme → refreshThemeColors）に再解決する。
+// canvas描画（ECharts）はCSS変数を解釈できないため、ここで実値へ変換して渡す
+const T = {};
+function refreshThemeColors() {
+    Object.assign(T, {
+        text:      cssVar('--text-primary',    '#f0f0f0'),
+        dim:       cssVar('--text-secondary',  '#a0a5b1'),
+        border:    cssVar('--border',          'rgba(255,255,255,0.08)'),
+        accent:    cssVar('--accent',          '#6366f1'),
+        bgMain:    cssVar('--bg-main',         '#0f1115'),  // PNGエクスポートの背景色
+        grid:      cssVar('--chart-grid',      'rgba(255,255,255,0.05)'),
+        axis:      cssVar('--chart-axis',      'rgba(255,255,255,0.15)'),
+        crosshair: cssVar('--chart-crosshair', 'rgba(255,255,255,0.35)'),
+        tooltipBg:     cssVar('--tooltip-bg',     'rgba(12,14,20,0.6)'),
+        tooltipBorder: cssVar('--tooltip-border', 'rgba(255,255,255,0.12)'),
+    });
+}
+refreshThemeColors();
+
+/**
+ * カラーテーマ（'dark'|'light'）を適用する。
+ * <html data-theme> の付け替え → CSSトークン切替 → チャート色の再解決 → 再描画。
+ * 永続化（saveSettings）は呼び出し側で行う（起動時の復元で二重保存しないため）。
+ */
+function applyTheme(theme) {
+    state.theme = theme === 'light' ? 'light' : 'dark';
+    if (state.theme === 'light') document.documentElement.dataset.theme = 'light';
+    else delete document.documentElement.dataset.theme;
+    refreshThemeColors();
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) {
+        const icon = btn.querySelector('i');
+        if (icon) icon.className = state.theme === 'light' ? 'bx bx-moon' : 'bx bx-sun';
+        btn.title = state.theme === 'light' ? 'ダークテーマに切替' : 'ライトテーマに切替';
+    }
+    if (state.chart) renderChart();
+}
 
 // Chart layout constants (px)
 const L = {
@@ -801,6 +828,7 @@ const state = {
     monoColorMode:  false,     // 単色モード: trueならファイル単位の色で描画
     fileColors:     {},        // fileId → '#RRGGBB' ファイルごとの色（単色モード用）
     fontScale:      'normal',  // フォントサイズ段階: 'small'|'normal'|'large'|'xlarge'
+    theme:          'dark',    // カラーテーマ: 'dark'|'light'
     rowHeightPx:    null,      // グリッド基準高さ(px)。null=コンテナに自動フィット
     gridHeights:    {},        // グリッド個別の高さ上書き { signature: px }
     parseJobs:      new Map(), // jobId → { name, detail, cancelled }
@@ -2655,7 +2683,7 @@ function showDebugModal(fileId) {
 
     // --- セクション1: headerInfo（パース設定）---
     // id を振ることで aria-labelledby からモーダルタイトルを参照できる
-    let html = `<h3 id="debug-modal-title" style="margin:0 0 12px;color:#818cf8;">Parse Info</h3>`;
+    let html = `<h3 id="debug-modal-title" style="margin:0 0 12px;color:var(--accent-soft);">Parse Info</h3>`;
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;margin-bottom:16px;">`;
     const infoRows = [
         ['ファイル名', f.name],
@@ -2679,7 +2707,7 @@ function showDebugModal(fileId) {
     html += `</table>`;
 
     // --- セクション2: timeDataの先頭・末尾 ---
-    html += `<h3 style="margin:0 0 8px;color:#818cf8;">Time Data（先頭10 / 末尾5）</h3>`;
+    html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">Time Data（先頭10 / 末尾5）</h3>`;
     html += `<div style="font-family:'Roboto Mono',monospace;font-size:11px;color:#86efac;margin-bottom:16px;">`;
     if (td.length === 0) {
         html += `(空)`;
@@ -2692,7 +2720,7 @@ function showDebugModal(fileId) {
     html += `</div>`;
 
     // --- セクション3: columns一覧 ---
-    html += `<h3 style="margin:0 0 8px;color:#818cf8;">Columns</h3>`;
+    html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">Columns</h3>`;
     html += `<div style="font-size:11px;max-height:120px;overflow-y:auto;margin-bottom:16px;">`;
     html += `<table style="border-collapse:collapse;width:100%;">`;
     html += `<tr style="color:#a0a5b1;"><td style="padding:2px 6px;">idx</td><td style="padding:2px 6px;">name</td><td style="padding:2px 6px;">unit</td><td style="padding:2px 6px;">loaded</td></tr>`;
@@ -2710,7 +2738,7 @@ function showDebugModal(fileId) {
     if (typeof f.file === 'string') {
         // dataStart前後を含めて表示（ヘッダー + 実データ最初の数行）
         const showUntil = hi.dataStart + 5;  // dataStartの5行先まで
-        html += `<h3 style="margin:0 0 8px;color:#818cf8;">変換後テキスト（〜行${showUntil}）</h3>`;
+        html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">変換後テキスト（〜行${showUntil}）</h3>`;
         const lines = f.file.split('\n').slice(0, showUntil + 1);
         html += `<pre style="font-size:10px;color:#fda4af;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre;max-width:100%;">`;
         for (let i = 0; i < lines.length; i++) {
@@ -2725,7 +2753,7 @@ function showDebugModal(fileId) {
         }
         html += `</pre>`;
     } else if (f.previewRows && f.previewRows.length) {
-        html += `<h3 style="margin:0 0 8px;color:#818cf8;">読み込みプレビュー</h3>`;
+        html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">読み込みプレビュー</h3>`;
         html += `<pre style="font-size:10px;color:#fda4af;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre;max-width:100%;">`;
         for (let i = 0; i < f.previewRows.length; i++) {
             let label = '';
@@ -4197,7 +4225,7 @@ $('custom-ram-help')?.addEventListener('keydown', e => {
 
 function showCustomRAMHelp() {
     // id を振ることで aria-labelledby からモーダルタイトルを参照できる
-    let html = `<h3 id="custom-ram-help-title" style="margin:0 0 12px;color:#818cf8;">Custom RAM 関数リファレンス</h3>`;
+    let html = `<h3 id="custom-ram-help-title" style="margin:0 0 12px;color:var(--accent-soft);">Custom RAM 関数リファレンス</h3>`;
 
     // 演算子
     html += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">演算子</h4>`;
@@ -4258,7 +4286,7 @@ function showCustomRAMHelp() {
     html += `サブのデータはメインの時間軸に補間され、オフセット(Δt)も考慮されます。</div>`;
     html += `<div style="font-family:monospace;font-size:11px;color:#86efac;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;margin-top:6px;">`;
     for (const [ex, desc] of examples) {
-        html += `<div style="margin-bottom:4px;"><span style="color:#818cf8;">${esc(ex)}</span> <span style="color:#a0a5b1;font-size:10px;">— ${esc(desc)}</span></div>`;
+        html += `<div style="margin-bottom:4px;"><span style="color:var(--accent-soft);">${esc(ex)}</span> <span style="color:#a0a5b1;font-size:10px;">— ${esc(desc)}</span></div>`;
     }
     html += `</div>`;
 
@@ -4516,7 +4544,7 @@ function showChannelMapModal(mainName) {
             : '<div class="alias-empty">候補がありません</div>';
 
         modal.innerHTML = `
-            <h3 id="channel-map-title" style="margin:0 0 10px;color:#818cf8;">Channel Map</h3>
+            <h3 id="channel-map-title" style="margin:0 0 10px;color:var(--accent-soft);">Channel Map</h3>
             <div class="alias-main">
                 <div class="alias-main-label">Main</div>
                 <div class="alias-main-name">${esc(mainName)}${mainCol.unit ? ` <span>(${esc(mainCol.unit)})</span>` : ''}</div>
@@ -5181,7 +5209,9 @@ function renderChart() {
     });
 
     // 全グリッド共通の静的オプション（axisPointer / tooltipの見た目 / brush）は純粋関数で構築
-    const baseOption = CSVChartOptions.buildBaseChartOption();
+    const baseOption = CSVChartOptions.buildBaseChartOption({
+        theme: { crosshair: T.crosshair, tooltipBg: T.tooltipBg, tooltipBorder: T.tooltipBorder },
+    });
     // tooltip formatterだけはモジュール状態（_lastTooltipParams / updatePerGridLabels /
     // フォント設定）に依存するためrenderChart側で注入する
     baseOption.tooltip.formatter = params => {
@@ -5190,7 +5220,7 @@ function renderChart() {
         updatePerGridLabels();
         const t = params[0].axisValue;
         const tStr = typeof t === 'number' ? t.toFixed(3) : String(t);
-        return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:#818cf8;font-weight:600">t = ${tStr} s</span>`;
+        return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:var(--accent-soft);font-weight:600">t = ${tStr} s</span>`;
     };
 
     state.chart.setOption({
@@ -5434,7 +5464,7 @@ function updatePerGridLabels() {
     // Ensure we have enough label elements
     while (_labelEls.length < gridLabels.length) {
         const el = document.createElement('div');
-        el.style.cssText = 'position:absolute;font-family:"Roboto Mono",monospace;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap;background:rgba(12,14,20,0.6);border:1px solid rgba(255,255,255,0.12);pointer-events:none;';
+        el.style.cssText = 'position:absolute;font-family:"Roboto Mono",monospace;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap;background:var(--tooltip-bg);border:1px solid var(--tooltip-border);pointer-events:none;';
         ensureLabelContainer().appendChild(el);
         _labelEls.push(el);
     }
@@ -5803,7 +5833,7 @@ function showShortcutsModal() {
         ['Ctrl + Shift + C', 'チャートをクリップボードにコピー'],
     ];
 
-    let html = `<h3 id="shortcuts-modal-title" style="margin:0 0 12px;color:#818cf8;">キーボードショートカット</h3>`;
+    let html = `<h3 id="shortcuts-modal-title" style="margin:0 0 12px;color:var(--accent-soft);">キーボードショートカット</h3>`;
     html += `<p style="color:#a0a5b1;font-size:11px;margin:0 0 10px;">入力欄にフォーカスがあるときは単打キー (B / T / R / ?) は無効になります。</p>`;
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;">`;
     for (const [key, desc] of rows) {
@@ -5823,6 +5853,12 @@ function showShortcutsModal() {
 
 // ツールバーの ? ボタン（追加予定）からもモーダルを開けるようにする
 $('shortcuts-help-btn')?.addEventListener('click', showShortcutsModal);
+
+// テーマ切替（ライト/ダーク）。見た目のみの設定なのでUndo履歴には積まない
+$('theme-toggle-btn')?.addEventListener('click', () => {
+    applyTheme(state.theme === 'light' ? 'dark' : 'light');
+    saveSettings();
+});
 
 // ─────────────────────────────────────────────────────────────
 // Time shift controls
@@ -6204,6 +6240,7 @@ function collectSettings() {
         // サンプリングモード
         samplingMode: dom.sampling.value,
         // チャートの表示設定（見た目のみ。Undo履歴の比較からは除外される）
+        theme: state.theme,
         fontScale: state.fontScale,
         rowHeightPx: state.rowHeightPx,
         gridHeights: state.gridHeights,
@@ -6488,6 +6525,7 @@ function applySettings(rawSettings) {
     if (s.samplingMode !== undefined) dom.sampling.value = s.samplingMode;
 
     // チャート表示設定を復元
+    if (s.theme === 'light' || s.theme === 'dark') applyTheme(s.theme);
     if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
         state.fontScale = s.fontScale;
         if (dom.fontScale) dom.fontScale.value = s.fontScale;
@@ -6789,6 +6827,7 @@ window.__csvViewerDebug = {
     parseExprToAST,
     evaluateAST,
     esc,
+    applyTheme,
 };
 
 })();
