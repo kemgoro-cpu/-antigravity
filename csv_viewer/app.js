@@ -1160,6 +1160,7 @@ const dom = {
     presetLoad: $('preset-load-btn'),
     presetDelete: $('preset-delete-btn'),
     diffBtn: $('diff-curves-btn'),
+    xyBtn: $('xy-plot-btn'),
     favSelect: $('channel-fav-select'),
     favSave:   $('channel-fav-save'),
     favApply:  $('channel-fav-apply'),
@@ -2610,6 +2611,7 @@ function updateUI() {
 
     const hasFiles = Object.keys(state.files).length > 0;
     dom.clearBtn.disabled = !hasFiles;
+    if (dom.xyBtn) dom.xyBtn.disabled = !getMainFile();
 
     const hasSub = getSubFileIds().length > 0;
     if (dom.shiftBtn) dom.shiftBtn.disabled = !hasSub;
@@ -7347,6 +7349,137 @@ function showDiffCurvesModal() {
 dom.diffBtn?.addEventListener('click', showDiffCurvesModal);
 
 // ─────────────────────────────────────────────────────────────
+// XYプロット（F7）: 任意チャンネル同士の散布図をモーダルで表示する。
+// main/subを重ね描き（ファイル色）。X/Yは同一ファイル内のペアなので
+// タイムシフトは「表示中の時間範囲のみ」の絞り込みにだけ関係する。
+// ─────────────────────────────────────────────────────────────
+
+// 散布図の最大点数。超える場合は等間隔に間引く（描画の固まり防止）
+const XY_MAX_POINTS = 50000;
+
+async function showXYPlotModal() {
+    const mainFile = getMainFile();
+    if (!mainFile) return;
+
+    const colOptions = mainFile.columns
+        .map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.unit ? ` [${esc(c.unit)}]` : ''}</option>`)
+        .join('');
+    // 既定値: 表示中チャンネルの先頭2つ（無ければ列の先頭2つ）
+    const displayed = currentChannelOrder();
+    const defX = displayed[0] || mainFile.columns[0]?.name || '';
+    const defY = displayed[1] || mainFile.columns[1]?.name || defX;
+
+    const html =
+        `<h3 id="xy-modal-title" style="margin:0 0 8px;color:var(--accent-soft);">XYプロット</h3>`
+        + `<div class="xy-controls">`
+        + `<label>X: <select id="xy-x-select" aria-label="X軸チャンネル">${colOptions}</select></label>`
+        + `<label>Y: <select id="xy-y-select" aria-label="Y軸チャンネル">${colOptions}</select></label>`
+        + `<label class="xy-visible-label"><input type="checkbox" id="xy-visible-only" checked> 表示中の時間範囲のみ</label>`
+        + `</div>`
+        + `<div id="xy-chart" class="xy-chart"></div>`
+        + MODAL_CLOSE_FOOTER;
+
+    const { overlay, modal, close } = createModal(html, { modalClass: 'xy-modal', labelledBy: 'xy-modal-title' });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
+
+    const xSel = modal.querySelector('#xy-x-select');
+    const ySel = modal.querySelector('#xy-y-select');
+    const visChk = modal.querySelector('#xy-visible-only');
+    if ([...xSel.options].some(o => o.value === defX)) xSel.value = defX;
+    if ([...ySel.options].some(o => o.value === defY)) ySel.value = defY;
+
+    const chart = echarts.init(modal.querySelector('#xy-chart'), null, { renderer: 'canvas' });
+    // モーダルがどの経路で閉じても（Esc・オーバーレイクリック含む）チャートを破棄する
+    const obs = new MutationObserver(() => {
+        if (!document.body.contains(overlay)) {
+            chart.dispose();
+            obs.disconnect();
+        }
+    });
+    obs.observe(document.body, { childList: true });
+
+    async function renderXY() {
+        const xName = xSel.value, yName = ySel.value;
+        if (!xName || !yName) return;
+        const onlyVisible = visChk.checked;
+        const range = onlyVisible ? getVisibleXRange() : null;
+
+        // 対象チャンネルを全ファイルでロードしてから系列を組み立てる
+        const loads = [];
+        for (const [fid, f] of Object.entries(state.files)) {
+            const names = [xName, yName].filter(n => resolveColumnForFile(f, n));
+            if (names.length) loads.push(loadColumnsForFile(fid, names));
+        }
+        try { await Promise.all(loads); } catch (e) { /* 欠けた列は下でスキップされる */ }
+
+        const series = [];
+        for (const [fid, f] of Object.entries(state.files)) {
+            const xc = resolveColumnForFile(f, xName);
+            const yc = resolveColumnForFile(f, yName);
+            if (!xc || !yc) continue;
+            const xv = f.colData[xc.id], yv = f.colData[yc.id];
+            if (!xv || !yv) continue;
+
+            const offset = f.offset || 0;
+            const t = f.timeData;
+            const pts = [];
+            for (let i = 0; i < t.length; i++) {
+                if (range && (t[i] + offset < range[0] || t[i] + offset > range[1])) continue;
+                const x = xv[i], y = yv[i];
+                if (Number.isNaN(x) || Number.isNaN(y)) continue;
+                pts.push([x, y]);
+            }
+            // 点数上限: 等間隔に間引く
+            let data = pts;
+            if (pts.length > XY_MAX_POINTS) {
+                const stride = Math.ceil(pts.length / XY_MAX_POINTS);
+                data = [];
+                for (let i = 0; i < pts.length; i += stride) data.push(pts[i]);
+            }
+            series.push({
+                name: f.shortName, type: 'scatter',
+                data, symbolSize: 2.5, large: true, largeThreshold: 5000,
+                itemStyle: { color: state.fileColors[fid] || undefined, opacity: 0.75 },
+            });
+        }
+
+        const axisStyle = {
+            nameTextStyle: { color: T.dim },
+            axisLabel: { color: T.dim, formatter: CSVChartOptions.formatYAxisValue },
+            axisLine: { lineStyle: { color: T.axis } },
+            splitLine: { lineStyle: { color: T.grid } },
+        };
+        const unitOf = n => mainFile.columns.find(c => c.name === n)?.unit || '';
+        chart.setOption({
+            animation: false,
+            backgroundColor: 'transparent',
+            legend: { show: series.length > 1, textStyle: { color: T.dim }, top: 0 },
+            grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44 },
+            tooltip: {
+                trigger: 'item',
+                formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
+            },
+            xAxis: { type: 'value', name: `${xName}${unitOf(xName) ? ` (${unitOf(xName)})` : ''}`,
+                     nameLocation: 'middle', nameGap: 28, scale: true, ...axisStyle },
+            yAxis: { type: 'value', name: `${yName}${unitOf(yName) ? ` (${unitOf(yName)})` : ''}`,
+                     scale: true, ...axisStyle },
+            dataZoom: [
+                { type: 'inside', xAxisIndex: 0 },
+                { type: 'inside', yAxisIndex: 0 },
+            ],
+            series,
+        }, { notMerge: true });
+    }
+
+    xSel.addEventListener('change', renderXY);
+    ySel.addEventListener('change', renderXY);
+    visChk.addEventListener('change', renderXY);
+    await renderXY();
+}
+
+dom.xyBtn?.addEventListener('click', showXYPlotModal);
+
+// ─────────────────────────────────────────────────────────────
 // チャンネルセットのお気に入り（F10）: 表示チャンネルの組み合わせに名前を
 // 付けて保存し、ワンクリックで適用する。設定プリセットの軽量版で、
 // 保存するのはチャンネル名の配列（グリッド表示順）のみ。
@@ -8004,6 +8137,7 @@ window.__csvViewerDebug = {
     currentChannelOrder,
     showDiffCurvesModal,
     exportReportHTML,
+    showXYPlotModal,
 };
 
 })();
