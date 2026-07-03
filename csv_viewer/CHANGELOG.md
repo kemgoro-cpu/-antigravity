@@ -3,6 +3,54 @@
 開発を引き継ぐ人（人間・AIエージェント問わず）向けの正確な変更記録。
 コミット単位の詳細は `git log` も参照のこと。
 
+## 2026-07-03: 新機能 第1弾（F1〜F4、Claude Code実施）
+
+`FEATURE_BACKLOG.md` の第1弾4機能を実装。コミット: `fd87195`（F1）/ `d2e803e`（F2）/
+`22eb106`（F3）/ `db72eb8`（F4）。各機能の仕様はバックログ本文を参照。
+
+### 追加された機能
+
+1. **ライト/ダークテーマ切替（F1）**: ツールバー右のトグルボタン。
+   `:root[data-theme="light"]` でCSSトークンを差し替え、`refreshThemeColors()` が
+   ECharts用実値（`T`）を再解決して再描画する。設定キー `theme` で永続化
+2. **カーソル計測（F2、ショートカット M）**: チャート2クリックで計測点A/Bを設置。
+   区間のΔtと表示チャンネルごとのA/B/Δ/min/max/mean/RMSをパネル表示。
+   Subファイルはタイムシフト適用済みの時間軸で集計
+3. **しきい値イベント検出（F3）**: サイドバーのEventsセクション。条件式
+   （例 `Actual_Speed > 120`）で真区間をメインファイルから検出し、一覧+markArea
+   ハイライト+行クリックでズーム。**式パーサに比較演算子（`> < >= <= == !=`）と
+   論理演算子（`&& ||`）を追加**（Custom RAMでも使用可。結果は1/0、NaNは伝播）
+4. **セッション自動復元（F4）**: パース成功時に元ファイルをIndexedDB
+   （`csvViewerSession`）へ保存し、次回起動時に自動再読み込み。ロール・選択等は
+   既存のlocalStorage復元機構が適用する
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **チャートへ渡す色を増やすときはCSSトークン＋`cssVar()`経由にする**
+  （`refreshThemeColors()` に追加。ハードコードするとライトテーマに追従しない）。
+  DOM側のインライン色は `var(--accent-soft)` 等のCSS変数を直接書いてよい
+- **式パーサの優先順位**: `|| < && < 比較 < 加減 < 乗除 < べき乗 < 単項`。
+  演算レベルを増やすときは `parseExpr`→`parseLogicalOr`→…の階層に挿入し、
+  深度ガード（`parseFactor`）を迂回しないこと
+- **計測（`state.measure`）とイベント区間（`state.events.intervals`）は永続化しない**。
+  設定に入るのは条件式 `eventExpr` のみ（`VISUAL_ONLY_KEYS` 登録済み）。
+  イベント区間はメインの時間軸基準なので、メイン切替・削除・Clear Allで
+  `clearEvents(false)` を呼んで破棄する
+- **ファイルの削除経路を増やしたらセッションストアの掃除も追加する**
+  （`sessionDeleteFile` / `sessionClearFiles`）。保存は Phase 2 complete の
+  `sessionSaveFile(fileId, _origFileById.get(fileId), fileName)` のみで行う
+  （TRNはパイプライン内が変換済みテキストのため、元Fileは `_origFileById` が持つ）
+- **モード追加時は相互排他に組み込む**: enter系で他モードをexitし、
+  マウス操作ガード（`state.shiftMode || state.brushMode || state.arrangeMode ||
+  state.measureMode`）とEsc処理・ショートカット一覧に追加する
+
+### 検証記録
+
+- `npm test` 6本グリーン（chart-options-utilsにテーマ引数のケースを追加）
+- Playwright実ブラウザスモーク4本・計53チェック全PASS
+  （テーマ切替/計測/イベント検出/セッション復元。各機能の数値検証を含む）
+- ライト/ダーク両テーマのスクリーンショット目視確認
+
 ## 2026-07-02: 改善バックログ全面実施（Claude Code実施）
 
 全体コードレビューで作成した `IMPROVEMENT_BACKLOG.md`（29タスク）を7フェーズで実施。
