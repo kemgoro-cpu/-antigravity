@@ -1158,6 +1158,7 @@ const dom = {
     presetSave: $('preset-save-btn'),
     presetLoad: $('preset-load-btn'),
     presetDelete: $('preset-delete-btn'),
+    diffBtn: $('diff-curves-btn'),
     favSelect: $('channel-fav-select'),
     favSave:   $('channel-fav-save'),
     favApply:  $('channel-fav-apply'),
@@ -2024,6 +2025,9 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
 
                     // 保留中の設定があればファイル読込後に適用する
                     await applyPendingSettings();
+                    // 参照先Subが揃うのを待っていたクロスファイルRAMを再試行
+                    await applyDeferredCrossRAMs()
+                        .catch(e => console.warn('[CSV Viewer] クロスファイルRAMの復元に失敗:', e));
 
                     // 既存のCustom RAMがあれば新ファイルにも計算・追加する
                     // 各awaitに個別の.catchを付けることで、計算に失敗してもUI更新と保存は
@@ -2571,6 +2575,7 @@ dom.clearBtn.addEventListener('click', () => {
     CSVHistory.reset(appHistory);
     updateUndoRedoButtons();
     _pendingSettings    = null; // 保留設定もクリア
+    _deferredCrossRAMs  = [];   // 繰り延べ中のクロスファイルRAMも破棄
     if (state.shiftMode) exitShiftMode();
     if (state.arrangeMode) exitArrangeMode();
     if (state.measureMode) exitMeasureMode(false);
@@ -2607,6 +2612,7 @@ function updateUI() {
 
     const hasSub = getSubFileIds().length > 0;
     if (dom.shiftBtn) dom.shiftBtn.disabled = !hasSub;
+    if (dom.diffBtn) dom.diffBtn.disabled = !hasSub;
     if (!hasSub && state.shiftMode) exitShiftMode();
 
     const canArrange = state.chartGroups.length > 1;
@@ -2995,7 +3001,7 @@ async function addCustomRAM(name, expr, unit = '') {
     if (!/^[@#$%]/.test(name)) name = '@' + name;
     // Prevent duplicate names
     if (mainFile.columns.some(c => c.name === name)) {
-        alert(`Channel "${name}" already exists.`);
+        showWarning(`チャンネル "${name}" は既に存在します`);
         return;
     }
 
@@ -3033,7 +3039,8 @@ async function addCustomRAM(name, expr, unit = '') {
     // メインファイルで計算してエラーチェック
     const mainVals = computeCustomExpr(expr, mainFile);
     if (mainVals.every(v => isNaN(v))) {
-        alert(`式のエラー: "${expr}" を評価できません。\nRAM名や関数名を確認してください。`);
+        showWarning(`式のエラー: "${name}" を追加できません`,
+            `"${expr}" を評価できません。RAM名や関数名を確認してください。`);
         return;
     }
 
@@ -7109,6 +7116,91 @@ function deleteSelectedPreset() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 差分カーブ生成（F8）: MainとSubの両方に存在するチャンネルから選んで、
+// Main − Sub の差分を Custom RAM（@Δ名_s番号）として一括生成する。
+// 計算はクロスファイル式（名前 - sN:名前）なので、Subのタイムシフト
+// （offset）適用後の時間軸でMainに補間される既存機構をそのまま使う。
+// ─────────────────────────────────────────────────────────────
+
+/** 名前が式のトークナイザを単一識別子として通るか（空白や演算子入りの名前は式にできない） */
+function isExprSafeName(name) {
+    try {
+        const t = tokenizeExpr(name);
+        return t.length === 1 && t[0].type === 'name' && t[0].value === name;
+    } catch (e) {
+        return false;
+    }
+}
+
+function showDiffCurvesModal() {
+    const mainFile = getMainFile();
+    const subIds = getSubFileIds();
+    if (!mainFile || !subIds.length) return;
+
+    let body = '';
+    let candidates = 0;
+    subIds.forEach((subId, i) => {
+        const sf = state.files[subId];
+        const subNames = new Set(sf.columns.map(c => c.name));
+        // 両ファイルに同名で存在し、式に書ける名前だけを候補にする
+        // （既生成の差分 @Δ… は除外）
+        const common = mainFile.columns.filter(c =>
+            subNames.has(c.name) && !c.name.startsWith('@Δ') && isExprSafeName(c.name));
+        if (!common.length) return;
+
+        body += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">s${i + 1}: ${esc(sf.shortName)}</h4>`
+            + `<div class="diff-ch-list">`;
+        for (const c of common) {
+            const newName = `@Δ${c.name}_s${i + 1}`;
+            const exists = mainFile.columns.some(col => col.name === newName);
+            if (!exists) candidates++;
+            body += `<label class="diff-ch-item">`
+                + `<input type="checkbox" data-sub="${i + 1}" data-ch="${esc(c.name)}"${exists ? ' disabled' : ''}>`
+                + `<span${exists ? ' style="opacity:0.45;"' : ''}>${esc(c.name)}</span>`
+                + (exists ? `<span class="diff-exists">生成済み</span>` : '')
+                + `</label>`;
+        }
+        body += `</div>`;
+    });
+
+    if (!body) {
+        showWarning('差分を作れるチャンネルがありません',
+            'MainとSubの両方に同じ名前で存在するチャンネルが対象です。名前が違う場合はChannel Mapではなく、Custom RAMで「Main名 - s1:Sub名」を直接定義してください。');
+        return;
+    }
+
+    const html =
+        `<h3 id="diff-modal-title" style="margin:0 0 8px;color:var(--accent-soft);">差分カーブ生成（Main − Sub）</h3>`
+        + `<p style="color:var(--text-secondary);font-size:11px;margin:0 0 4px;">`
+        + `選んだチャンネルの Main − Sub 差分を Custom RAM（@Δ名_s番号）として追加します。`
+        + `Subはタイムシフト適用後の時間軸でMainに補間されます。</p>`
+        + body
+        + `<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">`
+        + `<button id="diff-generate-btn" class="btn-primary" style="padding:6px 18px;font-size:13px;"${candidates ? '' : ' disabled'}>生成</button>`
+        + `<button class="modal-close-btn" style="background:transparent;color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button>`
+        + `</div>`;
+
+    const { modal, close } = createModal(html, { modalClass: 'diff-modal', labelledBy: 'diff-modal-title' });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
+    modal.querySelector('#diff-generate-btn').addEventListener('click', async () => {
+        const checked = [...modal.querySelectorAll('input[type="checkbox"]:checked')];
+        if (!checked.length) { showWarning('チャンネルを選択してください'); return; }
+        close();
+        for (const cb of checked) {
+            const ch = cb.dataset.ch;
+            const s = cb.dataset.sub;
+            const unit = mainFile.columns.find(c => c.name === ch)?.unit || '';
+            // addCustomRAM が '@' を付けて @Δ名_sN になる。計算・チャート追加・
+            // 永続化・全ファイルへの伝播はCustom RAMの既存経路に任せる
+            await addCustomRAM(`Δ${ch}_s${s}`, `${ch} - s${s}:${ch}`, unit);
+        }
+        showExportToast('差分カーブを追加しました', `${checked.length}件`);
+    });
+}
+
+dom.diffBtn?.addEventListener('click', showDiffCurvesModal);
+
+// ─────────────────────────────────────────────────────────────
 // チャンネルセットのお気に入り（F10）: 表示チャンネルの組み合わせに名前を
 // 付けて保存し、ワンクリックで適用する。設定プリセットの軽量版で、
 // 保存するのはチャンネル名の配列（グリッド表示順）のみ。
@@ -7465,6 +7557,27 @@ function restoreChartGroupsFromSettings(s, mainFile) {
     }
 }
 
+// 参照先のSubファイルがまだ無くて復元を繰り延べたクロスファイルCustom RAM
+// [{ name, unit, expr }]。後続ファイルのパース完了時に applyDeferredCrossRAMs が再試行する
+let _deferredCrossRAMs = [];
+
+/** 繰り延べたクロスファイルRAMのうち、参照先Subが揃ったものを追加する */
+async function applyDeferredCrossRAMs() {
+    if (!_deferredCrossRAMs.length) return;
+    const subCount = getSubFileIds().length;
+    const ready = [];
+    _deferredCrossRAMs = _deferredCrossRAMs.filter(r => {
+        const refs = extractCrossRefs(r.expr);
+        const maxRef = refs.length
+            ? Math.max(...refs.map(cr => parseInt(cr.fileKey.slice(1), 10))) : 0;
+        if (maxRef <= subCount) { ready.push(r); return false; }
+        return true;
+    });
+    for (const r of ready) {
+        await addCustomRAM(r.name, r.expr, r.unit);
+    }
+}
+
 async function applyPendingSettings() {
     const s = _pendingSettings;
     if (!s) return;
@@ -7518,14 +7631,25 @@ async function applyPendingSettings() {
         for (const name of s.bitManualOff) _bitManualOff.add(name);
     }
 
-    // Custom RAMを復元（まだ追加されていないもののみ）
+    // Custom RAMを復元（まだ追加されていないもののみ）。
+    // クロスファイル式（s1:Name等）は、参照先のSubがまだ読み込まれていないと
+    // 全NaNになって失敗するため、対象Subのパース完了まで繰り延べる
+    // （複数ファイル同時ドロップやセッション自動復元では、この関数は
+    //  最初のファイルの完了時点で走り、_pendingSettingsを消費するため）
     if (s.customRAMs && s.customRAMs.length) {
         const existingNames = new Set(state.customRAMs.map(c => c.name));
+        const subCount = getSubFileIds().length;
         for (const { name, unit = '', expr } of s.customRAMs) {
-            if (!existingNames.has(name)) {
-                await addCustomRAM(name, expr, unit);
-                existingNames.add(name);
+            if (existingNames.has(name)) continue;
+            const refs = extractCrossRefs(expr);
+            const maxRef = refs.length
+                ? Math.max(...refs.map(cr => parseInt(cr.fileKey.slice(1), 10))) : 0;
+            if (maxRef > subCount) {
+                _deferredCrossRAMs.push({ name, unit, expr });
+                continue;
             }
+            await addCustomRAM(name, expr, unit);
+            existingNames.add(name);
         }
     }
     if (timeScaleChanged && state.customRAMs.length) await recomputeCustomRAMs();
@@ -7732,6 +7856,7 @@ window.__csvViewerDebug = {
     saveChannelFavorite,
     applyChannelFavorite,
     currentChannelOrder,
+    showDiffCurvesModal,
 };
 
 })();

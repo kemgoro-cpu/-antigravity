@@ -1265,6 +1265,25 @@ input[type="text"]:focus {
 .event-range { font-family: 'Roboto Mono', monospace; color: var(--text-primary); flex: 1; }
 .event-dur   { font-family: 'Roboto Mono', monospace; color: var(--text-secondary); }
 
+/* 差分カーブ生成モーダル（F8） */
+.diff-modal { width: 520px; max-width: 92%; }
+.diff-ch-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.diff-ch-item {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--text-primary);
+    padding: 3px 4px; border-radius: var(--radius-sm);
+    cursor: pointer; min-width: 0;
+}
+.diff-ch-item:hover { background: var(--bg-hover); }
+.diff-ch-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-exists { color: var(--text-secondary); font-size: 10px; flex-shrink: 0; }
+
 /* カーソル計測パネル（Measureモード。チャート右上）と
    表示範囲統計パネル（Stats。チャート右下、スライダーの上）は同じ見た目 */
 .measure-panel,
