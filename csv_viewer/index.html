@@ -84,6 +84,18 @@
                     <ul id="custom-ram-list" class="custom-ram-list"></ul>
                 </div>
 
+                <!-- Event Detection -->
+                <div class="control-group">
+                    <h3><i class='bx bx-flag' aria-hidden="true"></i> Events</h3>
+                    <div class="event-form">
+                        <input type="text" id="event-expr" placeholder="e.g. Actual_Speed > 120" class="custom-ram-input" autocomplete="off" aria-label="イベント検出の条件式">
+                        <button id="event-detect-btn" class="btn-primary btn-sm">検出</button>
+                    </div>
+                    <div id="event-validation" class="custom-ram-validation"></div>
+                    <div id="event-summary" class="event-summary"></div>
+                    <ul id="event-list" class="event-list"></ul>
+                </div>
+
                 <!-- Channel Selection (main file only) -->
                 <div class="control-group active-columns-group">
                     <h3><i class='bx bx-list-ul' aria-hidden="true"></i> Channels <span id="channel-source-label" class="channel-source-label"></span></h3>

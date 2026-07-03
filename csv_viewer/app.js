@@ -342,6 +342,15 @@ function tokenizeExpr(expr) {
         if (/\s/.test(ch)) { i++; continue; }
         // カンマ（関数の引数区切り）
         if (ch === ',') { tokens.push({ type: 'comma' }); i++; continue; }
+        // 比較・論理演算子（2文字を1文字より先に判定する）
+        const two = expr.slice(i, i + 2);
+        if (two === '>=' || two === '<=' || two === '==' || two === '!=' || two === '&&' || two === '||') {
+            tokens.push({ type: 'op', value: two }); i += 2; continue;
+        }
+        if (ch === '>' || ch === '<') { tokens.push({ type: 'op', value: ch }); i++; continue; }
+        // 単独の = ! & | は文法に無い（==等の打ち間違い）。無限ループしないよう
+        // 消費だけして op として積む（どの文法規則にも一致せず無視される）
+        if ('=!&|'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
         // 演算子と括弧（^をべき乗演算子として追加）
         if ('+-*/()^'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
         // 数値リテラル（小数点、指数表記に対応）
@@ -358,7 +367,7 @@ function tokenizeExpr(expr) {
         // 識別子（RAM名 or 関数名 or ファイル間参照 s1:Name）
         // 英数字、アンダースコア、ドット、コロン、非ASCII（日本語など）を許可
         let name = '';
-        while (i < expr.length && !/[\s+\-*/()^,]/.test(expr[i])) name += expr[i++];
+        while (i < expr.length && !/[\s+\-*/()^,<>=!&|]/.test(expr[i])) name += expr[i++];
         if (name) {
             // ファイル間参照の判定: s1:Name, s2:Name 形式
             const crossMatch = name.match(/^(s\d+):(.+)$/);
@@ -389,8 +398,44 @@ function parseExprToAST(expr) {
     function peek() { return pos < tokens.length ? tokens[pos] : null; }
     function next() { return tokens[pos++]; }
 
-    // expr = term (('+' | '-') term)*
+    // expr = logicalOr（優先順位: || < && < 比較 < 加減 < 乗除 < べき乗 < 単項）
     function parseExpr() {
+        return parseLogicalOr();
+    }
+
+    // logicalOr = logicalAnd ('||' logicalAnd)*
+    function parseLogicalOr() {
+        let left = parseLogicalAnd();
+        while (peek() && peek().value === '||') {
+            next();
+            left = { type: 'binop', op: '||', left, right: parseLogicalAnd() };
+        }
+        return left;
+    }
+
+    // logicalAnd = comparison ('&&' comparison)*
+    function parseLogicalAnd() {
+        let left = parseComparison();
+        while (peek() && peek().value === '&&') {
+            next();
+            left = { type: 'binop', op: '&&', left, right: parseComparison() };
+        }
+        return left;
+    }
+
+    // comparison = additive (cmpOp additive)?  （a<b<c のような連鎖は許可しない）
+    const CMP_OPS = new Set(['>', '<', '>=', '<=', '==', '!=']);
+    function parseComparison() {
+        let left = parseAdditive();
+        if (peek() && CMP_OPS.has(peek().value)) {
+            const op = next().value;
+            left = { type: 'binop', op, left, right: parseAdditive() };
+        }
+        return left;
+    }
+
+    // additive = term (('+' | '-') term)*
+    function parseAdditive() {
         let left = parseTerm();
         while (peek() && (peek().value === '+' || peek().value === '-')) {
             const op = next().value;
@@ -510,16 +555,28 @@ function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
         return arr;
     }
 
-    // 二項演算を要素ごとに適用
+    // 二項演算を要素ごとに適用。
+    // 比較・論理演算の結果は 1（真）/ 0（偽）。どちらかの入力が NaN の点は
+    // NaN のまま伝播させる（欠損を「偽」と混同させない。イベント検出側は
+    // NaN を偽として扱う）
     function binop(op, a, b) {
         const out = new Float32Array(len);
         for (let i = 0; i < len; i++) {
+            const x = a[i], y = b[i];
             switch (op) {
-                case '+': out[i] = a[i] + b[i]; break;
-                case '-': out[i] = a[i] - b[i]; break;
-                case '*': out[i] = a[i] * b[i]; break;
-                case '/': out[i] = a[i] / b[i]; break;
-                case '^': out[i] = Math.pow(a[i], b[i]); break;
+                case '+': out[i] = x + y; break;
+                case '-': out[i] = x - y; break;
+                case '*': out[i] = x * y; break;
+                case '/': out[i] = x / y; break;
+                case '^': out[i] = Math.pow(x, y); break;
+                case '>':  out[i] = (x !== x || y !== y) ? NaN : (x >   y ? 1 : 0); break;
+                case '<':  out[i] = (x !== x || y !== y) ? NaN : (x <   y ? 1 : 0); break;
+                case '>=': out[i] = (x !== x || y !== y) ? NaN : (x >=  y ? 1 : 0); break;
+                case '<=': out[i] = (x !== x || y !== y) ? NaN : (x <=  y ? 1 : 0); break;
+                case '==': out[i] = (x !== x || y !== y) ? NaN : (x === y ? 1 : 0); break;
+                case '!=': out[i] = (x !== x || y !== y) ? NaN : (x !== y ? 1 : 0); break;
+                case '&&': out[i] = (x !== x || y !== y) ? NaN : ((x !== 0 && y !== 0) ? 1 : 0); break;
+                case '||': out[i] = (x !== x || y !== y) ? NaN : ((x !== 0 || y !== 0) ? 1 : 0); break;
             }
         }
         return out;
@@ -816,6 +873,7 @@ const state = {
     shiftMode:      false,
     measureMode:    false,               // カーソル計測モード（M）
     measure:        { tA: null, tB: null }, // 計測カーソル位置(秒)。永続化しない
+    events:         { expr: '', intervals: [] }, // イベント検出結果（区間はメインファイル基準。永続化しない）
     shiftFileId:    null,   // which sub file is the drag target
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
@@ -1084,6 +1142,11 @@ const dom = {
     customValidation: $('custom-ram-validation'),
     monoColorBtn: $('mono-color-btn'),
     measureBtn: $('measure-mode-btn'),
+    eventExpr:      $('event-expr'),
+    eventDetectBtn: $('event-detect-btn'),
+    eventValidation: $('event-validation'),
+    eventSummary:   $('event-summary'),
+    eventList:      $('event-list'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
     exportSettings: $('export-settings-btn'),
@@ -2425,6 +2488,7 @@ async function setMainFile(newMainId) {
     pruneChannelAliasesForMain(newMain);
     autoNormalizeTimeScales();
     await recomputeCustomRAMs();
+    clearEvents(false); // イベント区間は旧メインの時間軸基準なので破棄
     updateUI();
 }
 
@@ -2432,6 +2496,8 @@ function removeFile(fileId) {
     const wasMain = state.files[fileId]?.role === 'main';
     delete state.files[fileId];
     delete state.fileColors[fileId];
+    // イベント区間は旧メインの時間軸基準なので、メインが変わるなら破棄する
+    if (wasMain) clearEvents(false);
 
     if (state.shiftFileId === fileId) {
         state.shiftFileId = getSubFileIds()[0] ?? null;
@@ -2475,6 +2541,8 @@ dom.clearBtn.addEventListener('click', () => {
     _pendingSettings    = null; // 保留設定もクリア
     if (state.shiftMode) exitShiftMode();
     if (state.arrangeMode) exitArrangeMode();
+    if (state.measureMode) exitMeasureMode(false);
+    clearEvents(false); // イベント区間は消えたファイルの時間軸を指しているため破棄
     if (dom.parsePreview) dom.parsePreview.classList.add('hidden');
     renderParseJobs();
     updateUI();
@@ -4237,6 +4305,8 @@ function showCustomRAMHelp() {
         ['+, -, *, /', '四則演算'],
         ['^', 'べき乗（例: X^2）'],
         ['( )', '括弧でグループ化'],
+        ['>, <, >=, <=, ==, !=', '比較（結果は 1/0。例: SPD > 120）'],
+        ['&&, ||', '論理積・論理和（例: SPD > 60 && GEAR == 4）'],
     ];
     for (const [op, desc] of ops) {
         html += `<tr><td style="padding:3px 8px;color:#6ee7b7;font-family:monospace;white-space:nowrap;">${esc(op)}</td>`
@@ -5214,6 +5284,26 @@ function renderChart() {
         });
     });
 
+    // イベント検出結果の区間ハイライト（markArea）を各グリッドに重ねる
+    if (state.events.intervals.length) {
+        const areaData = state.events.intervals.map(iv => [{ xAxis: iv.t0 }, { xAxis: iv.t1 }]);
+        order.forEach((groupId, gi) => {
+            const yIdxMap = yAxisIndexByGroup.get(groupId);
+            const yAxisIndex = yIdxMap && yIdxMap.size ? yIdxMap.values().next().value : 0;
+            series.push({
+                id: `event-area-${gi}`,
+                type: 'line', data: [],
+                xAxisIndex: gi, yAxisIndex,
+                silent: true, animation: false,
+                markArea: {
+                    silent: true, animation: false,
+                    itemStyle: { color: EVENT_AREA_COLOR },
+                    data: areaData,
+                },
+            });
+        });
+    }
+
     // 計測カーソル（縦線）を各グリッドに重ねる。markLineのxAxis値指定なので
     // ズーム・リサイズには自動追従する
     if (state.measureMode && state.measure.tA != null) {
@@ -5797,6 +5887,125 @@ function buildMeasureTableHTML(t0, t1) {
     html += `</tbody></table>`;
     return html;
 }
+
+// ─────────────────────────────────────────────────────────────
+// イベント検出: 条件式（例 Actual_Speed > 120）を式パーサで評価し、
+// 真（≠0）が連続する区間をメインファイルから抽出して一覧表示・
+// チャート上に markArea でハイライトする。行クリックで区間へズーム。
+// ─────────────────────────────────────────────────────────────
+
+// 区間ハイライトの塗り色（canvas描画のため実値。薄い赤は両テーマで見える）
+const EVENT_AREA_COLOR = 'rgba(239,68,68,0.14)';
+// 検出区間の上限。ノイズ的な条件（例 X != 0）で数万区間できると
+// markAreaの描画とリスト構築が固まるため打ち切る
+const EVENT_MAX_INTERVALS = 300;
+
+/**
+ * 真（NaN以外かつ≠0）が連続する区間を抽出する。
+ * @returns {{list: {t0:number, t1:number}[], truncated: boolean}}
+ */
+function extractTrueIntervals(timeData, vals, cap) {
+    const list = [];
+    let startIdx = null;
+    let truncated = false;
+    const push = (endIdx) => list.push({ t0: timeData[startIdx], t1: timeData[endIdx] });
+    for (let i = 0; i < vals.length; i++) {
+        const v = vals[i];
+        const on = !Number.isNaN(v) && v !== 0;
+        if (on && startIdx === null) startIdx = i;
+        if (!on && startIdx !== null) {
+            push(i - 1);
+            startIdx = null;
+            if (list.length >= cap) { truncated = true; break; }
+        }
+    }
+    if (startIdx !== null && !truncated) push(vals.length - 1);
+    return { list, truncated };
+}
+
+function setEventValidation(text, cls) {
+    dom.eventValidation.textContent = text;
+    dom.eventValidation.className = 'custom-ram-validation' + (cls ? ' ' + cls : '');
+}
+
+/** 検出結果とハイライトをすべて消す */
+function clearEvents(rerender = true) {
+    const had = state.events.intervals.length > 0;
+    state.events = { expr: '', intervals: [] };
+    dom.eventSummary.textContent = '';
+    dom.eventList.innerHTML = '';
+    setEventValidation('', '');
+    if (rerender && had && state.chart && state.numGrids > 0) renderChart();
+}
+
+/** 条件式を評価してイベント区間を検出し、一覧とハイライトを更新する */
+async function detectEvents() {
+    const expr = dom.eventExpr.value.trim();
+    if (!expr) { clearEvents(); return; }
+    const mainFile = getMainFile();
+    if (!mainFile) { setEventValidation('ファイルを読み込んでください', 'error'); return; }
+
+    // 参照カラムをロードしてから検証・評価する（未ロード列はNaN扱いになるため）
+    const mainFileId = getMainFileId();
+    try {
+        await loadColumnsForFile(mainFileId, extractExprNames(expr));
+    } catch (e) { /* ロード失敗は検証エラーとして下で表面化する */ }
+
+    const v = evaluateExprForValidation(expr);
+    if (!v.ok) { setEventValidation(v.text, 'error'); return; }
+    setEventValidation('', '');
+
+    const vals = computeCustomExpr(expr, mainFile);
+    const { list, truncated } = extractTrueIntervals(mainFile.timeData, vals, EVENT_MAX_INTERVALS);
+    state.events = { expr, intervals: list };
+    renderEventList(truncated);
+    renderChart();
+    saveSettings();
+}
+
+/** イベント一覧（サマリ行+区間リスト）を再構築する */
+function renderEventList(truncated) {
+    const { intervals } = state.events;
+    dom.eventList.innerHTML = '';
+
+    if (!intervals.length) {
+        dom.eventSummary.textContent = '条件を満たす区間はありません';
+        return;
+    }
+    dom.eventSummary.innerHTML =
+        `${intervals.length}件${truncated ? `（上限${EVENT_MAX_INTERVALS}件で打ち切り）` : ''}　`
+        + `<button type="button" id="event-clear-btn" class="event-clear-btn">クリア</button>`;
+    dom.eventSummary.querySelector('#event-clear-btn')
+        .addEventListener('click', () => { dom.eventExpr.value = state.events.expr; clearEvents(); });
+
+    intervals.forEach((iv, i) => {
+        const li = document.createElement('li');
+        li.className = 'event-item';
+        li.innerHTML = `<span class="event-idx">${i + 1}</span>`
+            + `<span class="event-range">${esc(iv.t0.toFixed(2))} – ${esc(iv.t1.toFixed(2))} s</span>`
+            + `<span class="event-dur">${esc((iv.t1 - iv.t0).toFixed(2))} s</span>`;
+        li.title = 'クリックでこの区間へズーム';
+        li.addEventListener('click', () => zoomToInterval(iv));
+        dom.eventList.appendChild(li);
+    });
+}
+
+/** 区間の前後に余白を付けてX軸ズームする */
+function zoomToInterval(iv) {
+    if (!state.chart || state.numGrids === 0) return;
+    const pad = Math.max((iv.t1 - iv.t0) * 0.3, 1);
+    // dataZoomIndex:0（X軸スライダー）を対象にする（守るべき制約: index指定必須）
+    state.chart.dispatchAction({
+        type: 'dataZoom', dataZoomIndex: 0,
+        startValue: iv.t0 - pad, endValue: iv.t1 + pad,
+    });
+    recordHistory();
+}
+
+dom.eventDetectBtn.addEventListener('click', detectEvents);
+dom.eventExpr.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); detectEvents(); }
+});
 
 // ─────────────────────────────────────────────────────────────
 // Undo / Redo（Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z）
@@ -6446,6 +6655,8 @@ function collectSettings() {
         samplingMode: dom.sampling.value,
         // チャートの表示設定（見た目のみ。Undo履歴の比較からは除外される）
         theme: state.theme,
+        // イベント検出の条件式（区間は保存しない。次回は式だけ復元して手動で再検出）
+        eventExpr: dom.eventExpr?.value || '',
         fontScale: state.fontScale,
         rowHeightPx: state.rowHeightPx,
         gridHeights: state.gridHeights,
@@ -6731,6 +6942,7 @@ function applySettings(rawSettings) {
 
     // チャート表示設定を復元
     if (s.theme === 'light' || s.theme === 'dark') applyTheme(s.theme);
+    if (typeof s.eventExpr === 'string' && dom.eventExpr) dom.eventExpr.value = s.eventExpr;
     if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
         state.fontScale = s.fontScale;
         if (dom.fontScale) dom.fontScale.value = s.fontScale;
@@ -7035,6 +7247,9 @@ window.__csvViewerDebug = {
     applyTheme,
     computeIntervalStats,
     toggleMeasureMode,
+    extractTrueIntervals,
+    detectEvents,
+    computeCustomExpr,
 };
 
 })();

@@ -15,7 +15,7 @@
     // 履歴比較から除外する「見た目だけ」の設定キー
     // (サイドバー幅やフォント・グリッド高さの調整でUndoエントリが積まれるのは
     //  違和感があり、特に境界ドラッグ中は連続発火して履歴スパムになるため)
-    const VISUAL_ONLY_KEYS = ['sidebarWidth', 'fontScale', 'rowHeightPx', 'gridHeights', 'theme'];
+    const VISUAL_ONLY_KEYS = ['sidebarWidth', 'fontScale', 'rowHeightPx', 'gridHeights', 'theme', 'eventExpr'];
 
     /**
      * 空の履歴オブジェクトを作る。
