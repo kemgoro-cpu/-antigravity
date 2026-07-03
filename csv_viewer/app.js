@@ -1152,6 +1152,7 @@ const dom = {
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
     exportCsv:  $('export-csv-btn'),
+    exportReport: $('export-report-btn'),
     exportSettings: $('export-settings-btn'),
     importSettings: $('import-settings-btn'),
     presetSelect: $('settings-preset-select'),
@@ -5158,6 +5159,7 @@ function renderChart() {
         dom.measureBtn.disabled = true;
         dom.statsBtn.disabled = true;
         dom.exportCsv.disabled = true;
+        dom.exportReport.disabled = true;
         state.numGrids = 0;
         if (state.measureMode) exitMeasureMode(false); // 表示チャンネルが無くなったら計測も解除
         updateStatsPanel(); // グリッドが無くなったらパネルも消す
@@ -5170,6 +5172,7 @@ function renderChart() {
     dom.measureBtn.disabled = false;
     dom.statsBtn.disabled = false;
     dom.exportCsv.disabled = false;
+    dom.exportReport.disabled = false;
     state.numGrids = n;
 
     // フォントスケールと、それに連動する余白(数値ラベル幅・軸名間隔・左マージン)
@@ -5986,18 +5989,19 @@ function updateStatsPanel() {
     panel.innerHTML = buildStatsTableHTML(range[0], range[1]);
 }
 
-/** 表示範囲 [t0, t1] の統計テーブルHTML（行 = チャンネル × ファイル） */
-function buildStatsTableHTML(t0, t1) {
+/**
+ * 表示範囲 [t0, t1] の統計行（チャンネル × ファイル）を収集する。
+ * 統計パネル（F5）とレポート出力（F9）で共用。
+ * @returns {{label:string, color:string, min:number, max:number, mean:number, sigma:number, n:number}[]}
+ */
+function collectStatsRows(t0, t1) {
     const lookup = _lastRenderedLookup;
     const { groups: activeGroups, order: activeOrder } =
         _lastRenderedGroups || { groups: new Map(), order: [] };
     const mainFile = lookup && lookup.mainFile;
-
-    let html = `<div class="measure-title">表示範囲の統計　`
-        + `<span class="measure-dt">${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s</span></div>`;
-    if (!mainFile) return html + `<div class="measure-hint">データがありません</div>`;
-
     const rows = [];
+    if (!mainFile) return rows;
+
     const pushRow = (label, color, timeData, data, offset) => {
         const s = computeIntervalStats(timeData, data, t0 - offset, t1 - offset);
         if (!s) return;
@@ -6023,6 +6027,17 @@ function buildStatsTableHTML(t0, t1) {
             }
         }
     }
+    return rows;
+}
+
+/** 表示範囲 [t0, t1] の統計テーブルHTML（行 = チャンネル × ファイル） */
+function buildStatsTableHTML(t0, t1) {
+    let html = `<div class="measure-title">表示範囲の統計　`
+        + `<span class="measure-dt">${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s</span></div>`;
+    if (!(_lastRenderedLookup && _lastRenderedLookup.mainFile)) {
+        return html + `<div class="measure-hint">データがありません</div>`;
+    }
+    const rows = collectStatsRows(t0, t1);
     if (!rows.length) return html + `<div class="measure-hint">表示範囲内にデータ点がありません</div>`;
 
     html += `<table><thead><tr>`
@@ -6750,6 +6765,136 @@ function exportVisibleCSV() {
 }
 
 /**
+ * チャート画像・ファイル情報・表示範囲の統計・Drive Index・Custom RAM・
+ * イベント検出結果を1枚の自己完結HTMLレポートとして保存する（F9）。
+ */
+function exportReportHTML() {
+    const mainFile = getMainFile();
+    if (!mainFile || state.numGrids === 0) return;
+    const imgURL = getChartImageDataURL();
+    const range = getVisibleXRange() || [mainFile.timeData[0], mainFile.timeData[mainFile.timeData.length - 1]];
+    const [t0, t1] = [Math.min(range[0], range[1]), Math.max(range[0], range[1])];
+    const now = new Date();
+    const fmtNum = v => (v == null || Number.isNaN(v)) ? '—' : fmtVal(v);
+
+    // ── ファイル一覧 ──
+    let filesRows = '';
+    for (const f of Object.values(state.files)) {
+        const td = f.timeData;
+        filesRows += `<tr><td>${f.role === 'main' ? 'Main' : 'Sub'}</td><td>${esc(f.name)}</td>`
+            + `<td class="num">${td.length}</td><td class="num">${f.columns.length}</td>`
+            + `<td class="num">${td[0].toFixed(2)} – ${td[td.length - 1].toFixed(2)} s</td>`
+            + `<td class="num">${(f.offset || 0).toFixed(3)} s</td></tr>`;
+    }
+
+    // ── 表示範囲の統計 ──
+    const statsRows = collectStatsRows(t0, t1);
+    let statsHtml = '';
+    if (statsRows.length) {
+        statsHtml = `<h2>表示範囲の統計（${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s）</h2>`
+            + `<table><thead><tr><th>Channel</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th></tr></thead><tbody>`
+            + statsRows.map(r =>
+                `<tr><td><span class="sw" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
+                + `<td class="num">${fmtNum(r.min)}</td><td class="num">${fmtNum(r.max)}</td>`
+                + `<td class="num">${fmtNum(r.mean)}</td><td class="num">${fmtNum(r.sigma)}</td><td class="num">${r.n}</td></tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    // ── Drive Index（計算済みのときだけ）──
+    let diHtml = '';
+    const diResults = (state.driveIndex.results || []).filter(r => r.result);
+    if (diResults.length) {
+        const metrics = [
+            ['iwr', 'IWR [%]'], ['rmsse', 'RMSSE [km/h]'], ['ascr', 'ASCR [%]'], ['dr', 'DR [%]'],
+            ['er', 'ER [%]'], ['eer', 'EER [%]'], ['distanceKm', '距離 [km]'],
+            ['fuelL', '燃料 [L]'], ['fuelKmPerL', '燃費 [km/L]'], ['fuelLper100km', '燃費 [L/100km]'],
+        ];
+        diHtml = `<h2>Drive Index（${esc(diResults[0].cycleName || '')}）</h2>`
+            + `<table><thead><tr><th>指標</th>`
+            + diResults.map(r => `<th>${esc(r.fileName)}（${r.role}）</th>`).join('')
+            + `</tr></thead><tbody>`
+            + metrics.map(([key, label]) =>
+                `<tr><td>${esc(label)}</td>`
+                + diResults.map(r => `<td class="num">${fmtNum(r.result[key])}</td>`).join('')
+                + `</tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    // ── Custom RAM ──
+    let ramHtml = '';
+    if (state.customRAMs.length) {
+        ramHtml = `<h2>Custom RAM</h2><table><thead><tr><th>名前</th><th>単位</th><th>式</th></tr></thead><tbody>`
+            + state.customRAMs.map(c =>
+                `<tr><td>${esc(c.name)}</td><td>${esc(c.unit || '')}</td><td class="mono">${esc(c.expr)}</td></tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    // ── イベント検出結果 ──
+    let evHtml = '';
+    if (state.events.intervals.length) {
+        const list = state.events.intervals.slice(0, 50);
+        evHtml = `<h2>イベント検出（${esc(state.events.expr)}）: ${state.events.intervals.length}件`
+            + (state.events.intervals.length > 50 ? '（先頭50件のみ表示）' : '') + `</h2>`
+            + `<table><thead><tr><th>#</th><th>開始 [s]</th><th>終了 [s]</th><th>継続 [s]</th></tr></thead><tbody>`
+            + list.map((iv, i) =>
+                `<tr><td class="num">${i + 1}</td><td class="num">${iv.t0.toFixed(2)}</td>`
+                + `<td class="num">${iv.t1.toFixed(2)}</td><td class="num">${(iv.t1 - iv.t0).toFixed(2)}</td></tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>CSV Chart Viewer レポート — ${esc(mainFile.name)}</title>
+<style>
+body { font-family: 'Segoe UI', 'Hiragino Sans', Meiryo, sans-serif; color: #1d2130; margin: 24px auto; max-width: 1100px; padding: 0 16px; }
+h1 { font-size: 20px; border-bottom: 2px solid #6366f1; padding-bottom: 6px; }
+h2 { font-size: 15px; margin: 24px 0 8px; color: #4f46e5; }
+.meta { color: #5b6272; font-size: 12px; }
+table { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+th, td { border: 1px solid #d5d9e2; padding: 4px 10px; text-align: left; }
+th { background: #eef0f5; font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.mono { font-family: Consolas, monospace; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+img.chart { max-width: 100%; border: 1px solid #d5d9e2; border-radius: 6px; margin: 6px 0; }
+@media print { body { margin: 0; } }
+</style></head><body>
+<h1>CSV Chart Viewer レポート</h1>
+<p class="meta">Main: ${esc(mainFile.name)}　|　生成: ${now.toLocaleString('ja-JP')}</p>
+<h2>ファイル</h2>
+<table><thead><tr><th>ロール</th><th>ファイル名</th><th>点数</th><th>チャンネル数</th><th>時間範囲</th><th>Time Shift</th></tr></thead><tbody>${filesRows}</tbody></table>
+<h2>チャート</h2>
+${imgURL ? `<img class="chart" src="${imgURL}" alt="chart">` : '<p class="meta">チャート画像を取得できませんでした</p>'}
+${statsHtml}
+${diHtml}
+${ramHtml}
+${evHtml}
+</body></html>`;
+
+    const baseName = mainFile.name.replace(/\.(csv|trn)$/i, '');
+    const stamp = now.getFullYear()
+        + String(now.getMonth() + 1).padStart(2, '0')
+        + String(now.getDate()).padStart(2, '0')
+        + '_'
+        + String(now.getHours()).padStart(2, '0')
+        + String(now.getMinutes()).padStart(2, '0')
+        + String(now.getSeconds()).padStart(2, '0');
+    const fileName = `${baseName}_report_${stamp}.html`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showExportToast('レポートを保存しました', fileName);
+}
+
+/**
  * チャートをクリップボードに画像としてコピーする。
  * Ctrl+V でExcelやチャットツールに貼り付けできる。
  *
@@ -6790,6 +6935,7 @@ function showExportToast(title, detail) {
 dom.exportPng.addEventListener('click', exportChartAsPNG);
 dom.copyChart.addEventListener('click', copyChartToClipboard);
 dom.exportCsv.addEventListener('click', exportVisibleCSV);
+dom.exportReport.addEventListener('click', exportReportHTML);
 
 // ─────────────────────────────────────────────────────────────
 // 設定の保存・復元（localStorage）
@@ -7857,6 +8003,7 @@ window.__csvViewerDebug = {
     applyChannelFavorite,
     currentChannelOrder,
     showDiffCurvesModal,
+    exportReportHTML,
 };
 
 })();
