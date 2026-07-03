@@ -814,6 +814,8 @@ const state = {
     colorCtr:       0,
     brushMode:      false,
     shiftMode:      false,
+    measureMode:    false,               // カーソル計測モード（M）
+    measure:        { tA: null, tB: null }, // 計測カーソル位置(秒)。永続化しない
     shiftFileId:    null,   // which sub file is the drag target
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
@@ -1081,6 +1083,7 @@ const dom = {
     customSuggest:    $('custom-ram-suggest'),
     customValidation: $('custom-ram-validation'),
     monoColorBtn: $('mono-color-btn'),
+    measureBtn: $('measure-mode-btn'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
     exportSettings: $('export-settings-btn'),
@@ -1123,7 +1126,7 @@ function initChart() {
     // Y軸ラベル領域のホバーカーソル（grab/pointer）
     dom.chartEl.addEventListener('mousemove', e => {
         // ドラッグ中やシフトモード中はスキップ
-        if (state.mergeDrag || state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.mergeDrag || state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         const hit = hitTestGrid(e.clientY);
         if (hit && isInYAxisArea(e.clientX, hit.region)) {
             dom.chartEl.style.cursor = (hit && hit.region.merged) ? 'pointer' : 'grab';
@@ -1339,7 +1342,7 @@ function setupMergeDrag() {
 
     // --- mousedown: Y軸ラベル領域でドラッグ開始 ---
     dom.chartEl.addEventListener('mousedown', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         if (e.button !== 0) return;
         if (hitTestResizeBand(e.clientY)) return; // 境界の高さリサイズを優先
 
@@ -1403,7 +1406,7 @@ function setupMergeDrag() {
 
     // --- dblclick: マージ解除 ---
     dom.chartEl.addEventListener('dblclick', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         if (hitTestResizeBand(e.clientY)) return; // 境界のダブルクリックは高さリセット側で処理
 
         const hit = hitTestGrid(e.clientY);
@@ -1425,7 +1428,7 @@ function setupGridResizeDrag() {
     // 境界の上でカーソルをns-resizeにする(通常モードのみ)
     dom.chartEl.addEventListener('mousemove', e => {
         if (drag) return;
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         const band = hitTestResizeBand(e.clientY);
         if (band) {
             // 他のドラッグ(grabbing等)のカーソルを上書きしない
@@ -1436,7 +1439,7 @@ function setupGridResizeDrag() {
     });
 
     dom.chartEl.addEventListener('mousedown', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         if (e.button !== 0) return;
         const band = hitTestResizeBand(e.clientY);
         if (!band) return;
@@ -1470,7 +1473,7 @@ function setupGridResizeDrag() {
 
     // 境界のダブルクリックでそのグリッドだけ自動の高さに戻す
     dom.chartEl.addEventListener('dblclick', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         const band = hitTestResizeBand(e.clientY);
         if (!band) return;
         delete state.gridHeights[gridSignatureForRegion(band.region)];
@@ -5042,13 +5045,16 @@ function renderChart() {
         dom.resetBtn.disabled = true;
         dom.exportPng.disabled = true;
         dom.copyChart.disabled = true;
+        dom.measureBtn.disabled = true;
         state.numGrids = 0;
+        if (state.measureMode) exitMeasureMode(false); // 表示チャンネルが無くなったら計測も解除
         return;
     }
     dom.overlay.classList.add('hidden');
     dom.exportPng.disabled = false;
     dom.copyChart.disabled = false;
     dom.resetBtn.disabled = false;
+    dom.measureBtn.disabled = false;
     state.numGrids = n;
 
     // フォントスケールと、それに連動する余白(数値ラベル幅・軸名間隔・左マージン)
@@ -5207,6 +5213,34 @@ function renderChart() {
             }));
         });
     });
+
+    // 計測カーソル（縦線）を各グリッドに重ねる。markLineのxAxis値指定なので
+    // ズーム・リサイズには自動追従する
+    if (state.measureMode && state.measure.tA != null) {
+        const cursorData = [{ name: 'A', xAxis: state.measure.tA }];
+        if (state.measure.tB != null) cursorData.push({ name: 'B', xAxis: state.measure.tB });
+        order.forEach((groupId, gi) => {
+            const yIdxMap = yAxisIndexByGroup.get(groupId);
+            const yAxisIndex = yIdxMap && yIdxMap.size ? yIdxMap.values().next().value : 0;
+            series.push({
+                id: `measure-cursor-${gi}`,
+                type: 'line', data: [],
+                xAxisIndex: gi, yAxisIndex,
+                silent: true, animation: false,
+                markLine: {
+                    symbol: 'none', animation: false,
+                    lineStyle: { color: T.accent, width: 1.2, type: 'dashed' },
+                    label: {
+                        show: gi === 0, position: 'insideStartTop',
+                        formatter: p => p.name, color: T.accent, fontWeight: 700,
+                    },
+                    emphasis: { disabled: true },
+                    data: cursorData,
+                },
+            });
+        });
+        updateMeasurePanel();
+    }
 
     // 全グリッド共通の静的オプション（axisPointer / tooltipの見た目 / brush）は純粋関数で構築
     const baseOption = CSVChartOptions.buildBaseChartOption({
@@ -5506,6 +5540,7 @@ function updatePerGridLabels() {
 
 dom.zoomBtn.addEventListener('click', toggleBoxZoom);
 dom.resetBtn.addEventListener('click', resetZoom);
+dom.measureBtn.addEventListener('click', toggleMeasureMode);
 
 // ── Undo / Redo ──
 dom.undoBtn.addEventListener('click', appUndo);
@@ -5551,6 +5586,7 @@ function enterBoxZoom() {
     if (!state.chart) return;
     if (state.shiftMode) exitShiftMode();
     if (state.arrangeMode) exitArrangeMode();
+    if (state.measureMode) exitMeasureMode();
     state.brushMode = true;
     dom.zoomBtn.classList.add('btn-active');
     dom.zoomBtn.innerHTML = `<i class='bx bx-x'></i> Cancel Zoom`;
@@ -5600,6 +5636,166 @@ function resetZoom() {
     }
     // Reset View後もCtrl+Zで直前のズーム状態へ戻れるよう記録する
     recordHistory();
+}
+
+// ─────────────────────────────────────────────────────────────
+// カーソル計測（Measure / M）: チャートを2回クリックして計測点A/Bを置き、
+// 区間 [tA, tB] の Δt と、表示中チャンネルごとの A値/B値/Δ/min/max/mean/RMS を
+// フローティングパネルに表示する。カーソル位置・パネルは永続化しない。
+// ─────────────────────────────────────────────────────────────
+
+function toggleMeasureMode() { state.measureMode ? exitMeasureMode() : enterMeasureMode(); }
+
+function enterMeasureMode() {
+    if (!state.chart || state.numGrids === 0) return;
+    if (state.brushMode) exitBoxZoom();
+    if (state.shiftMode) exitShiftMode();
+    if (state.arrangeMode) exitArrangeMode();
+    state.measureMode = true;
+    state.measure = { tA: null, tB: null };
+    dom.measureBtn.classList.add('btn-active');
+    dom.measureBtn.innerHTML = `<i class='bx bx-x'></i> Cancel`;
+    dom.hintEl.textContent = 'チャートをクリックして計測点A→Bを指定…';
+    dom.chartEl.style.cursor = 'crosshair';
+    updateMeasurePanel();
+}
+
+/**
+ * 計測モードを抜けてカーソル・パネルを消す。
+ * @param {boolean} rerender falseなら再描画しない（renderChart内から呼ぶとき用）
+ */
+function exitMeasureMode(rerender = true) {
+    state.measureMode = false;
+    state.measure = { tA: null, tB: null };
+    dom.measureBtn?.classList.remove('btn-active');
+    if (dom.measureBtn) dom.measureBtn.innerHTML = `<i class='bx bx-ruler'></i> Measure`;
+    dom.hintEl.textContent = '';
+    dom.chartEl.style.cursor = '';
+    removeMeasurePanel();
+    if (rerender && state.chart && state.numGrids > 0) renderChart();
+}
+
+// 計測モード中のクリックで計測点を置く（A→B→置き直し）
+dom.chartEl.addEventListener('click', e => {
+    if (!state.measureMode || !state.chart) return;
+    const rect = dom.chartEl.getBoundingClientRect();
+    const t = state.chart.convertFromPixel({ xAxisIndex: 0 }, e.clientX - rect.left);
+    if (t == null || !Number.isFinite(t)) return;
+    const m = state.measure;
+    if (m.tA == null)      m.tA = t;
+    else if (m.tB == null) m.tB = t;
+    else { m.tA = t; m.tB = null; } // 3回目のクリックはAから置き直し
+    renderChart(); // カーソル線の再描画（updateMeasurePanelもrenderChart内で呼ばれる）
+});
+
+/**
+ * timeDataの [t0, t1] 区間のサンプルを集計する（NaNはスキップ）。
+ * @returns {{min:number,max:number,mean:number,rms:number,n:number}|null} 点が無ければnull
+ */
+function computeIntervalStats(timeData, data, t0, t1) {
+    // 二分探索で t0 以上の最初のインデックスを求める
+    let lo = 0, hi = timeData.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (timeData[mid] < t0) lo = mid + 1; else hi = mid; }
+    let min = Infinity, max = -Infinity, sum = 0, sumSq = 0, n = 0;
+    for (let i = lo; i < timeData.length && timeData[i] <= t1; i++) {
+        const v = data[i];
+        if (Number.isNaN(v)) continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+        sum += v; sumSq += v * v; n++;
+    }
+    if (!n) return null;
+    return { min, max, mean: sum / n, rms: Math.sqrt(sumSq / n), n };
+}
+
+const MEASURE_PANEL_ID = 'measure-panel';
+
+function removeMeasurePanel() {
+    document.getElementById(MEASURE_PANEL_ID)?.remove();
+}
+
+/**
+ * 計測パネルを現在のカーソル状態に合わせて再構築する。
+ * データ参照は renderChart が保存したスナップショット（_lastRenderedLookup /
+ * _lastRenderedGroups）のみを使う（守るべき制約と同じ理由で線形検索を避ける）。
+ */
+function updateMeasurePanel() {
+    removeMeasurePanel();
+    if (!state.measureMode) return;
+    const panel = document.createElement('div');
+    panel.id = MEASURE_PANEL_ID;
+    panel.className = 'measure-panel';
+
+    const { tA, tB } = state.measure;
+    if (tA == null || tB == null) {
+        const hint = tA == null
+            ? '1点目（A）をクリック'
+            : `A = ${esc(tA.toFixed(3))} s — 2点目（B）をクリック`;
+        panel.innerHTML = `<div class="measure-title">カーソル計測</div><div class="measure-hint">${hint}</div>`;
+    } else {
+        panel.innerHTML = buildMeasureTableHTML(Math.min(tA, tB), Math.max(tA, tB));
+    }
+    document.querySelector('.chart-container')?.appendChild(panel);
+}
+
+/**
+ * 区間 [t0, t1] の計測テーブルHTMLを構築する。
+ * 行 = 表示中の各チャンネル × 各ファイル（main + sub。subはタイムシフト適用済み）。
+ */
+function buildMeasureTableHTML(t0, t1) {
+    const lookup = _lastRenderedLookup;
+    const { groups: activeGroups, order: activeOrder } =
+        _lastRenderedGroups || { groups: new Map(), order: [] };
+    const mainFile = lookup && lookup.mainFile;
+
+    let html = `<div class="measure-title">カーソル計測　`
+        + `<span class="measure-dt">Δt = ${esc((t1 - t0).toFixed(3))} s`
+        + `（A=${esc(t0.toFixed(3))} / B=${esc(t1.toFixed(3))}）</span></div>`;
+    if (!mainFile) return html + `<div class="measure-hint">データがありません</div>`;
+
+    // 行を構築する共通処理: ファイルのtimeData/データ列から統計を取る
+    const rows = [];
+    const pushRow = (label, color, timeData, data, offset) => {
+        const s = computeIntervalStats(timeData, data, t0 - offset, t1 - offset);
+        if (!s) return;
+        const vA = interpolate(timeData, data, t0 - offset);
+        const vB = interpolate(timeData, data, t1 - offset);
+        rows.push({ label, color, vA, vB, d: vB - vA, ...s });
+    };
+
+    for (const gid of activeOrder) {
+        const grp = activeGroups.get(gid);
+        if (!grp) continue;
+        for (const chName of grp.mergedNames) {
+            const mc = lookup.colByName.get(chName);
+            if (mc && mainFile.colData[mc.id]) {
+                pushRow(chName, mc.color, mainFile.timeData, mainFile.colData[mc.id], 0);
+            }
+            for (const subId of lookup.subIds) {
+                const sf = state.files[subId];
+                const sc = lookup.subColByName.get(subId).get(chName);
+                if (!sc || !sf.colData[sc.id]) continue;
+                pushRow(`${chName} (${sf.shortName})`, sc.color,
+                        sf.timeData, sf.colData[sc.id], sf.offset || 0);
+            }
+        }
+    }
+    if (!rows.length) return html + `<div class="measure-hint">区間内にデータ点がありません</div>`;
+
+    html += `<table><thead><tr>`
+        + `<th>Channel</th><th>A</th><th>B</th><th>Δ</th>`
+        + `<th>min</th><th>max</th><th>mean</th><th>RMS</th>`
+        + `</tr></thead><tbody>`;
+    for (const r of rows) {
+        const f = v => Number.isNaN(v) ? '—' : fmtVal(v);
+        html += `<tr>`
+            + `<td><span class="measure-swatch" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
+            + `<td>${f(r.vA)}</td><td>${f(r.vB)}</td><td>${f(r.d)}</td>`
+            + `<td>${f(r.min)}</td><td>${f(r.max)}</td><td>${f(r.mean)}</td><td>${f(r.rms)}</td>`
+            + `</tr>`;
+    }
+    html += `</tbody></table>`;
+    return html;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -5791,6 +5987,7 @@ document.addEventListener('keydown', e => {
         if (state.brushMode) { exitBoxZoom(); return; }
         if (state.shiftMode) { exitShiftMode(); return; }
         if (state.arrangeMode) { exitArrangeMode(); return; }
+        if (state.measureMode) { exitMeasureMode(); return; }
     }
 
     // 単打キー: B / T / R（修飾キーなしのときだけ）
@@ -5811,6 +6008,11 @@ document.addEventListener('keydown', e => {
             resetZoom();
             return;
         }
+        if (e.key === 'm' || e.key === 'M') {
+            e.preventDefault();
+            toggleMeasureMode();
+            return;
+        }
     }
 });
 
@@ -5822,10 +6024,11 @@ document.addEventListener('keydown', e => {
 function showShortcutsModal() {
     const rows = [
         ['?',              'このショートカット一覧を表示'],
-        ['Esc',            'Box Zoom / Time Shift / Arrange モードを抜ける'],
+        ['Esc',            'Box Zoom / Time Shift / Arrange / Measure モードを抜ける'],
         ['B',              'Box Zoom モードを切り替え'],
         ['T',              'Time Shift モードを切り替え（Sub ファイルが必要）'],
         ['R',              'ズームをリセット（全範囲表示）'],
+        ['M',              'カーソル計測モードを切り替え（2回クリックで区間統計）'],
         ['Ctrl + Z',       '直前の操作を元に戻す（ズーム・チャンネル選択・設定など）'],
         ['Ctrl + Y',       '操作をやり直す'],
         ['Ctrl + Shift + Z', '操作をやり直す（Ctrl + Y と同じ）'],
@@ -5906,6 +6109,7 @@ function enterShiftMode() {
     if (!getSubFileIds().length) return;
     if (state.brushMode) exitBoxZoom();
     if (state.arrangeMode) exitArrangeMode();
+    if (state.measureMode) exitMeasureMode();
 
     // Default shift target = first sub file
     if (!state.shiftFileId || !state.files[state.shiftFileId] || state.files[state.shiftFileId].role !== 'sub') {
@@ -5942,6 +6146,7 @@ function enterArrangeMode() {
     if (state.chartGroups.length < 2) return;
     if (state.brushMode) exitBoxZoom();
     if (state.shiftMode) exitShiftMode();
+    if (state.measureMode) exitMeasureMode();
     state.arrangeMode = true;
     dom.arrangeBtn.classList.add('btn-active');
     dom.arrangeBtn.innerHTML = `<i class='bx bx-x'></i> Exit Arrange`;
@@ -6828,6 +7033,8 @@ window.__csvViewerDebug = {
     evaluateAST,
     esc,
     applyTheme,
+    computeIntervalStats,
+    toggleMeasureMode,
 };
 
 })();
