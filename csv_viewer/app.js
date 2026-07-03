@@ -874,6 +874,7 @@ const state = {
     measureMode:    false,               // カーソル計測モード（M）
     measure:        { tA: null, tB: null }, // 計測カーソル位置(秒)。永続化しない
     events:         { expr: '', intervals: [] }, // イベント検出結果（区間はメインファイル基準。永続化しない）
+    statsPanelVisible: false, // 表示範囲の統計サマリパネル（Stats）を表示中か
     shiftFileId:    null,   // which sub file is the drag target
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
@@ -1142,6 +1143,7 @@ const dom = {
     customValidation: $('custom-ram-validation'),
     monoColorBtn: $('mono-color-btn'),
     measureBtn: $('measure-mode-btn'),
+    statsBtn:   $('stats-panel-btn'),
     eventExpr:      $('event-expr'),
     eventDetectBtn: $('event-detect-btn'),
     eventValidation: $('event-validation'),
@@ -1180,6 +1182,16 @@ function initChart() {
         });
     });
     state.chart.on('brushEnd', onBrushEnd);
+
+    // ズーム操作に統計サマリパネルを追従させる（rAFで間引き）
+    let _statsRafId = null;
+    state.chart.on('datazoom', () => {
+        if (_statsRafId !== null) return;
+        _statsRafId = requestAnimationFrame(() => {
+            _statsRafId = null;
+            updateStatsPanel();
+        });
+    });
 
     dom.chartEl.addEventListener('mouseleave', () => {
         _lastTooltipParams = null;
@@ -5132,8 +5144,10 @@ function renderChart() {
         dom.exportPng.disabled = true;
         dom.copyChart.disabled = true;
         dom.measureBtn.disabled = true;
+        dom.statsBtn.disabled = true;
         state.numGrids = 0;
         if (state.measureMode) exitMeasureMode(false); // 表示チャンネルが無くなったら計測も解除
+        updateStatsPanel(); // グリッドが無くなったらパネルも消す
         return;
     }
     dom.overlay.classList.add('hidden');
@@ -5141,6 +5155,7 @@ function renderChart() {
     dom.copyChart.disabled = false;
     dom.resetBtn.disabled = false;
     dom.measureBtn.disabled = false;
+    dom.statsBtn.disabled = false;
     state.numGrids = n;
 
     // フォントスケールと、それに連動する余白(数値ラベル幅・軸名間隔・左マージン)
@@ -5400,6 +5415,7 @@ function renderChart() {
         return region;
     });
     updateArrangeOverlay();
+    updateStatsPanel(); // 表示範囲サマリをズーム/再描画に追従させる
 }
 
 function removeArrangeOverlay() {
@@ -5903,6 +5919,113 @@ function buildMeasureTableHTML(t0, t1) {
     html += `</tbody></table>`;
     return html;
 }
+
+// ─────────────────────────────────────────────────────────────
+// 表示範囲の統計サマリ（Stats）: 現在ズームで見えている時間範囲に追従して、
+// 表示中チャンネルごとの min / max / mean / σ をパネル表示する。
+// 計算は計測（Measure）と同じ computeIntervalStats とスナップショットを使う。
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 現在表示中のX軸範囲 [t0, t1] を返す（チャート未描画ならnull）。
+ * dataZoomのstartValue/endValueを優先し、%指定しか無ければ軸のmin/maxから換算する。
+ */
+function getVisibleXRange() {
+    const opt = state.chart?.getOption();
+    const dz = opt?.dataZoom?.[0];
+    const xa = opt?.xAxis?.[0];
+    if (!dz || !xa) return null;
+    let t0 = (typeof dz.startValue === 'number') ? dz.startValue : null;
+    let t1 = (typeof dz.endValue === 'number') ? dz.endValue : null;
+    if (t0 == null || t1 == null) {
+        if (typeof xa.min !== 'number' || typeof xa.max !== 'number') return null;
+        t0 = xa.min + (xa.max - xa.min) * (dz.start ?? 0) / 100;
+        t1 = xa.min + (xa.max - xa.min) * (dz.end ?? 100) / 100;
+    }
+    return [t0, t1];
+}
+
+function toggleStatsPanel() {
+    state.statsPanelVisible = !state.statsPanelVisible;
+    dom.statsBtn.classList.toggle('btn-active', state.statsPanelVisible);
+    updateStatsPanel();
+    saveSettings();
+}
+
+/** 統計サマリパネルを現在の表示範囲に合わせて再構築する（非表示時は消す） */
+function updateStatsPanel() {
+    const existing = document.getElementById('stats-panel');
+    if (!state.statsPanelVisible || !state.chart || state.numGrids === 0) {
+        existing?.remove();
+        return;
+    }
+    const range = getVisibleXRange();
+    if (!range) { existing?.remove(); return; }
+
+    let panel = existing;
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'stats-panel';
+        panel.className = 'stats-panel';
+        document.querySelector('.chart-container')?.appendChild(panel);
+    }
+    panel.innerHTML = buildStatsTableHTML(range[0], range[1]);
+}
+
+/** 表示範囲 [t0, t1] の統計テーブルHTML（行 = チャンネル × ファイル） */
+function buildStatsTableHTML(t0, t1) {
+    const lookup = _lastRenderedLookup;
+    const { groups: activeGroups, order: activeOrder } =
+        _lastRenderedGroups || { groups: new Map(), order: [] };
+    const mainFile = lookup && lookup.mainFile;
+
+    let html = `<div class="measure-title">表示範囲の統計　`
+        + `<span class="measure-dt">${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s</span></div>`;
+    if (!mainFile) return html + `<div class="measure-hint">データがありません</div>`;
+
+    const rows = [];
+    const pushRow = (label, color, timeData, data, offset) => {
+        const s = computeIntervalStats(timeData, data, t0 - offset, t1 - offset);
+        if (!s) return;
+        // σ² = RMS² − mean²（数値誤差で負にならないようクランプ）
+        const sigma = Math.sqrt(Math.max(s.rms * s.rms - s.mean * s.mean, 0));
+        rows.push({ label, color, min: s.min, max: s.max, mean: s.mean, sigma, n: s.n });
+    };
+
+    for (const gid of activeOrder) {
+        const grp = activeGroups.get(gid);
+        if (!grp) continue;
+        for (const chName of grp.mergedNames) {
+            const mc = lookup.colByName.get(chName);
+            if (mc && mainFile.colData[mc.id]) {
+                pushRow(chName, mc.color, mainFile.timeData, mainFile.colData[mc.id], 0);
+            }
+            for (const subId of lookup.subIds) {
+                const sf = state.files[subId];
+                const sc = lookup.subColByName.get(subId).get(chName);
+                if (!sc || !sf.colData[sc.id]) continue;
+                pushRow(`${chName} (${sf.shortName})`, sc.color,
+                        sf.timeData, sf.colData[sc.id], sf.offset || 0);
+            }
+        }
+    }
+    if (!rows.length) return html + `<div class="measure-hint">表示範囲内にデータ点がありません</div>`;
+
+    html += `<table><thead><tr>`
+        + `<th>Channel</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th>`
+        + `</tr></thead><tbody>`;
+    for (const r of rows) {
+        html += `<tr>`
+            + `<td><span class="measure-swatch" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
+            + `<td>${fmtVal(r.min)}</td><td>${fmtVal(r.max)}</td>`
+            + `<td>${fmtVal(r.mean)}</td><td>${fmtVal(r.sigma)}</td><td>${r.n}</td>`
+            + `</tr>`;
+    }
+    html += `</tbody></table>`;
+    return html;
+}
+
+dom.statsBtn.addEventListener('click', toggleStatsPanel);
 
 // ─────────────────────────────────────────────────────────────
 // イベント検出: 条件式（例 Actual_Speed > 120）を式パーサで評価し、
@@ -6673,6 +6796,7 @@ function collectSettings() {
         theme: state.theme,
         // イベント検出の条件式（区間は保存しない。次回は式だけ復元して手動で再検出）
         eventExpr: dom.eventExpr?.value || '',
+        statsPanel: state.statsPanelVisible,
         fontScale: state.fontScale,
         rowHeightPx: state.rowHeightPx,
         gridHeights: state.gridHeights,
@@ -6959,6 +7083,11 @@ function applySettings(rawSettings) {
     // チャート表示設定を復元
     if (s.theme === 'light' || s.theme === 'dark') applyTheme(s.theme);
     if (typeof s.eventExpr === 'string' && dom.eventExpr) dom.eventExpr.value = s.eventExpr;
+    if (s.statsPanel != null) {
+        state.statsPanelVisible = !!s.statsPanel;
+        dom.statsBtn?.classList.toggle('btn-active', state.statsPanelVisible);
+        // パネル本体はファイル読み込み後のrenderChartが構築する
+    }
     if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
         state.fontScale = s.fontScale;
         if (dom.fontScale) dom.fontScale.value = s.fontScale;
@@ -7372,6 +7501,8 @@ window.__csvViewerDebug = {
     extractTrueIntervals,
     detectEvents,
     computeCustomExpr,
+    toggleStatsPanel,
+    getVisibleXRange,
 };
 
 })();
