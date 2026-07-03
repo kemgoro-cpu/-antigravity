@@ -3,6 +3,54 @@
 開発を引き継ぐ人（人間・AIエージェント問わず）向けの正確な変更記録。
 コミット単位の詳細は `git log` も参照のこと。
 
+## 2026-07-03: 新機能 第2弾（F5〜F10、Claude Code実施）
+
+`FEATURE_BACKLOG.md` の残り6機能を実装し、バックログ全10件が完了。
+コミット: `90f63fc`（F5）/ `bedfc0a`（F6）/ `b831065`（F10）/ `a88ee55`（F8）/
+`0e02714`（F9）/ `347f787`（F7）。
+
+### 追加された機能
+
+1. **表示範囲の統計サマリ（F5）**: Statsボタン。ズームに追従して min/max/mean/σ を
+   パネル表示。集計は計測と共通の `computeIntervalStats` + `collectStatsRows`
+2. **表示データのCSVエクスポート（F6）**: CSVボタン。表示範囲×表示チャンネル
+   （Custom RAM含む）をBOM付きUTF-8で保存。メインファイルの時間軸基準
+3. **XYプロット（F7）**: XYボタン。任意チャンネル同士の散布図モーダル。
+   main/sub重ね描き、「表示中の時間範囲のみ」連動、5万点超は間引き
+4. **Main−Sub差分カーブ（F8）**: Diffボタン。両ファイルに同名で存在する
+   チャンネルから選んで `@Δ名_sN`（式 `名前 - sN:名前`）を一括生成
+5. **HTMLレポート出力（F9）**: Reportボタン。チャート画像・ファイル情報・
+   統計・Drive Index・Custom RAM・イベント一覧を自己完結HTMLで保存
+6. **チャンネルセットのお気に入り（F10）**: Channelsセクションの★行。
+   表示チャンネルの組み合わせを保存・ワンクリック適用。
+   独立キー `csvViewer_channelFavorites`（Clear Allで消えない）。上限30件
+
+### 挙動が変わった修正（バグ修正）
+
+1. **クロスファイルCustom RAMの復元失敗**: `s1:` 参照を含むRAMが、参照先Sub
+   ファイルの読み込み前に評価されて失敗・消失していた（複数ファイル同時
+   ドロップとセッション自動復元で発生）。参照先Subが揃うまで
+   `_deferredCrossRAMs` へ繰り延べ、後続パース完了時に再試行するようにした
+2. **addCustomRAMのalert**: 2箇所（重複名・評価失敗）をトースト通知へ統一
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **表示範囲の取得は `getVisibleXRange()` を使う**（F5/F6/F7が共用。
+  dataZoomのstartValue優先・%換算フォールバック込み）
+- **区間統計は `computeIntervalStats` / `collectStatsRows` を使う**（F2/F5/F9が共用）
+- **モーダル内にEChartsを作る場合は、閉じるあらゆる経路で `dispose()` する**
+  （XYプロットはMutationObserverでoverlay除去を監視して破棄している）
+- **ツールバーのボタン活性はrenderChartの2分岐（グリッド0/あり）と
+  `updateUI()` の両方を確認する**（exportCsv/exportReport/statsBtn/measureBtn は
+  renderChart、diffBtn=Sub有無・xyBtn=Main有無 は updateUI）
+
+### 検証記録
+
+- `npm test` 6本グリーン
+- Playwright実ブラウザスモーク10本・計111チェック全PASS（第1弾4本の回帰含む。
+  CSV/レポートは実ダウンロード内容の照合、統計は愚直計算との数値一致、
+  差分カーブは main−sub との全点一致まで検証）
+
 ## 2026-07-03: 新機能 第1弾（F1〜F4、Claude Code実施）
 
 `FEATURE_BACKLOG.md` の第1弾4機能を実装。コミット: `fd87195`（F1）/ `d2e803e`（F2）/
