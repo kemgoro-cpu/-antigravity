@@ -1738,8 +1738,14 @@ function getRequestedEncoding() {
     return dom.encoding?.value || 'auto';
 }
 
+// パース中ファイルの元Fileオブジェクト（fileId → File）。
+// TRNはパイプラインを変換済みテキストで流れるため、セッション保存
+// （sessionSaveFile）用に元のバイト列をここで持ち回す
+const _origFileById = new Map();
+
 async function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    _origFileById.set(fileId, file);
     const trn = isTrnFile(file.name);
     const requestedEncoding = getRequestedEncoding();
     // ヘッダー行のヒントはパース開始時点のSettings値をファイルごとに固定する（B4対策）。
@@ -1983,6 +1989,13 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     };
                     autoNormalizeTimeScales();
                     updateParsePreview(state.files[fileId]);
+
+                    // 次回起動時の自動復元用に元ファイルをIndexedDBへ保存
+                    // （非同期・失敗しても読み込み自体には影響させない）。
+                    // TRNではこのスコープの file は変換済みテキストなので、
+                    // parseCSVが控えた元Fileを使う
+                    sessionSaveFile(fileId, _origFileById.get(fileId), fileName);
+                    _origFileById.delete(fileId);
 
                     // ファイル色を自動割り当て（単色モード用）
                     if (!state.fileColors[fileId]) {
@@ -2496,6 +2509,7 @@ function removeFile(fileId) {
     const wasMain = state.files[fileId]?.role === 'main';
     delete state.files[fileId];
     delete state.fileColors[fileId];
+    sessionDeleteFile(fileId); // 自動復元ストアからも消す（非同期・失敗は無視）
     // イベント区間は旧メインの時間軸基準なので、メインが変わるなら破棄する
     if (wasMain) clearEvents(false);
 
@@ -2525,6 +2539,7 @@ function removeFile(fileId) {
 dom.clearBtn.addEventListener('click', () => {
     for (const job of state.parseJobs.values()) job.cancelled = true;
     state.parseJobs.clear();
+    _origFileById.clear(); // キャンセルされたパースの控えFileも破棄
     state.files         = {};
     state.selectedNames = new Set();
     state.chartGroups   = [];
@@ -2548,6 +2563,7 @@ dom.clearBtn.addEventListener('click', () => {
     updateUI();
     // localStorageの保存データもクリア
     try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    sessionClearFiles(); // 自動復元ストアも空にする（非同期・失敗は無視）
     // 上のupdateUI()がsaveSettings()で保存を予約しているため、
     // キャンセルしないと500ms後に空設定が書き戻されてしまう
     clearTimeout(_saveSettingsTimer);
@@ -7209,6 +7225,108 @@ function showPendingFiles(fileInfos) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// セッション自動復元（IndexedDB）
+// パース成功時にFile本体を保存し、次回起動時に自動で再読み込みする。
+// ロール・オフセット・選択チャンネルはlocalStorage設定（fileInfosの名前
+// マッチ → applyPendingSettings）の既存機構がそのまま復元する。
+// IndexedDBが使えない環境（プライベートモード等）では黙って無効になる。
+// ─────────────────────────────────────────────────────────────
+
+const SESSION_DB_NAME = 'csvViewerSession';
+const SESSION_STORE = 'files';
+// 保存合計の上限。IndexedDBのquota超過で書き込みが不安定になる前に打ち切る
+const SESSION_TOTAL_MAX_BYTES = 200 * 1024 * 1024;
+
+function openSessionDB() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+        const req = indexedDB.open(SESSION_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(SESSION_STORE)) {
+                db.createObjectStore(SESSION_STORE, { keyPath: 'id' });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+/** 1トランザクションでストア操作を実行する。fnはstoreを受け取りrequestを返してよい */
+async function sessionStoreRun(mode, fn) {
+    const db = await openSessionDB();
+    try {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(SESSION_STORE, mode);
+            const req = fn(tx.objectStore(SESSION_STORE));
+            tx.oncomplete = () => resolve(req ? req.result : undefined);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        });
+    } finally {
+        db.close();
+    }
+}
+
+/** パース済みファイルの本体を自動復元ストアへ保存する（上限超過分はスキップ+通知） */
+async function sessionSaveFile(fileId, file, name) {
+    if (!(file instanceof Blob)) return;
+    const fileName = name || file.name || 'restored.csv';
+    try {
+        const existing = await sessionStoreRun('readonly', s => s.getAll()) || [];
+        const total = existing.filter(r => r.id !== fileId)
+                              .reduce((acc, r) => acc + (r.size || 0), 0);
+        if (total + file.size > SESSION_TOTAL_MAX_BYTES) {
+            showWarning('セッション保存をスキップしました',
+                `保存容量の上限（${Math.round(SESSION_TOTAL_MAX_BYTES / 1048576)}MB）を超えるため、` +
+                `「${fileName}」は次回の自動復元対象になりません。`);
+            return;
+        }
+        await sessionStoreRun('readwrite', s => s.put({
+            id: fileId, name: fileName, size: file.size, addedAt: Date.now(), blob: file,
+        }));
+    } catch (e) {
+        console.warn('[CSV Viewer] セッション保存に失敗:', e);
+    }
+}
+
+async function sessionDeleteFile(fileId) {
+    try { await sessionStoreRun('readwrite', s => s.delete(fileId)); }
+    catch (e) { console.warn('[CSV Viewer] セッション削除に失敗:', e); }
+}
+
+async function sessionClearFiles() {
+    try { await sessionStoreRun('readwrite', s => s.clear()); }
+    catch (e) { console.warn('[CSV Viewer] セッションクリアに失敗:', e); }
+}
+
+/**
+ * 起動時に前回セッションのファイルを自動復元する。
+ * 復元パースが新しいfileIdで再保存するため、読み出し後にストアを一度空にする
+ * （残したままだと次回リロードで同じファイルが重複する）。
+ */
+async function restoreSessionFiles() {
+    let records;
+    try { records = await sessionStoreRun('readonly', s => s.getAll()); }
+    catch (e) { return; }
+    if (!records || !records.length) return;
+    if (Object.keys(state.files).length > 0) return; // 既にファイルがあるなら何もしない
+
+    records.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    try { await sessionStoreRun('readwrite', s => s.clear()); } catch (e) {}
+
+    for (const r of records) {
+        if (!r.blob) continue;
+        // Blobにはファイル名が無いことがあるためFileへ包み直す
+        const f = (typeof File !== 'undefined' && r.blob instanceof File)
+            ? r.blob : new File([r.blob], r.name || 'restored.csv');
+        parseCSV(f);
+    }
+    showToast('success', '前回のセッションを復元しました',
+        `${records.length} ファイルを再読み込みしています…`);
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialise
 // ─────────────────────────────────────────────────────────────
 
@@ -7227,6 +7345,10 @@ const _savedSettings = loadSettings();
 if (_savedSettings) {
     applySettings(_savedSettings);
 }
+
+// 設定適用後に前回セッションのファイルを自動復元する
+// （ロール等はapplySettingsが積んだ保留設定がパース完了時に適用する）
+restoreSessionFiles();
 
 // ─────────────────────────────────────────────────────────────
 // テスト/デバッグ用の公開面（M9）
