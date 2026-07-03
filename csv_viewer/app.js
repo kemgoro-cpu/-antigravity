@@ -1151,6 +1151,7 @@ const dom = {
     eventList:      $('event-list'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
+    exportCsv:  $('export-csv-btn'),
     exportSettings: $('export-settings-btn'),
     importSettings: $('import-settings-btn'),
     presetSelect: $('settings-preset-select'),
@@ -5145,6 +5146,7 @@ function renderChart() {
         dom.copyChart.disabled = true;
         dom.measureBtn.disabled = true;
         dom.statsBtn.disabled = true;
+        dom.exportCsv.disabled = true;
         state.numGrids = 0;
         if (state.measureMode) exitMeasureMode(false); // 表示チャンネルが無くなったら計測も解除
         updateStatsPanel(); // グリッドが無くなったらパネルも消す
@@ -5156,6 +5158,7 @@ function renderChart() {
     dom.resetBtn.disabled = false;
     dom.measureBtn.disabled = false;
     dom.statsBtn.disabled = false;
+    dom.exportCsv.disabled = false;
     state.numGrids = n;
 
     // フォントスケールと、それに連動する余白(数値ラベル幅・軸名間隔・左マージン)
@@ -6647,6 +6650,95 @@ function exportChartAsPNG() {
 }
 
 /**
+ * 表示中の時間範囲 × 表示中チャンネル（Custom RAM含む）をCSVで保存する（F6）。
+ * 行はメインファイルの時間軸（正規化後の秒）。Subファイルの系列は時間軸が
+ * 異なるため含まない。欠損（NaN）は空欄で出力する。
+ */
+function exportVisibleCSV() {
+    const lookup = _lastRenderedLookup;
+    const mainFile = lookup && lookup.mainFile;
+    if (!mainFile || state.numGrids === 0) return;
+    const { groups: activeGroups, order: activeOrder } =
+        _lastRenderedGroups || { groups: new Map(), order: [] };
+
+    const range = getVisibleXRange();
+    const t0 = range ? Math.min(range[0], range[1]) : -Infinity;
+    const t1 = range ? Math.max(range[0], range[1]) : Infinity;
+
+    // 表示順のチャンネル列（メインファイルにデータがあるもののみ・重複除去）
+    const cols = [];
+    const seen = new Set();
+    for (const gid of activeOrder) {
+        const grp = activeGroups.get(gid);
+        if (!grp) continue;
+        for (const chName of grp.mergedNames) {
+            if (seen.has(chName)) continue;
+            seen.add(chName);
+            const col = lookup.colByName.get(chName);
+            if (col && mainFile.colData[col.id]) cols.push(col);
+        }
+    }
+    if (!cols.length) {
+        showWarning('エクスポートできるチャンネルがありません');
+        return;
+    }
+
+    // CSVフィールドのエスケープ（カンマ・引用符・改行を含む名前対策）
+    const q = v => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+
+    const lines = [];
+    lines.push(['Time', ...cols.map(c => q(c.name))].join(','));
+    lines.push(['s',    ...cols.map(c => q(c.unit || ''))].join(','));
+
+    const td = mainFile.timeData;
+    const dataArrs = cols.map(c => mainFile.colData[c.id]);
+    let rows = 0;
+    for (let i = 0; i < td.length; i++) {
+        const t = td[i];
+        if (t < t0 || t > t1) continue;
+        const row = new Array(cols.length + 1);
+        row[0] = t;
+        for (let k = 0; k < dataArrs.length; k++) {
+            const v = dataArrs[k][i];
+            row[k + 1] = Number.isNaN(v) ? '' : v;
+        }
+        lines.push(row.join(','));
+        rows++;
+    }
+    if (!rows) {
+        showWarning('表示範囲内にデータ点がありません');
+        return;
+    }
+
+    const baseName = mainFile.name.replace(/\.(csv|trn)$/i, '');
+    const now = new Date();
+    const stamp = now.getFullYear()
+        + String(now.getMonth() + 1).padStart(2, '0')
+        + String(now.getDate()).padStart(2, '0')
+        + '_'
+        + String(now.getHours()).padStart(2, '0')
+        + String(now.getMinutes()).padStart(2, '0')
+        + String(now.getSeconds()).padStart(2, '0');
+    const fileName = `${baseName}_export_${stamp}.csv`;
+
+    // BOM付きUTF-8（Excelでの文字化け防止）
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showExportToast('CSVを保存しました', `${fileName}（${rows}行 × ${cols.length}チャンネル）`);
+}
+
+/**
  * チャートをクリップボードに画像としてコピーする。
  * Ctrl+V でExcelやチャットツールに貼り付けできる。
  *
@@ -6686,6 +6778,7 @@ function showExportToast(title, detail) {
 // ボタンのクリックイベントを登録
 dom.exportPng.addEventListener('click', exportChartAsPNG);
 dom.copyChart.addEventListener('click', copyChartToClipboard);
+dom.exportCsv.addEventListener('click', exportVisibleCSV);
 
 // ─────────────────────────────────────────────────────────────
 // 設定の保存・復元（localStorage）
@@ -7503,6 +7596,7 @@ window.__csvViewerDebug = {
     computeCustomExpr,
     toggleStatsPanel,
     getVisibleXRange,
+    exportVisibleCSV,
 };
 
 })();
