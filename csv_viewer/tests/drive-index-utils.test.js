@@ -1,17 +1,9 @@
 const assert = require('assert');
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
 
-// drive-cycles-data.js（window.DriveCycleData）と drive-index-utils.js（window.DriveIndex）を
-// 同じコンテキストに読み込む。getCycleTrace は DriveCycleData を参照するため両方必要。
-const context = { window: {} };
-vm.createContext(context);
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'drive-cycles-data.js'), 'utf8'), context);
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'drive-index-utils.js'), 'utf8'), context);
-
-const DriveIndex = context.window.DriveIndex;
-const DriveCycleData = context.window.DriveCycleData;
+// 両ファイルともUMD（Nodeでは module.exports）なので素の require で読み込める。
+// drive-index-utils.js は内部で drive-cycles-data.js を require する。
+const DriveIndex = require('../drive-index-utils.js');
+const DriveCycleData = require('../drive-cycles-data.js');
 
 function approx(actual, expected, eps = 1e-9) {
     assert.ok(
@@ -60,6 +52,16 @@ function distKm(speed) {
     assert.strictEqual(DriveIndex.resolveCycleId('wltc3'), 'wltc3b_4');
     assert.strictEqual(DriveIndex.resolveCycleId('nedc'), 'nedc');
     assert.strictEqual(DriveIndex.resolveCycleId('wltc3b_4'), 'wltc3b_4');
+    // 'mdc'（内蔵廃止）はマップ上null＝現行IDなし。実行時解決では素通しになり、
+    // 呼び出し側のレジストリ照合で落ちる（設定マイグレーションではnullへ読み替え）
+    assert.strictEqual(DriveIndex.resolveCycleId('mdc'), 'mdc');
+    assert.ok(Object.prototype.hasOwnProperty.call(DriveIndex.LEGACY_CYCLE_ID, 'mdc'));
+    assert.strictEqual(DriveIndex.LEGACY_CYCLE_ID.mdc, null);
+}
+
+// ── drive-cycles-data.js も単体でrequireできること（UMD） ──
+{
+    assert.deepStrictEqual([...DriveCycleData.keys].sort(), ['nedc', 'wltc_3a', 'wltc_3b']);
 }
 
 // ── getCycleTrace: 内蔵トレースの取得と 3フェーズ打ち切り ──

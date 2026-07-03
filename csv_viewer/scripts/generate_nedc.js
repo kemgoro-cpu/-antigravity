@@ -1,11 +1,33 @@
 /**
  * NEDCサイクルのサンプルTRNファイルを生成するスクリプト。
- * Node.js で実行: node generate_nedc.js
+ * Node.js で実行: node scripts/generate_nedc.js [出力ディレクトリ]
+ *   出力ディレクトリ省略時は csv_viewer/ 直下（同梱サンプルの場所）に出力する。
+ *
+ * 乱数はシード付きPRNG（mulberry32）を使用しているため、
+ * 何度実行しても出力は完全に同一（決定的）。
  *
  * NEDC = 4 × ECE-15 (Urban, 各195秒) + 1 × EUDC (Extra-Urban, 400秒) = 合計1180秒
  */
 
 const fs = require('fs');
+const path = require('path');
+
+// 出力先: 引数で指定がなければアプリ本体と同じディレクトリ（csv_viewer/）
+const OUT_DIR = process.argv[2]
+    ? path.resolve(process.argv[2])
+    : path.join(__dirname, '..');
+
+// ─── シード付きPRNG（mulberry32）: rand() の決定的な代替 ───
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
 
 // ─── ECE-15 (Urban) 目標車速プロファイル（195秒） ───
 // [開始秒, 終了秒, 開始速度(km/h), 終了速度(km/h)]
@@ -77,6 +99,9 @@ const N = Math.round(TOTAL_TIME / DT) + 1;
 let actualSpeed = 0;         // 実測車速（km/h）
 let engineRPM   = 800;       // エンジン回転数（rpm）
 
+// ファイルAのノイズ用PRNG（シード固定）
+const rand = mulberry32(12345);
+
 const rows = [];
 
 for (let i = 0; i < N; i++) {
@@ -89,7 +114,7 @@ for (let i = 0; i < N; i++) {
     const tau = targetSpeed > actualSpeed ? 0.8 : 0.6; // 加速は遅め、減速は速め
     actualSpeed += speedError * (DT / tau);
     // 微小ノイズ
-    actualSpeed += (Math.random() - 0.5) * 0.15;
+    actualSpeed += (rand() - 0.5) * 0.15;
     if (actualSpeed < 0) actualSpeed = 0;
     if (targetSpeed === 0 && actualSpeed < 0.3) actualSpeed = 0;
 
@@ -102,7 +127,7 @@ for (let i = 0; i < N; i++) {
         // 定速巡航: 走行抵抗を補う程度のアクセル
         throttle = targetSpeed * 0.12 + 2;
     }
-    throttle += (Math.random() - 0.5) * 0.8;
+    throttle += (rand() - 0.5) * 0.8;
     if (throttle < 0) throttle = 0;
     if (actualSpeed < 0.1 && targetSpeed < 0.1) throttle = 0;
 
@@ -126,18 +151,18 @@ for (let i = 0; i < N; i++) {
     }
     // 回転数もなめらかに追従
     engineRPM += (targetRPM - engineRPM) * 0.3;
-    engineRPM += (Math.random() - 0.5) * 10;
+    engineRPM += (rand() - 0.5) * 10;
     if (engineRPM < idleRPM) engineRPM = idleRPM;
 
     // ─── 燃料消費率: 回転数とアクセル開度から推定 ───
     let fuelRate;
     if (actualSpeed < 0.5 && throttle < 1) {
         // アイドリング
-        fuelRate = 0.5 + (Math.random() - 0.5) * 0.05;
+        fuelRate = 0.5 + (rand() - 0.5) * 0.05;
     } else {
         // 燃費マップを簡易モデル化
         fuelRate = 0.4 + engineRPM / 3000 * 2.5 + throttle / 100 * 6;
-        fuelRate += (Math.random() - 0.5) * 0.2;
+        fuelRate += (rand() - 0.5) * 0.2;
     }
     if (fuelRate < 0.3) fuelRate = 0.3;
 
@@ -166,11 +191,12 @@ function writeTRN(filePath, dataRows) {
 
 // ─── 3つのファイルを生成 ───
 // ファイル1: 基準データ（オフセットなし）
-writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
+writeTRN(path.join(OUT_DIR, 'NEDC_sample_A.trn'), rows);
 
 // ファイル2: 時間オフセット +3.5秒（ログ開始タイミングのズレ）＋ 別のノイズシード
 {
     const OFFSET = 3.5; // 秒
+    const rand = mulberry32(22345); // ファイルB用の別シード
     let aSpd = 0, rpm2 = 800;
     const rows2 = [];
     for (let i = 0; i < N; i++) {
@@ -181,7 +207,7 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
         const err = targetSpeed - aSpd;
         const tau = targetSpeed > aSpd ? 0.9 : 0.55;
         aSpd += err * (DT / tau);
-        aSpd += (Math.random() - 0.5) * 0.18;
+        aSpd += (rand() - 0.5) * 0.18;
         if (aSpd < 0) aSpd = 0;
         if (targetSpeed === 0 && aSpd < 0.3) aSpd = 0;
 
@@ -191,7 +217,7 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
         } else if (err > -1 && targetSpeed > 1) {
             thr = targetSpeed * 0.13 + 1.8;
         }
-        thr += (Math.random() - 0.5) * 0.9;
+        thr += (rand() - 0.5) * 0.9;
         if (thr < 0) thr = 0;
         if (aSpd < 0.1 && targetSpeed < 0.1) thr = 0;
 
@@ -202,15 +228,15 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
         else if (aSpd < 70) tRPM = 1500 + (aSpd - 40) * 42;
         else tRPM = 1800 + (aSpd - 70) * 30;
         rpm2 += (tRPM - rpm2) * 0.3;
-        rpm2 += (Math.random() - 0.5) * 12;
+        rpm2 += (rand() - 0.5) * 12;
         if (rpm2 < 800) rpm2 = 800;
 
         let fr;
         if (aSpd < 0.5 && thr < 1) {
-            fr = 0.52 + (Math.random() - 0.5) * 0.05;
+            fr = 0.52 + (rand() - 0.5) * 0.05;
         } else {
             fr = 0.42 + rpm2 / 3000 * 2.6 + thr / 100 * 5.8;
-            fr += (Math.random() - 0.5) * 0.22;
+            fr += (rand() - 0.5) * 0.22;
         }
         if (fr < 0.3) fr = 0.3;
 
@@ -223,12 +249,13 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
             fuelRate: fr.toFixed(3),
         });
     }
-    writeTRN(__dirname + '/NEDC_sample_B.trn', rows2);
+    writeTRN(path.join(OUT_DIR, 'NEDC_sample_B.trn'), rows2);
 }
 
 // ファイル3: 時間オフセット -1.2秒 ＋ ドライバーの追従特性が違う（応答が鈍い）
 {
     const OFFSET = -1.2;
+    const rand = mulberry32(32345); // ファイルC用の別シード
     let aSpd = 0, rpm3 = 800;
     const rows3 = [];
     for (let i = 0; i < N; i++) {
@@ -239,7 +266,7 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
         const err = targetSpeed - aSpd;
         const tau = targetSpeed > aSpd ? 1.2 : 0.7; // 応答が鈍い
         aSpd += err * (DT / tau);
-        aSpd += (Math.random() - 0.5) * 0.2;
+        aSpd += (rand() - 0.5) * 0.2;
         if (aSpd < 0) aSpd = 0;
         if (targetSpeed === 0 && aSpd < 0.3) aSpd = 0;
 
@@ -249,7 +276,7 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
         } else if (err > -1 && targetSpeed > 1) {
             thr = targetSpeed * 0.11 + 2.5;
         }
-        thr += (Math.random() - 0.5) * 1.0;
+        thr += (rand() - 0.5) * 1.0;
         if (thr < 0) thr = 0;
         if (aSpd < 0.1 && targetSpeed < 0.1) thr = 0;
 
@@ -260,15 +287,15 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
         else if (aSpd < 70) tRPM = 1480 + (aSpd - 40) * 38;
         else tRPM = 1780 + (aSpd - 70) * 26;
         rpm3 += (tRPM - rpm3) * 0.25;
-        rpm3 += (Math.random() - 0.5) * 15;
+        rpm3 += (rand() - 0.5) * 15;
         if (rpm3 < 800) rpm3 = 800;
 
         let fr;
         if (aSpd < 0.5 && thr < 1) {
-            fr = 0.48 + (Math.random() - 0.5) * 0.06;
+            fr = 0.48 + (rand() - 0.5) * 0.06;
         } else {
             fr = 0.38 + rpm3 / 3000 * 2.4 + thr / 100 * 6.2;
-            fr += (Math.random() - 0.5) * 0.25;
+            fr += (rand() - 0.5) * 0.25;
         }
         if (fr < 0.3) fr = 0.3;
 
@@ -281,5 +308,5 @@ writeTRN(__dirname + '/NEDC_sample_A.trn', rows);
             fuelRate: fr.toFixed(3),
         });
     }
-    writeTRN(__dirname + '/NEDC_sample_C.trn', rows3);
+    writeTRN(path.join(OUT_DIR, 'NEDC_sample_C.trn'), rows3);
 }

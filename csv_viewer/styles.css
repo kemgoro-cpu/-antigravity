@@ -2,10 +2,15 @@
    Premium Dark Theme - CSV Chart Viewer
    ============================================= */
 
-/* トースト通知のスライドインアニメーション */
+/* トースト通知のスライドインアニメーション
+   OSの「視覚効果を減らす」設定（prefers-reduced-motion）ではアニメーションを
+   適用せず、トーストは瞬時に表示する */
 @keyframes slideIn {
     from { opacity: 0; transform: translateX(40px); }
     to   { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .toast-slide-in { animation: slideIn 0.3s ease; }
 }
 
 :root {
@@ -16,12 +21,54 @@
     --text-secondary: #a0a5b1;
     --accent:         #6366f1;
     --accent-hover:   #4f46e5;
+    --accent-soft:    #818cf8;  /* 見出し・ツールチップの強調色（暗背景で読める明るめアクセント） */
     --accent-dim:     rgba(99, 102, 241, 0.15);
     --danger:         #ef4444;
     --border:         rgba(255, 255, 255, 0.08);
+    --border-weak:    rgba(255, 255, 255, 0.05);
+    --border-strong:  rgba(255, 255, 255, 0.13);
+    --overlay-1:      rgba(255, 255, 255, 0.03);  /* ごく薄い面の塗り */
+    --overlay-2:      rgba(255, 255, 255, 0.06);  /* やや強い面の塗り */
+    --bg-input:       rgba(255, 255, 255, 0.04);
+    --scrollbar-thumb:       rgba(255, 255, 255, 0.1);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+    --tooltip-bg:     rgba(12, 14, 20, 0.6);
+    --tooltip-border: rgba(255, 255, 255, 0.12);
+    /* チャート（canvas描画）用トークン。app.jsがcssVar()で実値を解決して使う */
+    --chart-grid:      rgba(255, 255, 255, 0.05);
+    --chart-axis:      rgba(255, 255, 255, 0.15);
+    --chart-crosshair: rgba(255, 255, 255, 0.35);
     --radius-sm:      6px;
     --radius-md:      8px;
     --transition:     0.16s ease;
+}
+
+/* ライトテーマ: <html data-theme="light"> で全トークンを差し替える。
+   チャート色は app.js の refreshThemeColors() が切替時に再解決する */
+:root[data-theme="light"] {
+    --bg-main:        #f4f5f7;
+    --bg-surface:     #ffffff;
+    --bg-hover:       #e9ebf0;
+    --text-primary:   #1d2130;
+    --text-secondary: #5b6272;
+    --accent:         #4f46e5;
+    --accent-hover:   #4338ca;
+    --accent-soft:    #4f46e5;
+    --accent-dim:     rgba(79, 70, 229, 0.12);
+    --danger:         #dc2626;
+    --border:         rgba(15, 20, 40, 0.12);
+    --border-weak:    rgba(15, 20, 40, 0.07);
+    --border-strong:  rgba(15, 20, 40, 0.18);
+    --overlay-1:      rgba(15, 20, 40, 0.04);
+    --overlay-2:      rgba(15, 20, 40, 0.07);
+    --bg-input:       rgba(15, 20, 40, 0.05);
+    --scrollbar-thumb:       rgba(15, 20, 40, 0.2);
+    --scrollbar-thumb-hover: rgba(15, 20, 40, 0.32);
+    --tooltip-bg:     rgba(255, 255, 255, 0.8);
+    --tooltip-border: rgba(15, 20, 40, 0.15);
+    --chart-grid:      rgba(15, 20, 40, 0.07);
+    --chart-axis:      rgba(15, 20, 40, 0.25);
+    --chart-crosshair: rgba(15, 20, 40, 0.4);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,8 +85,8 @@ body {
 /* ── Scrollbar ────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ── Layout ───────────────────────────────── */
 .app-container { display: flex; height: 100%; }
@@ -159,12 +206,12 @@ body {
 
 /* ── Drop Zone ────────────────────────────── */
 .drop-zone {
-    border: 2px dashed rgba(255,255,255,0.15);
+    border: 2px dashed var(--border-strong);
     border-radius: var(--radius-md);
     padding: 18px 14px;
     text-align: center;
     transition: var(--transition);
-    background: rgba(255,255,255,0.02);
+    background: var(--overlay-1);
     cursor: pointer;
 }
 
@@ -195,7 +242,7 @@ body {
 .parse-job {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: rgba(255,255,255,0.03);
+    background: var(--overlay-1);
     padding: 6px 7px;
     font-size: 0.7rem;
 }
@@ -224,7 +271,7 @@ body {
     height: 3px;
     margin-top: 5px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.08);
+    background: var(--overlay-2);
     overflow: hidden;
 }
 .parse-job-bar > span {
@@ -287,7 +334,7 @@ body {
 }
 
 .role-sub {
-    background: rgba(255,255,255,0.06);
+    background: var(--overlay-2);
     color: var(--text-secondary);
     border: 1px solid var(--border);
 }
@@ -347,7 +394,7 @@ body {
     align-items: center;
     gap: 6px;
     padding: 4px 8px 5px 34px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .time-unit-label,
@@ -379,7 +426,7 @@ body {
     align-items: center;
     gap: 5px;
     padding: 4px 8px 7px 34px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .offset-label {
@@ -396,7 +443,7 @@ body {
 }
 
 .btn-auto {
-    background: rgba(255,255,255,0.05);
+    background: var(--overlay-2);
     border: 1px solid var(--border);
     color: var(--text-secondary);
     font-size: 0.7rem;
@@ -436,7 +483,7 @@ body {
 .parse-preview {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: rgba(255,255,255,0.03);
+    background: var(--overlay-1);
     padding: 8px;
     font-size: 0.72rem;
     color: var(--text-secondary);
@@ -609,9 +656,9 @@ input[type="text"]:focus {
     margin-left: auto;
     font-weight: 600;
     transition: var(--transition);
-    background: rgba(255,255,255,0.06);
+    background: var(--overlay-2);
     color: var(--text-secondary);
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid var(--border-strong);
 }
 .bit-badge.active {
     background: rgba(16,185,129,0.15);
@@ -629,7 +676,7 @@ input[type="text"]:focus {
     align-items: center;
     gap: 4px;
     padding: 3px 7px 5px 23px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .col-yrange-label {
@@ -657,7 +704,7 @@ input[type="text"]:focus {
     align-items: center;
     gap: 6px;
     padding: 1px 7px 2px 23px;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid var(--border-weak);
 }
 
 .col-linewidth-label {
@@ -774,7 +821,7 @@ input[type="text"]:focus {
     padding: 20px 24px;
     color: var(--text-primary);
     background: #1a1d24;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
@@ -782,6 +829,14 @@ input[type="text"]:focus {
 .app-modal h3 { margin: 0 0 12px; color: #818cf8; font-size: 1rem; }
 .app-modal p { margin: 0 0 14px; color: var(--text-secondary); font-size: 0.78rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* 旧 style.cssText 直書きだったモーダルの寸法・角丸を維持する修飾クラス（M2でクラス方式へ統一） */
+.debug-modal           { width: auto; max-width: 640px; max-height: 80vh; border-radius: 10px; }
+.custom-ram-help-modal { width: auto; max-width: 520px; max-height: 80vh; border-radius: 10px; }
+.channel-map-modal     { width: 92%;  max-width: 680px; border-radius: 10px; }
+.shortcuts-modal       { width: auto; max-width: 480px; max-height: 80vh; border-radius: 10px; }
+/* 上記モーダルの h3 はインラインで font-size を持たないため、従来どおりブラウザ既定サイズを維持 */
+.debug-modal h3, .custom-ram-help-modal h3, .channel-map-modal h3, .shortcuts-modal h3 { font-size: 1.17em; }
 
 /* Custom RAM 編集モーダル（式・単位） */
 .custom-edit-name { font-size: 0.9rem !important; color: var(--text-primary) !important; font-weight: 600; }
@@ -998,7 +1053,7 @@ input[type="text"]:focus {
 }
 
 .alias-main {
-    background: rgba(255,255,255,0.04);
+    background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 9px 10px;
@@ -1061,7 +1116,7 @@ input[type="text"]:focus {
     overflow-y: auto;
 }
 .alias-candidate {
-    background: rgba(255,255,255,0.03);
+    background: var(--overlay-1);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -1113,7 +1168,7 @@ input[type="text"]:focus {
 }
 
 .btn-secondary:disabled { opacity: 0.35; cursor: not-allowed; }
-.btn-secondary:not(:disabled):hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.15); }
+.btn-secondary:not(:disabled):hover { background: var(--bg-hover); border-color: var(--border-strong); }
 
 .btn-secondary.btn-active {
     background: var(--accent-dim);
@@ -1186,6 +1241,97 @@ input[type="text"]:focus {
 }
 
 .echarts-dom { width: 100%; height: 100%; }
+
+/* イベント検出（サイドバー） */
+.event-form { display: flex; gap: 6px; }
+.event-form .custom-ram-input { flex: 1; min-width: 0; }
+.event-summary { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+.event-clear-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--accent-soft); font-size: 11px; padding: 0 2px;
+    text-decoration: underline;
+}
+.event-list {
+    list-style: none; margin-top: 4px;
+    max-height: 180px; overflow-y: auto;
+}
+.event-item {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 3px 6px; border-radius: var(--radius-sm);
+    font-size: 11px; cursor: pointer;
+}
+.event-item:hover { background: var(--bg-hover); }
+.event-idx   { color: var(--text-secondary); min-width: 1.6em; text-align: right; }
+.event-range { font-family: 'Roboto Mono', monospace; color: var(--text-primary); flex: 1; }
+.event-dur   { font-family: 'Roboto Mono', monospace; color: var(--text-secondary); }
+
+/* XYプロットモーダル（F7） */
+.xy-modal { width: 900px; max-width: 94%; }
+.xy-controls {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 8px; font-size: 12px; color: var(--text-primary);
+}
+.xy-controls select {
+    background: var(--bg-input); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 4px 8px; font-size: 12px; max-width: 260px;
+}
+.xy-visible-label { display: flex; align-items: center; gap: 5px; color: var(--text-secondary); cursor: pointer; }
+.xy-chart { width: 100%; height: 480px; }
+
+/* 差分カーブ生成モーダル（F8） */
+.diff-modal { width: 520px; max-width: 92%; }
+.diff-ch-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.diff-ch-item {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--text-primary);
+    padding: 3px 4px; border-radius: var(--radius-sm);
+    cursor: pointer; min-width: 0;
+}
+.diff-ch-item:hover { background: var(--bg-hover); }
+.diff-ch-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-exists { color: var(--text-secondary); font-size: 10px; flex-shrink: 0; }
+
+/* カーソル計測パネル（Measureモード。チャート右上）と
+   表示範囲統計パネル（Stats。チャート右下、スライダーの上）は同じ見た目 */
+.measure-panel,
+.stats-panel {
+    position: absolute;
+    top: 12px;
+    right: 18px;
+    z-index: 30;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    padding: 10px 12px;
+    font-size: 11px;
+    max-width: min(640px, 70%);
+    max-height: 45%;
+    overflow: auto;
+}
+.stats-panel { top: auto; bottom: 46px; }  /* Xスライダーに被らない位置 */
+.measure-title { font-weight: 600; color: var(--accent-soft); margin-bottom: 6px; white-space: nowrap; }
+.measure-dt    { font-weight: 500; color: var(--text-primary); font-family: 'Roboto Mono', monospace; font-size: 11px; }
+.measure-hint  { color: var(--text-secondary); white-space: nowrap; }
+.measure-panel table, .stats-panel table { border-collapse: collapse; white-space: nowrap; }
+.measure-panel th, .stats-panel th {
+    color: var(--text-secondary); font-weight: 500; text-align: right;
+    padding: 2px 7px; border-bottom: 1px solid var(--border);
+}
+.measure-panel th:first-child, .stats-panel th:first-child { text-align: left; }
+.measure-panel td, .stats-panel td { padding: 2px 7px; text-align: right; font-family: 'Roboto Mono', monospace; color: var(--text-primary); }
+.measure-panel td:first-child, .stats-panel td:first-child { text-align: left; font-family: inherit; }
+.measure-swatch {
+    display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    margin-right: 5px; vertical-align: baseline;
+}
 
 .chart-overlay {
     position: absolute;

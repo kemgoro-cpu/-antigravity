@@ -25,7 +25,7 @@
                         <i class='bx bx-cloud-upload' aria-hidden="true"></i>
                         <p>Drag & Drop files here</p>
                         <p class="small">CSV / TRN</p>
-                        <button class="btn-primary" onclick="document.getElementById('file-input').click()">Browse Files</button>
+                        <button id="browse-files-btn" class="btn-primary">Browse Files</button>
                         <input type="file" id="file-input" multiple accept=".csv,.trn" class="hidden">
                     </div>
                     <div id="parse-status-list" class="parse-status-list"></div>
@@ -36,11 +36,11 @@
                 <div class="control-group">
                     <h3><i class='bx bx-cog' aria-hidden="true"></i> Settings</h3>
                     <div class="settings-grid">
-                        <label>Name Row:</label>
+                        <label for="name-row-idx">Name Row:</label>
                         <input type="number" id="name-row-idx" value="1" min="1">
-                        <label>Unit Row:</label>
+                        <label for="unit-row-idx">Unit Row:</label>
                         <input type="number" id="unit-row-idx" value="2" min="1">
-                        <label>Encoding:</label>
+                        <label for="encoding-mode">Encoding:</label>
                         <select id="encoding-mode" aria-label="CSV文字コード">
                             <option value="auto" selected>Auto</option>
                             <option value="utf-8">UTF-8</option>
@@ -72,10 +72,10 @@
                         <i class='bx bx-help-circle' id="custom-ram-help" title="使える関数の一覧を表示" role="button" tabindex="0" aria-label="使える関数の一覧を表示" style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
                     </h3>
                     <div class="custom-ram-form">
-                        <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input">
-                        <input type="text" id="custom-ram-unit" placeholder="Unit (optional)" class="custom-ram-input">
+                        <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input" aria-label="Custom RAM名">
+                        <input type="text" id="custom-ram-unit" placeholder="Unit (optional)" class="custom-ram-input" aria-label="Custom RAM単位（省略可）">
                         <div style="position:relative;flex:1;">
-                            <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off">
+                            <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off" aria-label="Custom RAM計算式">
                             <ul id="custom-ram-suggest" class="custom-ram-suggest"></ul>
                         </div>
                         <button id="custom-ram-add" class="btn-primary btn-sm">Add</button>
@@ -84,12 +84,38 @@
                     <ul id="custom-ram-list" class="custom-ram-list"></ul>
                 </div>
 
+                <!-- Event Detection -->
+                <div class="control-group">
+                    <h3><i class='bx bx-flag' aria-hidden="true"></i> Events</h3>
+                    <div class="event-form">
+                        <input type="text" id="event-expr" placeholder="e.g. Actual_Speed > 120" class="custom-ram-input" autocomplete="off" aria-label="イベント検出の条件式">
+                        <button id="event-detect-btn" class="btn-primary btn-sm">検出</button>
+                    </div>
+                    <div id="event-validation" class="custom-ram-validation"></div>
+                    <div id="event-summary" class="event-summary"></div>
+                    <ul id="event-list" class="event-list"></ul>
+                </div>
+
                 <!-- Channel Selection (main file only) -->
                 <div class="control-group active-columns-group">
                     <h3><i class='bx bx-list-ul' aria-hidden="true"></i> Channels <span id="channel-source-label" class="channel-source-label"></span></h3>
                     <div class="search-box">
                         <i class='bx bx-search' aria-hidden="true"></i>
                         <input type="text" id="column-search" placeholder="Search channels..." aria-label="チャンネル検索">
+                    </div>
+                    <div class="preset-row">
+                        <select id="channel-fav-select" aria-label="チャンネルセットのお気に入り">
+                            <option value="">Favorites...</option>
+                        </select>
+                        <button id="channel-fav-save" class="btn-secondary btn-icon" title="現在の表示チャンネルの組み合わせをお気に入り保存">
+                            <i class='bx bx-star' aria-hidden="true"></i>
+                        </button>
+                        <button id="channel-fav-apply" class="btn-secondary btn-icon" title="選択したお気に入りを適用（表示チャンネルを置き換え）">
+                            <i class='bx bx-play' aria-hidden="true"></i>
+                        </button>
+                        <button id="channel-fav-delete" class="btn-secondary btn-icon" title="選択したお気に入りを削除">
+                            <i class='bx bx-trash' aria-hidden="true"></i>
+                        </button>
                     </div>
                     <div id="column-list" class="column-list">
                         <div class="placeholder-text">Upload a CSV to see channels</div>
@@ -116,6 +142,12 @@
                     <button id="reset-zoom-btn" class="btn-secondary" disabled title="Reset to full view (R)">
                         <i class='bx bx-reset' aria-hidden="true"></i> Reset View
                     </button>
+                    <button id="measure-mode-btn" class="btn-secondary" disabled title="カーソル計測: チャートを2回クリックして区間のΔ値と統計を表示 (M)">
+                        <i class='bx bx-ruler' aria-hidden="true"></i> Measure
+                    </button>
+                    <button id="stats-panel-btn" class="btn-secondary" disabled title="表示範囲の統計サマリ（min/max/mean/σ）を表示。ズームに追従">
+                        <i class='bx bx-table' aria-hidden="true"></i> Stats
+                    </button>
                     <div class="toolbar-sep"></div>
                     <button id="undo-btn" class="btn-secondary" disabled title="元に戻す (Ctrl+Z)">
                         <i class='bx bx-undo' aria-hidden="true"></i> Undo
@@ -140,6 +172,12 @@
                     <button id="arrange-mode-btn" class="btn-secondary" disabled title="Reorder chart panels">
                         <i class='bx bx-sort-alt-2' aria-hidden="true"></i> Arrange
                     </button>
+                    <button id="diff-curves-btn" class="btn-secondary" disabled title="MainとSubの同名チャンネルから差分カーブ（Main − Sub）を生成">
+                        <i class='bx bx-git-compare' aria-hidden="true"></i> Diff
+                    </button>
+                    <button id="xy-plot-btn" class="btn-secondary" disabled title="任意チャンネル同士の散布図（XYプロット）を表示">
+                        <i class='bx bx-scatter-chart' aria-hidden="true"></i> XY
+                    </button>
                     <div class="toolbar-sep"></div>
                     <label class="sampling-label" title="Data sampling mode">
                         <i class='bx bx-pulse' aria-hidden="true"></i>
@@ -159,11 +197,11 @@
                     </label>
                     <label class="sampling-label" title="線の太さ">
                         <i class='bx bx-pulse' aria-hidden="true"></i>
-                        <input type="range" id="line-width-range" min="0.5" max="5" step="0.5" value="1.0" style="width:80px;">
+                        <input type="range" id="line-width-range" min="0.5" max="5" step="0.5" value="1.0" style="width:80px;" aria-label="線の太さ">
                         <span id="line-width-value">1.0</span>
                     </label>
                     <label class="sampling-label" title="データ点（マーカー）を表示">
-                        <input type="checkbox" id="show-markers-chk">
+                        <input type="checkbox" id="show-markers-chk" aria-label="データ点（マーカー）を表示">
                         <span style="font-size:12px;">点</span>
                     </label>
                     <div class="toolbar-sep"></div>
@@ -180,6 +218,12 @@
                     <button id="copy-chart-btn" class="btn-secondary" disabled title="Copy chart to clipboard (Ctrl+Shift+C)">
                         <i class='bx bx-copy' aria-hidden="true"></i> Copy
                     </button>
+                    <button id="export-csv-btn" class="btn-secondary" disabled title="表示中の時間範囲×表示チャンネルをCSVで保存（Custom RAM含む・メインファイル基準）">
+                        <i class='bx bx-spreadsheet' aria-hidden="true"></i> CSV
+                    </button>
+                    <button id="export-report-btn" class="btn-secondary" disabled title="チャート画像・統計・Drive Index・Custom RAMをまとめたHTMLレポートを保存">
+                        <i class='bx bx-notepad' aria-hidden="true"></i> Report
+                    </button>
                     <div class="toolbar-sep"></div>
                     <button id="export-settings-btn" class="btn-secondary" title="設定をJSONファイルにエクスポート">
                         <i class='bx bx-export' aria-hidden="true"></i> Settings
@@ -190,6 +234,9 @@
                 </div>
                 <div class="toolbar-right">
                     <span id="toolbar-hint" class="toolbar-hint"></span>
+                    <button id="theme-toggle-btn" class="btn-secondary" aria-label="テーマ切替（ライト/ダーク）" title="ライトテーマに切替">
+                        <i class='bx bx-sun' aria-hidden="true"></i>
+                    </button>
                     <button id="shortcuts-help-btn" class="btn-secondary" aria-label="キーボードショートカット一覧" title="キーボードショートカット (?)">
                         <i class='bx bx-keyboard' aria-hidden="true"></i>
                     </button>
@@ -213,6 +260,7 @@
     <script src="settings-utils.js"></script>
     <script src="history-utils.js"></script>
     <script src="layout-utils.js"></script>
+    <script src="chart-options-utils.js"></script>
     <script src="drive-cycles-data.js"></script>
     <script src="drive-index-utils.js"></script>
     <script src="app.js" charset="UTF-8"></script>

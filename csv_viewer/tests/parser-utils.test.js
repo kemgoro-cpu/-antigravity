@@ -51,6 +51,30 @@ function testTrnConversion() {
     );
 }
 
+// 単一スペースを含むチャンネル名（Vehicle Speed 等）が2列に分割されないこと。
+// 区切りは「パイプ」「タブ」「連続2個以上の空白」のみ。
+function testTrnConversionSpaceInName() {
+    // 実際の.trnと同じ「先頭パイプ+複数空白区切り」レイアウト
+    const text = '| Time    Vehicle Speed    Engine RPM\n  s       km/h          rpm\n      0.0        0.00       805';
+    assert.equal(
+        CSVUtils.convertWhitespaceToTabs(text),
+        'Time\tVehicle Speed\tEngine RPM\ns\tkm/h\trpm\n0.0\t0.00\t805'
+    );
+
+    // パイプ区切りレイアウトでもスペース入り名が生き残ること
+    const piped = '| Time | Vehicle Speed |\n| s | km/h |\n0.0    12.5';
+    assert.equal(
+        CSVUtils.convertWhitespaceToTabs(piped),
+        'Time\tVehicle Speed\ns\tkm/h\n0.0\t12.5'
+    );
+
+    // タブ区切り行はそのまま列として扱われること
+    assert.equal(
+        CSVUtils.convertWhitespaceToTabs('Time\tVehicle Speed\n0.0\t12.5'),
+        'Time\tVehicle Speed\n0.0\t12.5'
+    );
+}
+
 function testToNumber() {
     assert.equal(CSVUtils.toNumber('TRUE'), 1);
     assert.equal(CSVUtils.toNumber('FALSE'), 0);
@@ -86,6 +110,7 @@ testUtf8Detection();
 testBomDetection();
 testHeaderRows();
 testTrnConversion();
+testTrnConversionSpaceInName();
 testToNumber();
 testTimeUnitHelpers();
 testChannelNameHelpers();

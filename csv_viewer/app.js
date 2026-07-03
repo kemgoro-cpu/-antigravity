@@ -1,55 +1,91 @@
 ﻿'use strict';
 
+// M9: 全体をIIFEで包み、app.js内部の関数・変数（数百個）をグローバルスコープへ
+// 漏らさない。function宣言のhoistingはIIFEスコープ内でそのまま維持される。
+// テスト（Playwrightスモーク）とコンソールデバッグに必要な最小限だけを
+// ファイル末尾の window.__csvViewerDebug で明示的に公開する。
+// （本文のインデントは差分を最小にするため意図的に変えていない）
+(function () {
+
 // ─────────────────────────────────────────────────────────────
 // Error notification system
 // ─────────────────────────────────────────────────────────────
 
 const _errorLog = []; // { time, message, detail }
 
+// トーストの種類ごとの見た目定義（色・細部だけが違い、構造は共通）
+const TOAST_KINDS = {
+    error:   { bg: '#2d1216', border: '#f43f5e', text: '#fda4af', title: '#fb7185', detail: '#f9a8b8', titlePrefix: '⚠ ', titleMargin: 4, detailScroll: true, timestamp: true, alert: true },
+    warning: { bg: '#2a1f0c', border: '#f59e0b', text: '#fcd34d', title: '#fbbf24', detail: '#fde68a', titlePrefix: '',   titleMargin: 4, detailScroll: true },
+    success: { bg: '#122d1b', border: '#22c55e', text: '#86efac', title: '#4ade80', detail: '#86efac', titlePrefix: '',   titleMargin: 2, detailScroll: false },
+};
+
+// 同時に表示するトーストの上限。超えたら最古のものから消す
+const TOAST_MAX_VISIBLE = 5;
+
+// トーストの自動消去までの時間(ms)。エラーは読む時間を長めに確保する
+const TOAST_TTL_ERROR   = 15000;
+const TOAST_TTL_WARNING = 9000;
+const TOAST_TTL_SUCCESS = 3000;
+
+/**
+ * トースト通知の共通実装。showError / showWarning / showExportToast の本体。
+ * @param {'error'|'warning'|'success'} kind  種類（色・細部の見た目を決める）
+ * @param {string} message  タイトル行
+ * @param {string} [detail] 詳細行（省略可）
+ * @param {number} ttl      自動消去までのミリ秒
+ */
+function showToast(kind, message, detail, ttl) {
+    const k = TOAST_KINDS[kind] || TOAST_KINDS.error;
+
+    let container = document.getElementById('error-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'error-toast-container';
+        // スクリーンリーダーに新着トーストを読み上げさせる（エラーは各トースト側の role="alert" で即時通知）
+        container.setAttribute('role', 'status');
+        container.setAttribute('aria-live', 'polite');
+        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
+        document.body.appendChild(container);
+    }
+
+    // 表示上限: 不正ファイルの一括ドロップ等で画面が埋まらないようにする
+    while (container.children.length >= TOAST_MAX_VISIBLE) {
+        container.firstElementChild.remove();
+    }
+
+    const toast = document.createElement('div');
+    // スライドインはCSSクラス側で prefers-reduced-motion をガード（styles.css参照）
+    toast.className = 'toast-slide-in';
+    toast.style.cssText = `background:${k.bg};border:1px solid ${k.border};border-radius:8px;padding:12px 16px;color:${k.text};font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;`;
+    // エラーは assertive 相当で即時読み上げ
+    if (k.alert) toast.setAttribute('role', 'alert');
+
+    let html = `<div style="font-weight:600;margin-bottom:${k.titleMargin}px;color:${k.title};">${k.titlePrefix}${esc(message)}</div>`;
+    if (detail) {
+        const detailExtra = k.detailScroll ? 'word-break:break-all;max-height:80px;overflow:auto;' : '';
+        html += `<div style="font-size:11px;color:${k.detail};opacity:0.85;${detailExtra}">${esc(String(detail))}</div>`;
+    }
+    if (k.timestamp) {
+        html += `<div style="font-size:10px;color:#888;margin-top:4px;">${new Date().toLocaleTimeString()} — click to dismiss</div>`;
+    }
+    toast.innerHTML = html;
+    toast.addEventListener('click', () => toast.remove());
+    container.appendChild(toast);
+
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, ttl);
+}
+
 function showError(message, detail) {
     const entry = { time: new Date().toLocaleTimeString(), message, detail: detail || '' };
     _errorLog.push(entry);
     console.error(`[CSV Viewer] ${message}`, detail || '');
-
-    // Create toast notification
-    let container = document.getElementById('error-toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'error-toast-container';
-        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
-        document.body.appendChild(container);
-    }
-
-    const toast = document.createElement('div');
-    toast.style.cssText = 'background:#2d1216;border:1px solid #f43f5e;border-radius:8px;padding:12px 16px;color:#fda4af;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
-    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;color:#fb7185;">⚠ ${esc(message)}</div>`
-        + (detail ? `<div style="font-size:11px;color:#f9a8b8;opacity:0.85;word-break:break-all;max-height:80px;overflow:auto;">${esc(String(detail))}</div>` : '')
-        + `<div style="font-size:10px;color:#888;margin-top:4px;">${entry.time} — click to dismiss</div>`;
-    toast.addEventListener('click', () => toast.remove());
-    container.appendChild(toast);
-
-    // Auto-dismiss after 15 seconds
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 15000);
+    showToast('error', message, detail, TOAST_TTL_ERROR);
 }
 
 function showWarning(message, detail) {
     console.warn(`[CSV Viewer] ${message}`, detail || '');
-
-    let container = document.getElementById('error-toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'error-toast-container';
-        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
-        document.body.appendChild(container);
-    }
-
-    const toast = document.createElement('div');
-    toast.style.cssText = 'background:#2a1f0c;border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;color:#fcd34d;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
-    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;color:#fbbf24;">${esc(message)}</div>`
-        + (detail ? `<div style="font-size:11px;color:#fde68a;opacity:0.85;word-break:break-all;max-height:80px;overflow:auto;">${esc(String(detail))}</div>` : '');
-    toast.addEventListener('click', () => toast.remove());
-    container.appendChild(toast);
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 9000);
+    showToast('warning', message, detail, TOAST_TTL_WARNING);
 }
 
 // Catch all unhandled errors
@@ -152,6 +188,54 @@ function setupModalA11y(overlay, modalEl) {
     }, 0);
 }
 
+/**
+ * モーダル共通の生成ヘルパー（M2: モーダル生成の共通化）。
+ * overlay(#app-modal-overlay) + モーダル本体(.app-modal)を生成して body に追加し、
+ * setupModalA11y（role/フォーカストラップ/Esc/フォーカス復帰）を仕込む。
+ * overlay の ID を全モーダルで共有することで、同時に開くモーダルは常に1つになる
+ * （既存モーダルが開いていれば先に閉じる）。
+ *
+ * @param {string} contentHtml  モーダル本体の innerHTML。後から流し込む場合は '' でよい
+ * @param {object} opts
+ *   - modalClass: '.app-modal' に追加するクラス（幅などの個別調整用）
+ *   - labelledBy: aria-labelledby に設定するタイトル要素の ID
+ *   - closeOnOverlayClick: overlay の余白クリックで閉じるか（既定 true）。
+ *     閉じる前に独自処理（Promise の resolve 等）が必要なモーダルは
+ *     false を渡して自前でリスナーを登録すること
+ * @returns {{overlay: HTMLElement, modal: HTMLElement, close: Function}}
+ *   close は overlay を DOM から外すだけ。リスナー解除とフォーカス復帰は
+ *   setupModalA11y 内の MutationObserver が overlay の除去を検知して行う
+ */
+function createModal(contentHtml, opts = {}) {
+    document.getElementById('app-modal-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'app-modal-overlay';
+    overlay.className = 'app-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'app-modal' + (opts.modalClass ? ' ' + opts.modalClass : '');
+    if (opts.labelledBy) modal.setAttribute('aria-labelledby', opts.labelledBy);
+    modal.innerHTML = contentHtml;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setupModalA11y(overlay, modal);
+
+    const close = () => overlay.remove();
+    if (opts.closeOnOverlayClick !== false) {
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    }
+    return { overlay, modal, close };
+}
+
+// Debug / Custom RAMヘルプ / ショートカットの3モーダル共通の「閉じる」フッター。
+// インライン onclick は CSP 対応のため使わない（S3）。
+// createModal 呼び出し後に .modal-close-btn へ close をバインドすること
+const MODAL_CLOSE_FOOTER =
+    '<div style="text-align:right;margin-top:12px;"><button class="modal-close-btn" '
+    + 'style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>';
+
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
@@ -198,7 +282,7 @@ function hslToHex(h, s, l) {
 
 // HTML-escape to safely insert text into innerHTML
 function esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -232,6 +316,15 @@ const CUSTOM_RAM_FUNCTIONS = [
 // 関数名のセット（パーサーが関数呼び出しか RAM名 かを区別するために使う）
 const _builtinFuncNames = new Set(CUSTOM_RAM_FUNCTIONS.map(f => f.name));
 
+// 関数名 → 必要な引数の個数（args定義から導出。式検証のarityチェックに使う）
+const _builtinFuncArity = new Map(
+    CUSTOM_RAM_FUNCTIONS.map(f => [f.name, f.args.split(',').length])
+);
+
+// 式のネスト深度の上限。再帰下降パーサなので、異常に深い式
+// （"((((...))))" 等）でスタックオーバーフローする前にエラーで打ち切る
+const EXPR_MAX_DEPTH = 200;
+
 /**
  * 式をトークン列に分割する。
  * トークンの種類:
@@ -249,6 +342,15 @@ function tokenizeExpr(expr) {
         if (/\s/.test(ch)) { i++; continue; }
         // カンマ（関数の引数区切り）
         if (ch === ',') { tokens.push({ type: 'comma' }); i++; continue; }
+        // 比較・論理演算子（2文字を1文字より先に判定する）
+        const two = expr.slice(i, i + 2);
+        if (two === '>=' || two === '<=' || two === '==' || two === '!=' || two === '&&' || two === '||') {
+            tokens.push({ type: 'op', value: two }); i += 2; continue;
+        }
+        if (ch === '>' || ch === '<') { tokens.push({ type: 'op', value: ch }); i++; continue; }
+        // 単独の = ! & | は文法に無い（==等の打ち間違い）。無限ループしないよう
+        // 消費だけして op として積む（どの文法規則にも一致せず無視される）
+        if ('=!&|'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
         // 演算子と括弧（^をべき乗演算子として追加）
         if ('+-*/()^'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
         // 数値リテラル（小数点、指数表記に対応）
@@ -265,7 +367,7 @@ function tokenizeExpr(expr) {
         // 識別子（RAM名 or 関数名 or ファイル間参照 s1:Name）
         // 英数字、アンダースコア、ドット、コロン、非ASCII（日本語など）を許可
         let name = '';
-        while (i < expr.length && !/[\s+\-*/()^,]/.test(expr[i])) name += expr[i++];
+        while (i < expr.length && !/[\s+\-*/()^,<>=!&|]/.test(expr[i])) name += expr[i++];
         if (name) {
             // ファイル間参照の判定: s1:Name, s2:Name 形式
             const crossMatch = name.match(/^(s\d+):(.+)$/);
@@ -291,12 +393,49 @@ function tokenizeExpr(expr) {
 function parseExprToAST(expr) {
     const tokens = tokenizeExpr(expr);
     let pos = 0;
+    let depth = 0; // 再帰の深さ（EXPR_MAX_DEPTH超過でエラー）
 
     function peek() { return pos < tokens.length ? tokens[pos] : null; }
     function next() { return tokens[pos++]; }
 
-    // expr = term (('+' | '-') term)*
+    // expr = logicalOr（優先順位: || < && < 比較 < 加減 < 乗除 < べき乗 < 単項）
     function parseExpr() {
+        return parseLogicalOr();
+    }
+
+    // logicalOr = logicalAnd ('||' logicalAnd)*
+    function parseLogicalOr() {
+        let left = parseLogicalAnd();
+        while (peek() && peek().value === '||') {
+            next();
+            left = { type: 'binop', op: '||', left, right: parseLogicalAnd() };
+        }
+        return left;
+    }
+
+    // logicalAnd = comparison ('&&' comparison)*
+    function parseLogicalAnd() {
+        let left = parseComparison();
+        while (peek() && peek().value === '&&') {
+            next();
+            left = { type: 'binop', op: '&&', left, right: parseComparison() };
+        }
+        return left;
+    }
+
+    // comparison = additive (cmpOp additive)?  （a<b<c のような連鎖は許可しない）
+    const CMP_OPS = new Set(['>', '<', '>=', '<=', '==', '!=']);
+    function parseComparison() {
+        let left = parseAdditive();
+        if (peek() && CMP_OPS.has(peek().value)) {
+            const op = next().value;
+            left = { type: 'binop', op, left, right: parseAdditive() };
+        }
+        return left;
+    }
+
+    // additive = term (('+' | '-') term)*
+    function parseAdditive() {
         let left = parseTerm();
         while (peek() && (peek().value === '+' || peek().value === '-')) {
             const op = next().value;
@@ -326,7 +465,20 @@ function parseExprToAST(expr) {
     }
 
     // factor = unary | '(' expr ')' | funcCall | number | ramName
+    // ネストの再帰（括弧・単項演算子・関数引数）はすべてここを通るため、
+    // 深度ガードはこの1箇所に置く（try/finallyで兄弟要素間の誤累積を防ぐ）
     function parseFactor() {
+        if (++depth > EXPR_MAX_DEPTH) {
+            throw new Error(`式のネストが深すぎます（上限${EXPR_MAX_DEPTH}）`);
+        }
+        try {
+            return parseFactorInner();
+        } finally {
+            depth--;
+        }
+    }
+
+    function parseFactorInner() {
         const t = peek();
         if (!t) return { type: 'num', value: NaN };
 
@@ -403,16 +555,28 @@ function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
         return arr;
     }
 
-    // 二項演算を要素ごとに適用
+    // 二項演算を要素ごとに適用。
+    // 比較・論理演算の結果は 1（真）/ 0（偽）。どちらかの入力が NaN の点は
+    // NaN のまま伝播させる（欠損を「偽」と混同させない。イベント検出側は
+    // NaN を偽として扱う）
     function binop(op, a, b) {
         const out = new Float32Array(len);
         for (let i = 0; i < len; i++) {
+            const x = a[i], y = b[i];
             switch (op) {
-                case '+': out[i] = a[i] + b[i]; break;
-                case '-': out[i] = a[i] - b[i]; break;
-                case '*': out[i] = a[i] * b[i]; break;
-                case '/': out[i] = a[i] / b[i]; break;
-                case '^': out[i] = Math.pow(a[i], b[i]); break;
+                case '+': out[i] = x + y; break;
+                case '-': out[i] = x - y; break;
+                case '*': out[i] = x * y; break;
+                case '/': out[i] = x / y; break;
+                case '^': out[i] = Math.pow(x, y); break;
+                case '>':  out[i] = (x !== x || y !== y) ? NaN : (x >   y ? 1 : 0); break;
+                case '<':  out[i] = (x !== x || y !== y) ? NaN : (x <   y ? 1 : 0); break;
+                case '>=': out[i] = (x !== x || y !== y) ? NaN : (x >=  y ? 1 : 0); break;
+                case '<=': out[i] = (x !== x || y !== y) ? NaN : (x <=  y ? 1 : 0); break;
+                case '==': out[i] = (x !== x || y !== y) ? NaN : (x === y ? 1 : 0); break;
+                case '!=': out[i] = (x !== x || y !== y) ? NaN : (x !== y ? 1 : 0); break;
+                case '&&': out[i] = (x !== x || y !== y) ? NaN : ((x !== 0 && y !== 0) ? 1 : 0); break;
+                case '||': out[i] = (x !== x || y !== y) ? NaN : ((x !== 0 || y !== 0) ? 1 : 0); break;
             }
         }
         return out;
@@ -427,6 +591,9 @@ function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
 
     // --- ASTノードを再帰的に評価 ---
     function evalNode(node) {
+        // 引数不足の関数呼び出し（mavg(X) 等）で argNodes[1] が undefined のまま
+        // 渡ってきてもTypeErrorにせずNaN列に落とす（arity検証はUI側で行う）
+        if (!node) return fillConst(NaN);
         if (node.type === 'num') return fillConst(node.value);
         if (node.type === 'name') {
             const arr = getArray(node.value);
@@ -616,14 +783,53 @@ function evaluateExpr(expr, getVal) {
     return evalNode(ast);
 }
 
-// Actual hex values — ECharts does NOT understand CSS variables
-const T = {
-    text:   '#f0f0f0',
-    dim:    '#a0a5b1',
-    border: 'rgba(255,255,255,0.08)',
-    grid:   'rgba(255,255,255,0.05)',
-    axis:   'rgba(255,255,255,0.15)',
-};
+/**
+ * styles.css の :root で定義されたCSS変数を読み取る（未定義・空なら fallback）。
+ * EChartsはCSS変数を解釈しないため、チャートへ渡す色は起動時にここで実値へ解決する。
+ */
+function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+}
+
+// チャート用テーマ色。styles.css の :root トークンを単一情報源とし、
+// 起動時とテーマ切替時（applyTheme → refreshThemeColors）に再解決する。
+// canvas描画（ECharts）はCSS変数を解釈できないため、ここで実値へ変換して渡す
+const T = {};
+function refreshThemeColors() {
+    Object.assign(T, {
+        text:      cssVar('--text-primary',    '#f0f0f0'),
+        dim:       cssVar('--text-secondary',  '#a0a5b1'),
+        border:    cssVar('--border',          'rgba(255,255,255,0.08)'),
+        accent:    cssVar('--accent',          '#6366f1'),
+        bgMain:    cssVar('--bg-main',         '#0f1115'),  // PNGエクスポートの背景色
+        grid:      cssVar('--chart-grid',      'rgba(255,255,255,0.05)'),
+        axis:      cssVar('--chart-axis',      'rgba(255,255,255,0.15)'),
+        crosshair: cssVar('--chart-crosshair', 'rgba(255,255,255,0.35)'),
+        tooltipBg:     cssVar('--tooltip-bg',     'rgba(12,14,20,0.6)'),
+        tooltipBorder: cssVar('--tooltip-border', 'rgba(255,255,255,0.12)'),
+    });
+}
+refreshThemeColors();
+
+/**
+ * カラーテーマ（'dark'|'light'）を適用する。
+ * <html data-theme> の付け替え → CSSトークン切替 → チャート色の再解決 → 再描画。
+ * 永続化（saveSettings）は呼び出し側で行う（起動時の復元で二重保存しないため）。
+ */
+function applyTheme(theme) {
+    state.theme = theme === 'light' ? 'light' : 'dark';
+    if (state.theme === 'light') document.documentElement.dataset.theme = 'light';
+    else delete document.documentElement.dataset.theme;
+    refreshThemeColors();
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) {
+        const icon = btn.querySelector('i');
+        if (icon) icon.className = state.theme === 'light' ? 'bx bx-moon' : 'bx bx-sun';
+        btn.title = state.theme === 'light' ? 'ダークテーマに切替' : 'ライトテーマに切替';
+    }
+    if (state.chart) renderChart();
+}
 
 // Chart layout constants (px)
 const L = {
@@ -637,6 +843,23 @@ const L = {
 };
 
 // ─────────────────────────────────────────────────────────────
+// チューニング用定数（挙動を調整するときはここを変える）
+// ─────────────────────────────────────────────────────────────
+
+// チャート描画（renderChart）系の定数は chart-options-utils.js の
+// CSVChartOptions.CONSTANTS が単一情報源（BIT_WEIGHT / ZOOM_GAP /
+// NARROW_PLOT_WARN_PX / SERIES_PROGRESSIVE(_THRESHOLD) / MARKER_SYMBOL_SIZE /
+// MARK_AREA_FAR_SCALE / MARK_AREA_FAR_OFFSET）。値を変えるときはそちらを編集する。
+// Custom RAM式サジェストの最大表示件数
+const SUGGEST_MAX_ITEMS = 15;
+// 設定保存(saveSettings)のdebounce時間(ms)
+const SAVE_DEBOUNCE_MS = 500;
+// Custom RAM式ライブ検証のdebounce時間(ms)（追加フォーム・編集モーダル共通）
+const VALIDATE_DEBOUNCE_MS = 300;
+// チャンネル検索のdebounce時間(ms)
+const SEARCH_DEBOUNCE_MS = 150;
+
+// ─────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────
 
@@ -648,6 +871,10 @@ const state = {
     colorCtr:       0,
     brushMode:      false,
     shiftMode:      false,
+    measureMode:    false,               // カーソル計測モード（M）
+    measure:        { tA: null, tB: null }, // 計測カーソル位置(秒)。永続化しない
+    events:         { expr: '', intervals: [] }, // イベント検出結果（区間はメインファイル基準。永続化しない）
+    statsPanelVisible: false, // 表示範囲の統計サマリパネル（Stats）を表示中か
     shiftFileId:    null,   // which sub file is the drag target
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
@@ -662,6 +889,7 @@ const state = {
     monoColorMode:  false,     // 単色モード: trueならファイル単位の色で描画
     fileColors:     {},        // fileId → '#RRGGBB' ファイルごとの色（単色モード用）
     fontScale:      'normal',  // フォントサイズ段階: 'small'|'normal'|'large'|'xlarge'
+    theme:          'dark',    // カラーテーマ: 'dark'|'light'
     rowHeightPx:    null,      // グリッド基準高さ(px)。null=コンテナに自動フィット
     gridHeights:    {},        // グリッド個別の高さ上書き { signature: px }
     parseJobs:      new Map(), // jobId → { name, detail, cancelled }
@@ -914,14 +1142,29 @@ const dom = {
     customSuggest:    $('custom-ram-suggest'),
     customValidation: $('custom-ram-validation'),
     monoColorBtn: $('mono-color-btn'),
+    measureBtn: $('measure-mode-btn'),
+    statsBtn:   $('stats-panel-btn'),
+    eventExpr:      $('event-expr'),
+    eventDetectBtn: $('event-detect-btn'),
+    eventValidation: $('event-validation'),
+    eventSummary:   $('event-summary'),
+    eventList:      $('event-list'),
     exportPng:  $('export-png-btn'),
     copyChart:  $('copy-chart-btn'),
+    exportCsv:  $('export-csv-btn'),
+    exportReport: $('export-report-btn'),
     exportSettings: $('export-settings-btn'),
     importSettings: $('import-settings-btn'),
     presetSelect: $('settings-preset-select'),
     presetSave: $('preset-save-btn'),
     presetLoad: $('preset-load-btn'),
     presetDelete: $('preset-delete-btn'),
+    diffBtn: $('diff-curves-btn'),
+    xyBtn: $('xy-plot-btn'),
+    favSelect: $('channel-fav-select'),
+    favSave:   $('channel-fav-save'),
+    favApply:  $('channel-fav-apply'),
+    favDelete: $('channel-fav-delete'),
     driveIndexBtn: $('drive-index-btn'),
 };
 
@@ -934,8 +1177,29 @@ function initChart() {
         backgroundColor: 'transparent',
         renderer: 'canvas',
     });
-    window.addEventListener('resize', () => state.chart.resize());
+    // windowリサイズはrAFでスロットル（フレームに1回）。
+    // ツールチップ表示中にresizeするとECharts内部で「offsetWidth of null」
+    // エラーが出るため、renderChartと同様に先にhideTipをdispatchする
+    let _resizeRafId = null;
+    window.addEventListener('resize', () => {
+        if (_resizeRafId !== null) return;
+        _resizeRafId = requestAnimationFrame(() => {
+            _resizeRafId = null;
+            state.chart.dispatchAction({ type: 'hideTip' });
+            state.chart.resize();
+        });
+    });
     state.chart.on('brushEnd', onBrushEnd);
+
+    // ズーム操作に統計サマリパネルを追従させる（rAFで間引き）
+    let _statsRafId = null;
+    state.chart.on('datazoom', () => {
+        if (_statsRafId !== null) return;
+        _statsRafId = requestAnimationFrame(() => {
+            _statsRafId = null;
+            updateStatsPanel();
+        });
+    });
 
     dom.chartEl.addEventListener('mouseleave', () => {
         _lastTooltipParams = null;
@@ -945,7 +1209,7 @@ function initChart() {
     // Y軸ラベル領域のホバーカーソル（grab/pointer）
     dom.chartEl.addEventListener('mousemove', e => {
         // ドラッグ中やシフトモード中はスキップ
-        if (state.mergeDrag || state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.mergeDrag || state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         const hit = hitTestGrid(e.clientY);
         if (hit && isInYAxisArea(e.clientX, hit.region)) {
             dom.chartEl.style.cursor = (hit && hit.region.merged) ? 'pointer' : 'grab';
@@ -1065,14 +1329,7 @@ function isInYAxisArea(clientX, region = null) {
 
 function showOverlayAxisModal(targetGroup, sourceName) {
     return new Promise(resolve => {
-        document.getElementById('app-modal-overlay')?.remove();
         const sourceUnit = getMainColumn(sourceName)?.unit || '';
-        const overlay = document.createElement('div');
-        overlay.id = 'app-modal-overlay';
-        overlay.className = 'app-modal-overlay';
-
-        const modal = document.createElement('div');
-        modal.className = 'app-modal axis-choice-modal';
         const axisButtons = targetGroup.axes.map(axis => {
             const unit = getAxisDisplayUnit(targetGroup, axis.id) || 'unitなし';
             const names = targetGroup.channels.filter(ch => ch.axisId === axis.id).map(ch => ch.name).join(', ');
@@ -1080,20 +1337,21 @@ function showOverlayAxisModal(targetGroup, sourceName) {
                 <strong>${esc(unit)}</strong><span>${esc(names)}</span>
             </button>`;
         }).join('');
-        modal.innerHTML = `
+        const { overlay, modal, close } = createModal(`
             <h3 id="axis-choice-title">Y軸の割り当て</h3>
             <p><strong>${esc(sourceName)}</strong>${sourceUnit ? ` (${esc(sourceUnit)})` : ''} を重ねます。</p>
             <div class="axis-choice-list">${axisButtons}</div>
             <button class="axis-choice-btn new-axis" data-axis-id="__new__">
                 <strong><i class='bx bx-plus'></i> 新しいY軸</strong><span>独立したスケールで表示</span>
             </button>
-            <div class="modal-actions"><button class="btn-secondary axis-choice-cancel">キャンセル</button></div>`;
-        modal.setAttribute('aria-labelledby', 'axis-choice-title');
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        setupModalA11y(overlay, modal);
+            <div class="modal-actions"><button class="btn-secondary axis-choice-cancel">キャンセル</button></div>`, {
+            modalClass: 'axis-choice-modal',
+            labelledBy: 'axis-choice-title',
+            // overlayクリックは閉じるだけでなく resolve(null) も必要なので自前で登録する
+            closeOnOverlayClick: false,
+        });
 
-        const finish = value => { overlay.remove(); resolve(value); };
+        const finish = value => { close(); resolve(value); };
         modal.querySelectorAll('[data-axis-id]').forEach(btn => {
             btn.addEventListener('click', () => finish(btn.dataset.axisId));
         });
@@ -1167,7 +1425,7 @@ function setupMergeDrag() {
 
     // --- mousedown: Y軸ラベル領域でドラッグ開始 ---
     dom.chartEl.addEventListener('mousedown', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         if (e.button !== 0) return;
         if (hitTestResizeBand(e.clientY)) return; // 境界の高さリサイズを優先
 
@@ -1231,7 +1489,7 @@ function setupMergeDrag() {
 
     // --- dblclick: マージ解除 ---
     dom.chartEl.addEventListener('dblclick', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         if (hitTestResizeBand(e.clientY)) return; // 境界のダブルクリックは高さリセット側で処理
 
         const hit = hitTestGrid(e.clientY);
@@ -1253,7 +1511,7 @@ function setupGridResizeDrag() {
     // 境界の上でカーソルをns-resizeにする(通常モードのみ)
     dom.chartEl.addEventListener('mousemove', e => {
         if (drag) return;
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         const band = hitTestResizeBand(e.clientY);
         if (band) {
             // 他のドラッグ(grabbing等)のカーソルを上書きしない
@@ -1264,7 +1522,7 @@ function setupGridResizeDrag() {
     });
 
     dom.chartEl.addEventListener('mousedown', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         if (e.button !== 0) return;
         const band = hitTestResizeBand(e.clientY);
         if (!band) return;
@@ -1298,7 +1556,7 @@ function setupGridResizeDrag() {
 
     // 境界のダブルクリックでそのグリッドだけ自動の高さに戻す
     dom.chartEl.addEventListener('dblclick', e => {
-        if (state.shiftMode || state.brushMode || state.arrangeMode) return;
+        if (state.shiftMode || state.brushMode || state.arrangeMode || state.measureMode) return;
         const band = hitTestResizeBand(e.clientY);
         if (!band) return;
         delete state.gridHeights[gridSignatureForRegion(band.region)];
@@ -1311,14 +1569,6 @@ setupGridResizeDrag();
 function showChartGroupModal(groupId) {
     const group = getChartGroupById(groupId);
     if (!group) return;
-    document.getElementById('app-modal-overlay')?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.className = 'app-modal-overlay';
-    const modal = document.createElement('div');
-    modal.className = 'app-modal chart-group-modal';
-    modal.setAttribute('aria-labelledby', 'chart-group-title');
-
     const axisOptions = group.axes.map(axis => {
         const unit = getAxisDisplayUnit(group, axis.id) || 'unitなし';
         return `<option value="${esc(axis.id)}">${esc(unit)} / ${esc(axis.representative)}</option>`;
@@ -1329,13 +1579,13 @@ function showChartGroupModal(groupId) {
             <select class="chart-group-axis-select">${axisOptions}<option value="__new__">+ 新しいY軸</option></select>
             <button class="btn-secondary btn-icon chart-group-detach" title="独立チャートへ分離"><i class='bx bx-unlink'></i></button>
         </div>`).join('');
-    modal.innerHTML = `
+    const { modal, close } = createModal(`
         <h3 id="chart-group-title">Overlay Settings</h3>
         <div class="chart-group-rows">${rows}</div>
-        <div class="modal-actions"><button class="btn-primary chart-group-done">完了</button></div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+        <div class="modal-actions"><button class="btn-primary chart-group-done">完了</button></div>`, {
+        modalClass: 'chart-group-modal',
+        labelledBy: 'chart-group-title',
+    });
 
     modal.querySelectorAll('.chart-group-row').forEach(row => {
         const name = row.dataset.channel;
@@ -1347,7 +1597,7 @@ function showChartGroupModal(groupId) {
                 const axis = createChartAxis(name, getMainColumn(name)?.unit || '');
                 group.axes.push(axis);
                 assignment.axisId = axis.id;
-                overlay.remove();
+                close();
                 cleanupChartGroup(group);
                 renderChart();
                 saveSettings();
@@ -1358,24 +1608,30 @@ function showChartGroupModal(groupId) {
             cleanupChartGroup(group);
             renderChart();
             saveSettings();
-            overlay.remove();
+            close();
             showChartGroupModal(group.id);
         });
         row.querySelector('.chart-group-detach').addEventListener('click', () => {
             if (detachChannelToStandalone(group.id, name)) {
-                overlay.remove();
+                close();
                 renderChart();
                 saveSettings();
             }
         });
     });
-    modal.querySelector('.chart-group-done').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    modal.querySelector('.chart-group-done').addEventListener('click', close);
 }
 
 // ─────────────────────────────────────────────────────────────
 // File drag-drop & input
 // ─────────────────────────────────────────────────────────────
+
+// ドロップゾーン外（チャート領域など）へのD&Dでブラウザがファイルへページ遷移し、
+// 読み込み済みの全状態が消えるのを防ぐ（B3対策）。
+// preventDefaultは伝播を止めないため、dropZoneのハンドラや
+// ArrangeモードのパネルD&D（updateArrangeOverlay内）とは干渉しない。
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
 
 dom.dropZone.addEventListener('dragover', e => { e.preventDefault(); dom.dropZone.classList.add('dragover'); });
 dom.dropZone.addEventListener('dragleave', () => dom.dropZone.classList.remove('dragover'));
@@ -1388,6 +1644,8 @@ dom.fileInput.addEventListener('change', e => {
     if (e.target.files.length) handleFiles(e.target.files);
     dom.fileInput.value = '';
 });
+// Browse Files ボタン → 非表示の file input を開く（S3: インラインonclickの排除）
+$('browse-files-btn')?.addEventListener('click', () => dom.fileInput.click());
 
 // 対応するファイル拡張子（.csv と .trn）
 const SUPPORTED_EXTENSIONS = ['.csv', '.trn'];
@@ -1500,10 +1758,23 @@ function getRequestedEncoding() {
     return dom.encoding?.value || 'auto';
 }
 
+// パース中ファイルの元Fileオブジェクト（fileId → File）。
+// TRNはパイプラインを変換済みテキストで流れるため、セッション保存
+// （sessionSaveFile）用に元のバイト列をここで持ち回す
+const _origFileById = new Map();
+
 async function parseCSV(file) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    _origFileById.set(fileId, file);
     const trn = isTrnFile(file.name);
     const requestedEncoding = getRequestedEncoding();
+    // ヘッダー行のヒントはパース開始時点のSettings値をファイルごとに固定する（B4対策）。
+    // 検出結果はUI表示としてdom.nameRow/unitRowへ書き戻されるため、並行パース中に
+    // DOMから読み直すと他ファイルの検出値に汚染される。以降のチェーンはこの値だけを使う。
+    const headerHints = {
+        nameRow: parseInt(dom.nameRow.value, 10) - 1,
+        unitRow: parseInt(dom.unitRow.value, 10) - 1,
+    };
     const parseJob = createParseJob(file.name, 'Detecting encoding...');
     let encoding = 'utf-8';
     try {
@@ -1533,7 +1804,7 @@ async function parseCSV(file) {
                 skipEmptyLines: true,
             });
             // 変換済みテキストを保持するため、fileの代わりにconvertedを渡す
-            onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding, requestedEncoding, parseJob);
+            onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding, requestedEncoding, parseJob, headerHints);
         } catch (e) {
             finishParseJob(parseJob);
             showError(`TRN parse failed: ${file.name}`, e.stack || e.message);
@@ -1550,7 +1821,7 @@ async function parseCSV(file) {
                 preview: 50,
                 complete: res => {
                     try {
-                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding, requestedEncoding, parseJob);
+                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding, requestedEncoding, parseJob, headerHints);
                     } catch (e) {
                         finishParseJob(parseJob);
                         showError(`Header parse failed: ${file.name}`, e.stack || e.message);
@@ -1568,11 +1839,13 @@ async function parseCSV(file) {
     }
 }
 
-function detectHeaderRows(raw) {
+function detectHeaderRows(raw, hints) {
+    // hints（parseCSV開始時に固定したSettings値）があればそれを使う。
+    // DOMからの読み取りはhints無しで呼ばれた場合のフォールバックのみ（B4対策）。
     return detectHeaderRowsBase(
         raw,
-        parseInt(dom.nameRow.value, 10) - 1,
-        parseInt(dom.unitRow.value, 10) - 1
+        Number.isInteger(hints?.nameRow) ? hints.nameRow : parseInt(dom.nameRow.value, 10) - 1,
+        Number.isInteger(hints?.unitRow) ? hints.unitRow : parseInt(dom.unitRow.value, 10) - 1
     );
 }
 
@@ -1601,14 +1874,14 @@ function describeHeaderParseIssue(raw, nameRow, unitRow, dataStart) {
  * Extracts column metadata and stores File reference for lazy loading.
  * Does NOT load any column data yet — only time data is loaded via streaming.
  */
-function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodingMode, parseJob) {
+function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodingMode, parseJob, headerHints) {
     if (parseJob?.cancelled) {
         finishParseJob(parseJob);
         showWarning(`読み込みをキャンセルしました: ${fileName}`);
         return;
     }
 
-    const { nameRow, unitRow } = detectHeaderRows(raw);
+    const { nameRow, unitRow } = detectHeaderRows(raw, headerHints);
     const dataStart = Math.max(nameRow, unitRow >= 0 ? unitRow : nameRow) + 1;
 
     const parseIssue = describeHeaderParseIssue(raw, nameRow, unitRow, dataStart);
@@ -1618,6 +1891,8 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
         return;
     }
 
+    // 検出結果のUI表示のみ。パース処理はheaderHints経由で受け渡すため、
+    // この書き戻し値が他ファイルのパースに影響することはない（B4対策）
     dom.nameRow.value = nameRow + 1;
     if (unitRow >= 0) dom.unitRow.value = unitRow + 1;
 
@@ -1662,8 +1937,6 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
         return;
     }
 
-    const hasMain   = Object.values(state.files).some(f => f.role === 'main');
-    const role      = hasMain ? 'sub' : 'main';
     const shortName = fileName.length > 22 ? fileName.slice(0, 20) + '…' : fileName;
 
     // Phase 2: Stream-parse to extract ONLY time data (no column values yet)
@@ -1712,6 +1985,14 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     const timeData = new Float64Array(timeChunks.length);
                     for (let i = 0; i < timeChunks.length; i++) timeData[i] = timeChunks[i];
 
+                    // ロール決定はstate.filesへの挿入直前に同期で行う（B1対策）。
+                    // ヘッダーパース時（Phase 1）に決めると、複数ファイル同時ドロップで
+                    // どちらも「Main不在」を見て両方Mainになる競合が起きる。
+                    // completeコールバックはイベントループで1件ずつ直列に走るため、
+                    // ここで判定→直後に挿入すれば競合しない。
+                    const hasMain = Object.values(state.files).some(f => f.role === 'main');
+                    const role    = hasMain ? 'sub' : 'main';
+
                     state.files[fileId] = {
                         name: fileName, shortName, columns, timeData,
                         colData: {},  // empty — columns loaded on demand
@@ -1729,6 +2010,13 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     autoNormalizeTimeScales();
                     updateParsePreview(state.files[fileId]);
 
+                    // 次回起動時の自動復元用に元ファイルをIndexedDBへ保存
+                    // （非同期・失敗しても読み込み自体には影響させない）。
+                    // TRNではこのスコープの file は変換済みテキストなので、
+                    // parseCSVが控えた元Fileを使う
+                    sessionSaveFile(fileId, _origFileById.get(fileId), fileName);
+                    _origFileById.delete(fileId);
+
                     // ファイル色を自動割り当て（単色モード用）
                     if (!state.fileColors[fileId]) {
                         const fileCount = Object.keys(state.fileColors).length;
@@ -1739,6 +2027,9 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
 
                     // 保留中の設定があればファイル読込後に適用する
                     await applyPendingSettings();
+                    // 参照先Subが揃うのを待っていたクロスファイルRAMを再試行
+                    await applyDeferredCrossRAMs()
+                        .catch(e => console.warn('[CSV Viewer] クロスファイルRAMの復元に失敗:', e));
 
                     // 既存のCustom RAMがあれば新ファイルにも計算・追加する
                     // 各awaitに個別の.catchを付けることで、計算に失敗してもUI更新と保存は
@@ -2233,6 +2524,7 @@ async function setMainFile(newMainId) {
     pruneChannelAliasesForMain(newMain);
     autoNormalizeTimeScales();
     await recomputeCustomRAMs();
+    clearEvents(false); // イベント区間は旧メインの時間軸基準なので破棄
     updateUI();
 }
 
@@ -2240,6 +2532,9 @@ function removeFile(fileId) {
     const wasMain = state.files[fileId]?.role === 'main';
     delete state.files[fileId];
     delete state.fileColors[fileId];
+    sessionDeleteFile(fileId); // 自動復元ストアからも消す（非同期・失敗は無視）
+    // イベント区間は旧メインの時間軸基準なので、メインが変わるなら破棄する
+    if (wasMain) clearEvents(false);
 
     if (state.shiftFileId === fileId) {
         state.shiftFileId = getSubFileIds()[0] ?? null;
@@ -2267,6 +2562,7 @@ function removeFile(fileId) {
 dom.clearBtn.addEventListener('click', () => {
     for (const job of state.parseJobs.values()) job.cancelled = true;
     state.parseJobs.clear();
+    _origFileById.clear(); // キャンセルされたパースの控えFileも破棄
     state.files         = {};
     state.selectedNames = new Set();
     state.chartGroups   = [];
@@ -2281,13 +2577,17 @@ dom.clearBtn.addEventListener('click', () => {
     CSVHistory.reset(appHistory);
     updateUndoRedoButtons();
     _pendingSettings    = null; // 保留設定もクリア
+    _deferredCrossRAMs  = [];   // 繰り延べ中のクロスファイルRAMも破棄
     if (state.shiftMode) exitShiftMode();
     if (state.arrangeMode) exitArrangeMode();
+    if (state.measureMode) exitMeasureMode(false);
+    clearEvents(false); // イベント区間は消えたファイルの時間軸を指しているため破棄
     if (dom.parsePreview) dom.parsePreview.classList.add('hidden');
     renderParseJobs();
     updateUI();
     // localStorageの保存データもクリア
     try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    sessionClearFiles(); // 自動復元ストアも空にする（非同期・失敗は無視）
     // 上のupdateUI()がsaveSettings()で保存を予約しているため、
     // キャンセルしないと500ms後に空設定が書き戻されてしまう
     clearTimeout(_saveSettingsTimer);
@@ -2311,9 +2611,11 @@ function updateUI() {
 
     const hasFiles = Object.keys(state.files).length > 0;
     dom.clearBtn.disabled = !hasFiles;
+    if (dom.xyBtn) dom.xyBtn.disabled = !getMainFile();
 
     const hasSub = getSubFileIds().length > 0;
     if (dom.shiftBtn) dom.shiftBtn.disabled = !hasSub;
+    if (dom.diffBtn) dom.diffBtn.disabled = !hasSub;
     if (!hasSub && state.shiftMode) exitShiftMode();
 
     const canArrange = state.chartGroups.length > 1;
@@ -2365,8 +2667,9 @@ function renderFileList() {
         const badgeTitle = isMain
             ? 'Main file — 右クリックで色変更'
             : `Sub file (s${subNum}) — クリックでMain切替 / 右クリックで色変更\nCustom RAM式で s${subNum}:チャンネル名 と書くと参照できます`;
-        // ファイル色をバッジの背景色に反映
-        const fColor = state.fileColors[fid] || '#6366f1';
+        // ファイル色をバッジの背景色に反映。
+        // 値はapplySettingsで#RRGGBB検証済みだが、多層防御として出力側もesc()を通す
+        const fColor = esc(state.fileColors[fid] || '#6366f1');
         const encodingLabel = f.headerInfo?.encodingMode === 'auto'
             ? `Auto:${f.headerInfo.encoding}`
             : (f.headerInfo?.encoding || '');
@@ -2493,7 +2796,7 @@ function showDebugModal(fileId) {
 
     // --- セクション1: headerInfo（パース設定）---
     // id を振ることで aria-labelledby からモーダルタイトルを参照できる
-    let html = `<h3 id="debug-modal-title" style="margin:0 0 12px;color:#818cf8;">Parse Info</h3>`;
+    let html = `<h3 id="debug-modal-title" style="margin:0 0 12px;color:var(--accent-soft);">Parse Info</h3>`;
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;margin-bottom:16px;">`;
     const infoRows = [
         ['ファイル名', f.name],
@@ -2517,7 +2820,7 @@ function showDebugModal(fileId) {
     html += `</table>`;
 
     // --- セクション2: timeDataの先頭・末尾 ---
-    html += `<h3 style="margin:0 0 8px;color:#818cf8;">Time Data（先頭10 / 末尾5）</h3>`;
+    html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">Time Data（先頭10 / 末尾5）</h3>`;
     html += `<div style="font-family:'Roboto Mono',monospace;font-size:11px;color:#86efac;margin-bottom:16px;">`;
     if (td.length === 0) {
         html += `(空)`;
@@ -2530,7 +2833,7 @@ function showDebugModal(fileId) {
     html += `</div>`;
 
     // --- セクション3: columns一覧 ---
-    html += `<h3 style="margin:0 0 8px;color:#818cf8;">Columns</h3>`;
+    html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">Columns</h3>`;
     html += `<div style="font-size:11px;max-height:120px;overflow-y:auto;margin-bottom:16px;">`;
     html += `<table style="border-collapse:collapse;width:100%;">`;
     html += `<tr style="color:#a0a5b1;"><td style="padding:2px 6px;">idx</td><td style="padding:2px 6px;">name</td><td style="padding:2px 6px;">unit</td><td style="padding:2px 6px;">loaded</td></tr>`;
@@ -2548,7 +2851,7 @@ function showDebugModal(fileId) {
     if (typeof f.file === 'string') {
         // dataStart前後を含めて表示（ヘッダー + 実データ最初の数行）
         const showUntil = hi.dataStart + 5;  // dataStartの5行先まで
-        html += `<h3 style="margin:0 0 8px;color:#818cf8;">変換後テキスト（〜行${showUntil}）</h3>`;
+        html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">変換後テキスト（〜行${showUntil}）</h3>`;
         const lines = f.file.split('\n').slice(0, showUntil + 1);
         html += `<pre style="font-size:10px;color:#fda4af;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre;max-width:100%;">`;
         for (let i = 0; i < lines.length; i++) {
@@ -2563,7 +2866,7 @@ function showDebugModal(fileId) {
         }
         html += `</pre>`;
     } else if (f.previewRows && f.previewRows.length) {
-        html += `<h3 style="margin:0 0 8px;color:#818cf8;">読み込みプレビュー</h3>`;
+        html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">読み込みプレビュー</h3>`;
         html += `<pre style="font-size:10px;color:#fda4af;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;overflow-x:auto;white-space:pre;max-width:100%;">`;
         for (let i = 0; i < f.previewRows.length; i++) {
             let label = '';
@@ -2576,25 +2879,12 @@ function showDebugModal(fileId) {
     }
 
     // --- モーダル表示 ---
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
     // aria-labelledby でスクリーンリーダーがモーダルのタイトルを読み上げられるようにする
-    modal.setAttribute('aria-labelledby', 'debug-modal-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:640px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
-        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+    const { modal, close } = createModal(html + MODAL_CLOSE_FOOTER, {
+        modalClass: 'debug-modal',
+        labelledBy: 'debug-modal-title',
+    });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2714,7 +3004,7 @@ async function addCustomRAM(name, expr, unit = '') {
     if (!/^[@#$%]/.test(name)) name = '@' + name;
     // Prevent duplicate names
     if (mainFile.columns.some(c => c.name === name)) {
-        alert(`Channel "${name}" already exists.`);
+        showWarning(`チャンネル "${name}" は既に存在します`);
         return;
     }
 
@@ -2752,7 +3042,8 @@ async function addCustomRAM(name, expr, unit = '') {
     // メインファイルで計算してエラーチェック
     const mainVals = computeCustomExpr(expr, mainFile);
     if (mainVals.every(v => isNaN(v))) {
-        alert(`式のエラー: "${expr}" を評価できません。\nRAM名や関数名を確認してください。`);
+        showWarning(`式のエラー: "${name}" を追加できません`,
+            `"${expr}" を評価できません。RAM名や関数名を確認してください。`);
         return;
     }
 
@@ -3053,15 +3344,8 @@ function renderCustomRAMList() {
 function showCustomRAMEditModal(id) {
     const cr = state.customRAMs.find(item => item.id === id);
     if (!cr) return;
-    document.getElementById('app-modal-overlay')?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.className = 'app-modal-overlay';
-    const modal = document.createElement('div');
-    modal.className = 'app-modal custom-unit-modal';
-    modal.setAttribute('aria-labelledby', 'custom-edit-title');
     // 名前は読み取り専用（識別子のため変更不可）。式と単位を編集できる
-    modal.innerHTML = `
+    const { modal, close } = createModal(`
         <h3 id="custom-edit-title">Custom RAM を編集</h3>
         <p class="custom-edit-name">${esc(cr.name)}<span class="custom-edit-hint">（名前は変更できません）</span></p>
         <label class="custom-edit-label">式</label>
@@ -3072,16 +3356,15 @@ function showCustomRAMEditModal(id) {
         <div class="modal-actions">
             <button class="btn-secondary custom-edit-cancel">キャンセル</button>
             <button class="btn-primary custom-edit-save">保存</button>
-        </div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+        </div>`, {
+        modalClass: 'custom-unit-modal',
+        labelledBy: 'custom-edit-title',
+    });
 
     const exprInput = modal.querySelector('.custom-edit-expr-input');
     const unitInput = modal.querySelector('.custom-edit-unit-input');
     const vEl       = modal.querySelector('.custom-edit-validation');
     const saveBtn   = modal.querySelector('.custom-edit-save');
-    const close = () => overlay.remove();
 
     // 式入力をライブ検証（追加フォームと同じ evaluateExprForValidation を共用）
     let vTimer = null;
@@ -3094,7 +3377,7 @@ function showCustomRAMEditModal(id) {
     };
     exprInput.addEventListener('input', () => {
         clearTimeout(vTimer);
-        vTimer = setTimeout(runValidate, 300);
+        vTimer = setTimeout(runValidate, VALIDATE_DEBOUNCE_MS);
     });
     runValidate();           // 初期表示（既存式のプレビューを出す）
     exprInput.focus();
@@ -3107,7 +3390,6 @@ function showCustomRAMEditModal(id) {
         if (saved) close();
         else runValidate();        // 失敗時はボタンの有効/無効を戻す
     });
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 dom.customAdd.addEventListener('click', () => {
@@ -3514,14 +3796,6 @@ function showDriveIndexModal() {
     const di = state.driveIndex;
     const REG = window.DriveIndex.CYCLE_REGISTRY;
 
-    document.getElementById('app-modal-overlay')?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.className = 'app-modal-overlay';
-    const modal = document.createElement('div');
-    modal.className = 'app-modal drive-index-modal';
-    modal.setAttribute('aria-labelledby', 'drive-index-title');
-
     const colNames  = mainFile.columns.filter(c => !c.isCustom).map(c => c.name);
     const speedOpts = sel => colNames.map(n => `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join('');
     const fuelOpts  = sel => `<option value="" ${!sel ? 'selected' : ''}>（なし）</option>`
@@ -3544,7 +3818,7 @@ function showDriveIndexModal() {
     };
     const detName = di.lastResult ? di.lastResult.detectedName : '—';
 
-    modal.innerHTML = `
+    const { modal, close } = createModal(`
         <h3 id="drive-index-title"><i class='bx bx-tachometer'></i> Driving Index（モード走行品質・燃費）</h3>
         <p class="di-detected">自動判別: <strong>${esc(detName)}</strong>　<span class="di-note">目標車速は選択モードの法規トレースを使用。走行抵抗はファイルごとに各表の上で入力できます</span></p>
         <div class="di-controls">
@@ -3574,11 +3848,10 @@ function showDriveIndexModal() {
         <div class="modal-actions">
             <button class="btn-secondary di-close">閉じる</button>
             <button class="btn-primary di-recompute"><i class='bx bx-refresh'></i> 再計算</button>
-        </div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
-    const close = () => overlay.remove();
+        </div>`, {
+        modalClass: 'drive-index-modal',
+        labelledBy: 'drive-index-title',
+    });
 
     // ── フェーズ編集行 ──
     const phaseRowsEl = modal.querySelector('.di-phase-rows');
@@ -3759,7 +4032,6 @@ function showDriveIndexModal() {
     });
 
     modal.querySelector('.di-close').addEventListener('click', close);
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 // ツールバーの Driving Index ボタン → 詳細モーダルを開く
@@ -3822,7 +4094,7 @@ function buildSuggestions(partial) {
         }
     }
 
-    return results.slice(0, 15); // 最大15件
+    return results.slice(0, SUGGEST_MAX_ITEMS);
 }
 
 let _suggestIdx = -1; // サジェストのアクティブインデックス
@@ -3922,7 +4194,7 @@ dom.customExpr.addEventListener('keydown', e => {
 let _validateTimer = null;
 const _validateDebounce = () => {
     clearTimeout(_validateTimer);
-    _validateTimer = setTimeout(validateCustomExpr, 300);
+    _validateTimer = setTimeout(validateCustomExpr, VALIDATE_DEBOUNCE_MS);
 };
 
 /**
@@ -3991,13 +4263,38 @@ function evaluateExprForValidation(expr) {
         errors.push('式の構文エラー: ' + e.message);
     }
 
+    // 3. ASTを走査して関数の引数個数をチェック（mavg(X) のような引数不足を検出）
+    if (errors.length === 0) {
+        try {
+            const checkArity = (node) => {
+                if (!node || typeof node !== 'object') return;
+                if (node.type === 'call') {
+                    const fname = String(node.name).toLowerCase();
+                    const expected = _builtinFuncArity.get(fname);
+                    if (expected != null && node.args.length !== expected) {
+                        errors.push(`"${node.name}" は引数が${expected}個必要です（${node.args.length}個指定）`);
+                    }
+                    node.args.forEach(checkArity);
+                } else if (node.type === 'binop') {
+                    checkArity(node.left);
+                    checkArity(node.right);
+                } else if (node.type === 'unary') {
+                    checkArity(node.operand);
+                }
+            };
+            checkArity(parseExprToAST(expr));
+        } catch (e) {
+            errors.push('式の構文エラー: ' + e.message);
+        }
+    }
+
     if (errors.length > 0) {
         // 重複除去して最大3件表示
         const unique = [...new Set(errors)].slice(0, 3);
         return { ok: false, text: unique.join(' / '), cls: 'error' };
     }
 
-    // 3. 計算結果プレビュー（エラーがなければ）
+    // 4. 計算結果プレビュー（エラーがなければ）
     try {
         const vals = computeCustomExpr(expr, mainFile);
         let min = Infinity, max = -Infinity, sum = 0, cnt = 0;
@@ -4042,7 +4339,7 @@ $('custom-ram-help')?.addEventListener('keydown', e => {
 
 function showCustomRAMHelp() {
     // id を振ることで aria-labelledby からモーダルタイトルを参照できる
-    let html = `<h3 id="custom-ram-help-title" style="margin:0 0 12px;color:#818cf8;">Custom RAM 関数リファレンス</h3>`;
+    let html = `<h3 id="custom-ram-help-title" style="margin:0 0 12px;color:var(--accent-soft);">Custom RAM 関数リファレンス</h3>`;
 
     // 演算子
     html += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">演算子</h4>`;
@@ -4051,6 +4348,8 @@ function showCustomRAMHelp() {
         ['+, -, *, /', '四則演算'],
         ['^', 'べき乗（例: X^2）'],
         ['( )', '括弧でグループ化'],
+        ['>, <, >=, <=, ==, !=', '比較（結果は 1/0。例: SPD > 120）'],
+        ['&&, ||', '論理積・論理和（例: SPD > 60 && GEAR == 4）'],
     ];
     for (const [op, desc] of ops) {
         html += `<tr><td style="padding:3px 8px;color:#6ee7b7;font-family:monospace;white-space:nowrap;">${esc(op)}</td>`
@@ -4103,31 +4402,26 @@ function showCustomRAMHelp() {
     html += `サブのデータはメインの時間軸に補間され、オフセット(Δt)も考慮されます。</div>`;
     html += `<div style="font-family:monospace;font-size:11px;color:#86efac;background:rgba(255,255,255,0.04);padding:8px;border-radius:4px;margin-top:6px;">`;
     for (const [ex, desc] of examples) {
-        html += `<div style="margin-bottom:4px;"><span style="color:#818cf8;">${esc(ex)}</span> <span style="color:#a0a5b1;font-size:10px;">— ${esc(desc)}</span></div>`;
+        html += `<div style="margin-bottom:4px;"><span style="color:var(--accent-soft);">${esc(ex)}</span> <span style="color:#a0a5b1;font-size:10px;">— ${esc(desc)}</span></div>`;
     }
     html += `</div>`;
 
     // モーダル表示
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
     // aria-labelledby でスクリーンリーダーがモーダルのタイトルを読み上げられるようにする
-    modal.setAttribute('aria-labelledby', 'custom-ram-help-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:520px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
-        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+    const { modal, close } = createModal(html + MODAL_CLOSE_FOOTER, {
+        modalClass: 'custom-ram-help-modal',
+        labelledBy: 'custom-ram-help-title',
+    });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
-dom.colSearch.addEventListener('input', renderColumnList);
+// チャンネル検索はキーストロークごとにリスト全体を再構築するため、SEARCH_DEBOUNCE_MSでdebounceする。
+// プログラムからの renderColumnList() 直接呼び出しは従来どおり即時実行される。
+let _colSearchTimer = null;
+dom.colSearch.addEventListener('input', () => {
+    clearTimeout(_colSearchTimer);
+    _colSearchTimer = setTimeout(renderColumnList, SEARCH_DEBOUNCE_MS);
+});
 
 function renderColumnList() {
     dom.colList.innerHTML = '';
@@ -4336,19 +4630,11 @@ function showChannelMapModal(mainName) {
     const mainCol = mainFile.columns.find(c => c.name === mainName);
     if (!mainCol) return;
 
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.setAttribute('aria-labelledby', 'channel-map-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:680px;width:92%;max-height:82vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
+    // 内容は render() が後から流し込むため contentHtml は空でよい
+    const { modal, close } = createModal('', {
+        modalClass: 'channel-map-modal',
+        labelledBy: 'channel-map-title',
+    });
 
     const render = (filterText = '') => {
         const aliases = getChannelAliases(mainName);
@@ -4374,7 +4660,7 @@ function showChannelMapModal(mainName) {
             : '<div class="alias-empty">候補がありません</div>';
 
         modal.innerHTML = `
-            <h3 id="channel-map-title" style="margin:0 0 10px;color:#818cf8;">Channel Map</h3>
+            <h3 id="channel-map-title" style="margin:0 0 10px;color:var(--accent-soft);">Channel Map</h3>
             <div class="alias-main">
                 <div class="alias-main-label">Main</div>
                 <div class="alias-main-name">${esc(mainName)}${mainCol.unit ? ` <span>(${esc(mainCol.unit)})</span>` : ''}</div>
@@ -4416,11 +4702,10 @@ function showChannelMapModal(mainName) {
                 render(input.value);
             });
         });
-        modal.querySelector('#alias-close-btn').addEventListener('click', () => overlay.remove());
+        modal.querySelector('#alias-close-btn').addEventListener('click', close);
     };
 
     render();
-    setupModalA11y(overlay, modal);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -4862,6 +5147,7 @@ function renderChart() {
 
     const active = getActiveGroups();
     _lastRenderedGroups = active; // ホバー時のラベル更新用スナップショット
+    _lastRenderedLookup = buildHoverLookup(active); // ホバー時の線形検索回避用（PF2）
     const { groups, order } = active;
     const n = order.length;
 
@@ -4872,13 +5158,23 @@ function renderChart() {
         dom.resetBtn.disabled = true;
         dom.exportPng.disabled = true;
         dom.copyChart.disabled = true;
+        dom.measureBtn.disabled = true;
+        dom.statsBtn.disabled = true;
+        dom.exportCsv.disabled = true;
+        dom.exportReport.disabled = true;
         state.numGrids = 0;
+        if (state.measureMode) exitMeasureMode(false); // 表示チャンネルが無くなったら計測も解除
+        updateStatsPanel(); // グリッドが無くなったらパネルも消す
         return;
     }
     dom.overlay.classList.add('hidden');
     dom.exportPng.disabled = false;
     dom.copyChart.disabled = false;
     dom.resetBtn.disabled = false;
+    dom.measureBtn.disabled = false;
+    dom.statsBtn.disabled = false;
+    dom.exportCsv.disabled = false;
+    dom.exportReport.disabled = false;
     state.numGrids = n;
 
     // フォントスケールと、それに連動する余白(数値ラベル幅・軸名間隔・左マージン)
@@ -4890,14 +5186,9 @@ function renderChart() {
     const gapPx  = L.gapPx;
 
     // Bitチャンネルのグリッドは通常の1/3の高さにする
-    // まず各グリッドの「重み」を計算（Bit = 0.33, 通常 = 1.0）
-    const BIT_WEIGHT = 0.33;
-    const gridWeights = order.map(name => {
-        const grp = groups.get(name);
-        // マージグリッドの全チャンネルがBitなら狭くする
-        const allBit = grp.mergedNames.every(n => state.bitChannels.has(n));
-        return allBit ? BIT_WEIGHT : 1.0;
-    });
+    // 各グリッドの「重み」（Bit = BIT_WEIGHT, 通常 = 1.0）を純粋関数で計算
+    const gridWeights = CSVChartOptions.computeGridWeights(
+        order.map(gid => groups.get(gid).mergedNames), state.bitChannels);
 
     // グリッド高さの配分（layout-utils.jsの純粋関数）。
     // rowHeightPx/個別上書きが未設定なら従来どおりコンテナに収まる自動配分、
@@ -4930,33 +5221,18 @@ function renderChart() {
     const series   = [], dataZooms = [];
 
     // Compute global time range across all loaded files (including offsets)
-    let globalXMin = Infinity, globalXMax = -Infinity;
-    for (const f of Object.values(state.files)) {
-        if (!f.timeData || f.timeData.length === 0) continue;
-        const off = f.offset || 0;
-        const lo  = f.timeData[0] + off;
-        const hi  = f.timeData[f.timeData.length - 1] + off;
-        if (lo < globalXMin) globalXMin = lo;
-        if (hi > globalXMax) globalXMax = hi;
-    }
-    if (!isFinite(globalXMin)) { globalXMin = 0; globalXMax = 1; }
+    const { min: globalXMin, max: globalXMax } = CSVChartOptions.computeGlobalXRange(
+        Object.values(state.files)
+            .filter(f => f.timeData && f.timeData.length > 0)
+            .map(f => ({ first: f.timeData[0], last: f.timeData[f.timeData.length - 1], offset: f.offset || 0 })));
 
     const AXIS_GAP = DL.axisGap; // フォントに連動(大きいフォントで軸同士が重ならないように)
-    const ZOOM_GAP = 12;
-    const groupLayouts = order.map(groupId => {
-        const axisCount = Math.max(groups.get(groupId).axes.length, 1);
-        const leftCount = Math.ceil(axisCount / 2);
-        const rightCount = Math.floor(axisCount / 2);
-        return {
-            left: DL.gridLeft + Math.max(0, leftCount - 1) * AXIS_GAP,
-            right: Math.max(L.gridRight, 68) + Math.max(0, rightCount - 1) * AXIS_GAP + axisCount * ZOOM_GAP,
-            axisCount,
-        };
-    });
-    const xSliderLeft = Math.max(...groupLayouts.map(layout => layout.left));
-    const xSliderRight = Math.max(...groupLayouts.map(layout => layout.right));
+    const groupLayouts = CSVChartOptions.computeGroupLayouts(
+        order.map(groupId => Math.max(groups.get(groupId).axes.length, 1)),
+        { gridLeft: DL.gridLeft, gridRight: L.gridRight, axisGap: AXIS_GAP });
+    const { left: xSliderLeft, right: xSliderRight } = CSVChartOptions.computeSliderBounds(groupLayouts);
     const narrowPlotWidth = state.chart.getWidth() - xSliderLeft - xSliderRight;
-    const warningKey = narrowPlotWidth < 260 ? `${Math.max(...groupLayouts.map(l => l.axisCount))}:${Math.round(narrowPlotWidth)}` : '';
+    const warningKey = CSVChartOptions.deriveNarrowWarningKey(narrowPlotWidth, groupLayouts.map(l => l.axisCount));
     if (warningKey && state.axisLayoutWarningKey !== warningKey) {
         state.axisLayoutWarningKey = warningKey;
         showWarning('Y軸が多いため描画領域が狭くなっています', 'Overlay Settings で軸を共有すると表示幅を広げられます。');
@@ -4964,35 +5240,16 @@ function renderChart() {
         state.axisLayoutWarningKey = '';
     }
 
-    // X-axis slider (bottom, all grids linked)
+    // X-axis slider (bottom, all grids linked) + inside zoom (scroll + pan)
     const xStart = savedXZoom ? savedXZoom.start : 0;
     const xEnd   = savedXZoom ? savedXZoom.end   : 100;
-    dataZooms.push({
-        type: 'slider',
-        xAxisIndex: order.map((_, i) => i),
-        start: xStart, end: xEnd,
-        bottom: 8, height: 28,
+    dataZooms.push(...CSVChartOptions.buildXDataZooms({
+        gridCount: n, start: xStart, end: xEnd,
         left: xSliderLeft, right: xSliderRight,
-        borderColor: T.border,
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        fillerColor: 'rgba(99,102,241,0.18)',
-        handleStyle: { color: '#6366f1', borderColor: '#6366f1' },
-        textStyle: { color: T.dim, fontSize: F.slider },
-        dataBackground: {
-            lineStyle: { color: 'rgba(99,102,241,0.4)', width: 1 },
-            areaStyle: { color: 'rgba(99,102,241,0.07)' },
-        },
-    });
-
-    // X-axis inside zoom (scroll + pan) — pan disabled in shift mode
-    dataZooms.push({
-        type: 'inside',
-        xAxisIndex: order.map((_, i) => i),
-        start: xStart, end: xEnd,
-        zoomOnMouseWheel:  true,
-        moveOnMouseMove:   !state.shiftMode && !state.arrangeMode,
-        moveOnMouseWheel:  false,
-    });
+        theme: T, sliderFontSize: F.slider,
+        // シフト/Arrangeモード中はドラッグパンを無効化する
+        panEnabled: !state.shiftMode && !state.arrangeMode,
+    }));
 
     const yAxisIndexByGroup = new Map();
     let _cumulativeTop = topPx;
@@ -5003,92 +5260,56 @@ function renderChart() {
         _cumulativeTop += gridH + gapPx;
         const layout = groupLayouts[i];
 
-        const isBitGrid = grp.mergedNames.every(nm => state.bitChannels.has(nm));
-
         grids.push({
             left: layout.left, right: layout.right,
             top: pct(topPxI), height: pct(gridH),
             containLabel: false,
         });
 
-        xAxes.push({
-            gridIndex: i,
-            type: 'value',
-            axisLabel: {
-                show: i === n - 1,
-                color: T.dim, fontSize: F.label,
-                formatter: v => v % 1 === 0 ? v.toString() : v.toFixed(1),
-            },
-            axisTick:  { show: i === n - 1, lineStyle: { color: T.axis } },
-            axisLine:  { show: true, lineStyle: { color: T.axis } },
-            splitLine: { show: true, lineStyle: { color: T.grid } },
+        xAxes.push(CSVChartOptions.buildXAxisOption({
+            gridIndex: i, isLast: i === n - 1,
             min: globalXMin, max: globalXMax,
-        });
+            fontSize: F.label, theme: T,
+        }));
 
-        const yValFmt = v => {
-            if (v === 0) return '0';
-            const a = Math.abs(v);
-            if (a >= 1e6)  return (v / 1e6).toFixed(1) + 'M';
-            if (a >= 1e3)  return (v / 1e3).toFixed(1) + 'k';
-            if (a >= 1)    return v.toFixed(1);
-            if (a >= 0.01) return v.toPrecision(2);
-            return v.toExponential(1);
-        };
         const axisIndexMap = new Map();
         const axisSpecs = new Map();
         grp.axes.forEach((axis, axisOrder) => {
             const assignedNames = grp.channels.filter(ch => ch.axisId === axis.id).map(ch => ch.name);
             if (!assignedNames.length) return;
-            const representative = assignedNames.includes(axis.representative) ? axis.representative : assignedNames[0];
-            const rangeSpec = state.yRanges[representative] ?? {};
-            const axisIsBit = assignedNames.every(name => state.bitChannels.has(name));
-            const yMinParsed = axisIsBit ? -0.2 : parseFloat(rangeSpec.min);
-            const yMaxParsed = axisIsBit ? 1.2 : parseFloat(rangeSpec.max);
-            const hasYMin = !isNaN(yMinParsed);
-            const hasYMax = !isNaN(yMaxParsed);
-            const position = axisOrder % 2 === 0 ? 'left' : 'right';
-            const offset = Math.floor(axisOrder / 2) * AXIS_GAP;
+            // 代表チャンネル・Y範囲・左右位置の解決（純粋関数）
+            const axisSpec = CSVChartOptions.computeAxisSpec({
+                assignedNames,
+                preferredRepresentative: axis.representative,
+                yRanges: state.yRanges,
+                bitChannels: state.bitChannels,
+                axisOrder,
+                axisGap: AXIS_GAP,
+            });
             const units = getAxisDisplayUnit(getChartGroupById(groupId), axis.id);
-            const yLabelName = assignedNames.join(' / ');
-            const yLabel = units ? `${yLabelName}  (${units})` : yLabelName;
             const yAxisIndex = yAxes.length;
             axisIndexMap.set(axis.id, yAxisIndex);
-            axisSpecs.set(axis.id, { representative, yMinParsed, yMaxParsed, hasYMin, hasYMax });
+            axisSpecs.set(axis.id, axisSpec);
 
-            yAxes.push({
+            yAxes.push(CSVChartOptions.buildYAxisOption({
                 gridIndex: i,
-                type: 'value',
-                position,
-                offset,
-                name: yLabel,
-                nameLocation: 'middle',
+                axisSpec,
+                assignedNames,
+                units,
+                axisOrder,
                 nameGap: DL.nameGap,
-                nameTextStyle: { color: T.dim, fontSize: F.name, fontWeight: 500 },
-                // 軸名(回転表示)がグリッド高さを超えると上下のチャートのラベルと
-                // 重なるため、収まらない分は「…」で自動的に切り詰める(ECharts 5.5組み込み)
-                nameTruncate: { maxWidth: CSVLayout.truncateMaxWidth(gridH), ellipsis: '…' },
-                min: hasYMin ? yMinParsed : undefined,
-                max: hasYMax ? yMaxParsed : undefined,
-                scale: !hasYMin && !hasYMax,
-                axisLabel: { color: T.dim, fontSize: F.label, width: DL.labelWidth, overflow: 'truncate', formatter: yValFmt },
-                axisPointer: { show: false },
-                axisTick: { lineStyle: { color: T.axis } },
-                axisLine: { show: true, lineStyle: { color: T.axis } },
-                splitLine: { show: axisOrder === 0, lineStyle: { color: T.grid } },
-            });
+                nameFontSize: F.name,
+                labelFontSize: F.label,
+                labelWidth: DL.labelWidth,
+                nameTruncateMaxWidth: CSVLayout.truncateMaxWidth(gridH),
+                theme: T,
+            }));
 
-            dataZooms.push({
-                type: 'slider', yAxisIndex: [yAxisIndex],
-                start: 0, end: 100,
-                right: L.yZoomRight + axisOrder * ZOOM_GAP, top: pct(topPxI),
-                height: pct(gridH), width: 9,
-                borderColor: 'transparent',
-                backgroundColor: 'rgba(255,255,255,0.04)',
-                fillerColor: 'rgba(255,255,255,0.1)',
-                handleStyle: { color: 'rgba(255,255,255,0.3)', borderColor: 'rgba(255,255,255,0.2)' },
-                showDetail: false, showDataShadow: false,
-                textStyle: { color: 'transparent', fontSize: 0 },
-            });
+            dataZooms.push(CSVChartOptions.buildYSliderZoom({
+                yAxisIndex, axisOrder,
+                top: pct(topPxI), height: pct(gridH),
+                yZoomRight: L.yZoomRight,
+            }));
         });
         yAxisIndexByGroup.set(groupId, axisIndexMap);
 
@@ -5096,98 +5317,88 @@ function renderChart() {
         grp.series.forEach(s => {
             const yAxisIndex = axisIndexMap.get(s.axisId);
             if (yAxisIndex === undefined) return;
-            const axisSpec = axisSpecs.get(s.axisId);
             const isFirstForAxis = !firstSeriesByAxis.has(s.axisId);
             firstSeriesByAxis.add(s.axisId);
-            const { yMinParsed, yMaxParsed, hasYMin, hasYMax } = axisSpec;
-            const markArea = (isFirstForAxis && (hasYMin || hasYMax)) ? {
-                silent: true,
-                data: [
-                    ...(hasYMax ? [[{ yAxis: yMaxParsed }, { yAxis: yMaxParsed * 100 + 1e9 }]] : []),
-                    ...(hasYMin ? [[{ yAxis: -(Math.abs(yMinParsed) * 100 + 1e9) }, { yAxis: yMinParsed }]] : []),
-                ],
-                itemStyle: { color: 'rgba(255,80,50,0.07)' },
-            } : undefined;
-
-            const markLine = (isFirstForAxis && (hasYMin || hasYMax)) ? {
-                silent: true,
-                symbol: 'none',
-                data: [
-                    ...(hasYMax ? [{ yAxis: yMaxParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▲ ${yMaxParsed}`, fontSize: F.label - 1, color: 'rgba(255,120,60,0.8)', position: 'insideStartTop' } }] : []),
-                    ...(hasYMin ? [{ yAxis: yMinParsed, lineStyle: { color: 'rgba(255,120,60,0.6)', type: 'dashed', width: 1 }, label: { formatter: `▼ ${yMinParsed}`, fontSize: F.label - 1, color: 'rgba(255,120,60,0.8)', position: 'insideStartBottom' } }] : []),
-                ],
-            } : undefined;
-
-            series.push({
-                id:         s.id,
-                name:       s.label,
-                type:       'line',
+            // markArea / markLine（Y範囲の帯と境界線）はbuildSeriesOption内で
+            // 「軸ごとの最初のシリーズ」にだけ付与される
+            series.push(CSVChartOptions.buildSeriesOption(s, {
                 xAxisIndex: i,
                 yAxisIndex,
-                data:       s.data,
-                showSymbol: state.showMarkers,
-                symbolSize: 4,
-                sampling:   dom.sampling.value || false,
-                progressive: 400,
-                progressiveThreshold: 3000,
-                clip:       true,
-                lineStyle:  { width: state.channelLineWidths[s.channelName] ?? state.lineWidth, color: s.color, type: s.dash ? [6, 4] : 'solid' },
-                itemStyle:  { color: s.color },
-                emphasis:   { disabled: true },
-                ...(markArea ? { markArea } : {}),
-                ...(markLine ? { markLine } : {}),
-            });
+                isFirstForAxis,
+                axisSpec: axisSpecs.get(s.axisId),
+                showMarkers: state.showMarkers,
+                sampling: dom.sampling.value || false,
+                lineWidth: state.channelLineWidths[s.channelName] ?? state.lineWidth,
+                labelFontSize: F.label,
+            }));
         });
     });
 
+    // イベント検出結果の区間ハイライト（markArea）を各グリッドに重ねる
+    if (state.events.intervals.length) {
+        const areaData = state.events.intervals.map(iv => [{ xAxis: iv.t0 }, { xAxis: iv.t1 }]);
+        order.forEach((groupId, gi) => {
+            const yIdxMap = yAxisIndexByGroup.get(groupId);
+            const yAxisIndex = yIdxMap && yIdxMap.size ? yIdxMap.values().next().value : 0;
+            series.push({
+                id: `event-area-${gi}`,
+                type: 'line', data: [],
+                xAxisIndex: gi, yAxisIndex,
+                silent: true, animation: false,
+                markArea: {
+                    silent: true, animation: false,
+                    itemStyle: { color: EVENT_AREA_COLOR },
+                    data: areaData,
+                },
+            });
+        });
+    }
+
+    // 計測カーソル（縦線）を各グリッドに重ねる。markLineのxAxis値指定なので
+    // ズーム・リサイズには自動追従する
+    if (state.measureMode && state.measure.tA != null) {
+        const cursorData = [{ name: 'A', xAxis: state.measure.tA }];
+        if (state.measure.tB != null) cursorData.push({ name: 'B', xAxis: state.measure.tB });
+        order.forEach((groupId, gi) => {
+            const yIdxMap = yAxisIndexByGroup.get(groupId);
+            const yAxisIndex = yIdxMap && yIdxMap.size ? yIdxMap.values().next().value : 0;
+            series.push({
+                id: `measure-cursor-${gi}`,
+                type: 'line', data: [],
+                xAxisIndex: gi, yAxisIndex,
+                silent: true, animation: false,
+                markLine: {
+                    symbol: 'none', animation: false,
+                    lineStyle: { color: T.accent, width: 1.2, type: 'dashed' },
+                    label: {
+                        show: gi === 0, position: 'insideStartTop',
+                        formatter: p => p.name, color: T.accent, fontWeight: 700,
+                    },
+                    emphasis: { disabled: true },
+                    data: cursorData,
+                },
+            });
+        });
+        updateMeasurePanel();
+    }
+
+    // 全グリッド共通の静的オプション（axisPointer / tooltipの見た目 / brush）は純粋関数で構築
+    const baseOption = CSVChartOptions.buildBaseChartOption({
+        theme: { crosshair: T.crosshair, tooltipBg: T.tooltipBg, tooltipBorder: T.tooltipBorder },
+    });
+    // tooltip formatterだけはモジュール状態（_lastTooltipParams / updatePerGridLabels /
+    // フォント設定）に依存するためrenderChart側で注入する
+    baseOption.tooltip.formatter = params => {
+        if (!params || !params.length) return '';
+        _lastTooltipParams = params;
+        updatePerGridLabels();
+        const t = params[0].axisValue;
+        const tStr = typeof t === 'number' ? t.toFixed(3) : String(t);
+        return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:var(--accent-soft);font-weight:600">t = ${tStr} s</span>`;
+    };
+
     state.chart.setOption({
-        animation:       false,
-        backgroundColor: 'transparent',
-        legend:          { show: false },  // sidebar acts as legend
-
-        // Global axis pointer — links vertical crosshair across ALL grids
-        axisPointer: {
-            link:  [{ xAxisIndex: 'all' }],
-            label: { show: false },
-            triggerOn: 'mousemove',
-        },
-
-        tooltip: {
-            show: true,
-            trigger: 'axis',
-            axisPointer: {
-                type: 'line',
-                lineStyle: { color: 'rgba(255,255,255,0.35)', type: 'solid', width: 1 },
-                animation: false,
-                snap: true,
-            },
-            backgroundColor: 'rgba(12,14,20,0.45)',
-            extraCssText: [
-                'backdrop-filter:blur(8px)',
-                '-webkit-backdrop-filter:blur(8px)',
-                'border:1px solid rgba(255,255,255,0.08)',
-                'border-radius:6px',
-                'box-shadow:0 4px 16px rgba(0,0,0,0.35)',
-                'padding:4px 8px',
-                'pointer-events:none',
-            ].join(';'),
-            confine: true,
-            formatter: params => {
-                if (!params || !params.length) return '';
-                _lastTooltipParams = params;
-                updatePerGridLabels();
-                const t = params[0].axisValue;
-                const tStr = typeof t === 'number' ? t.toFixed(3) : String(t);
-                return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:#818cf8;font-weight:600">t = ${tStr} s</span>`;
-            },
-        },
-
-        brush: {
-            xAxisIndex: 'all', brushLink: 'all', toolbox: [],
-            throttleType: 'debounce', throttleDelay: 80,
-            outOfBrush: { colorAlpha: 0.05 },
-        },
-
+        ...baseOption,
         grid:     grids,
         xAxis:    xAxes,
         yAxis:    yAxes,
@@ -5223,6 +5434,7 @@ function renderChart() {
         return region;
     });
     updateArrangeOverlay();
+    updateStatsPanel(); // 表示範囲サマリをズーム/再描画に追従させる
 }
 
 function removeArrangeOverlay() {
@@ -5305,6 +5517,45 @@ let _lastTooltipParams = null;
 // キャッシュ無効化ロジックなしで常に描画内容と一致したデータが得られる。
 let _lastRenderedGroups = null;
 
+// ホバー経路の参照スナップショット（_lastRenderedGroups方式の拡張）。
+// updatePerGridLabels内の columns.find / getSubFileIds / resolveColumnForFile は
+// チャンネルごとの線形検索なので、描画時にMap化して保存しホバー時は参照のみにする。
+// 状態変更（エイリアス・ファイル構成含む）は必ずrenderChartを通るため無効化不要。
+let _lastRenderedLookup = null;
+
+/**
+ * updatePerGridLabelsが必要とする参照をまとめたスナップショットを構築する。
+ * renderChartから描画のたびに呼ばれる。
+ * @param {{groups: Map, order: string[]}} active getActiveGroups() の結果
+ * @returns {{mainFile: object|null, colByName: Map, subIds: string[], subColByName: Map}}
+ *   colByName    … メインファイルの チャンネル名 → カラムレコード
+ *   subColByName … サブファイルID → (チャンネル名 → 解決済みカラムレコード)
+ */
+function buildHoverLookup(active) {
+    const mainFile = getMainFile() || null;
+    const subIds = getSubFileIds();
+    const colByName = new Map();
+    const subColByName = new Map(subIds.map(id => [id, new Map()]));
+    if (mainFile) {
+        for (const gid of active.order) {
+            const grp = active.groups.get(gid);
+            if (!grp) continue;
+            for (const chName of grp.mergedNames) {
+                if (!colByName.has(chName)) {
+                    colByName.set(chName, mainFile.columns.find(c => c.name === chName) || null);
+                }
+                for (const subId of subIds) {
+                    const m = subColByName.get(subId);
+                    if (!m.has(chName)) {
+                        m.set(chName, resolveColumnForFile(state.files[subId], chName) || null);
+                    }
+                }
+            }
+        }
+    }
+    return { mainFile, colByName, subIds, subColByName };
+}
+
 function fmtVal(v) {
     const a = Math.abs(v);
     if (a >= 1e4)   return v.toFixed(0);
@@ -5325,7 +5576,11 @@ function updatePerGridLabels() {
     const xVal = params[0].axisValue;
     if (xVal == null || isNaN(xVal)) return;
 
-    const mainFile = getMainFile();
+    // renderChartが保存した参照スナップショットを使う（PF2）。
+    // ここで getMainFile / columns.find / getSubFileIds / resolveColumnForFile を
+    // 呼び直すと毎mousemoveで線形検索が走るため、参照のみにする
+    const lookup = _lastRenderedLookup;
+    const mainFile = lookup && lookup.mainFile;
     if (!mainFile) return;
 
     // Build one label per grid, with values from ALL channels and files
@@ -5346,7 +5601,7 @@ function updatePerGridLabels() {
             const yAxisIndex = state.yAxisIndexByGroup?.get(grp.id)?.get(assignment?.axisId);
             if (yAxisIndex === undefined) continue;
             // Main file
-            const mc = mainFile.columns.find(c => c.name === chName);
+            const mc = lookup.colByName.get(chName);
             if (mc && mainFile.colData[mc.id]) {
                 const val = interpolate(mainFile.timeData, mainFile.colData[mc.id], xVal);
                 if (!isNaN(val)) {
@@ -5355,9 +5610,9 @@ function updatePerGridLabels() {
             }
 
             // Sub files
-            for (const subId of getSubFileIds()) {
+            for (const subId of lookup.subIds) {
                 const sf = state.files[subId];
-                const sc = resolveColumnForFile(sf, chName);
+                const sc = lookup.subColByName.get(subId).get(chName);
                 if (!sc || !sf.colData[sc.id]) continue;
                 const subT = xVal - (sf.offset || 0);
                 const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
@@ -5384,7 +5639,7 @@ function updatePerGridLabels() {
     // Ensure we have enough label elements
     while (_labelEls.length < gridLabels.length) {
         const el = document.createElement('div');
-        el.style.cssText = 'position:absolute;font-family:"Roboto Mono",monospace;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap;background:rgba(12,14,20,0.6);border:1px solid rgba(255,255,255,0.12);pointer-events:none;';
+        el.style.cssText = 'position:absolute;font-family:"Roboto Mono",monospace;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap;background:var(--tooltip-bg);border:1px solid var(--tooltip-border);pointer-events:none;';
         ensureLabelContainer().appendChild(el);
         _labelEls.push(el);
     }
@@ -5426,6 +5681,7 @@ function updatePerGridLabels() {
 
 dom.zoomBtn.addEventListener('click', toggleBoxZoom);
 dom.resetBtn.addEventListener('click', resetZoom);
+dom.measureBtn.addEventListener('click', toggleMeasureMode);
 
 // ── Undo / Redo ──
 dom.undoBtn.addEventListener('click', appUndo);
@@ -5471,6 +5727,7 @@ function enterBoxZoom() {
     if (!state.chart) return;
     if (state.shiftMode) exitShiftMode();
     if (state.arrangeMode) exitArrangeMode();
+    if (state.measureMode) exitMeasureMode();
     state.brushMode = true;
     dom.zoomBtn.classList.add('btn-active');
     dom.zoomBtn.innerHTML = `<i class='bx bx-x'></i> Cancel Zoom`;
@@ -5521,6 +5778,404 @@ function resetZoom() {
     // Reset View後もCtrl+Zで直前のズーム状態へ戻れるよう記録する
     recordHistory();
 }
+
+// ─────────────────────────────────────────────────────────────
+// カーソル計測（Measure / M）: チャートを2回クリックして計測点A/Bを置き、
+// 区間 [tA, tB] の Δt と、表示中チャンネルごとの A値/B値/Δ/min/max/mean/RMS を
+// フローティングパネルに表示する。カーソル位置・パネルは永続化しない。
+// ─────────────────────────────────────────────────────────────
+
+function toggleMeasureMode() { state.measureMode ? exitMeasureMode() : enterMeasureMode(); }
+
+function enterMeasureMode() {
+    if (!state.chart || state.numGrids === 0) return;
+    if (state.brushMode) exitBoxZoom();
+    if (state.shiftMode) exitShiftMode();
+    if (state.arrangeMode) exitArrangeMode();
+    state.measureMode = true;
+    state.measure = { tA: null, tB: null };
+    dom.measureBtn.classList.add('btn-active');
+    dom.measureBtn.innerHTML = `<i class='bx bx-x'></i> Cancel`;
+    dom.hintEl.textContent = 'チャートをクリックして計測点A→Bを指定…';
+    dom.chartEl.style.cursor = 'crosshair';
+    updateMeasurePanel();
+}
+
+/**
+ * 計測モードを抜けてカーソル・パネルを消す。
+ * @param {boolean} rerender falseなら再描画しない（renderChart内から呼ぶとき用）
+ */
+function exitMeasureMode(rerender = true) {
+    state.measureMode = false;
+    state.measure = { tA: null, tB: null };
+    dom.measureBtn?.classList.remove('btn-active');
+    if (dom.measureBtn) dom.measureBtn.innerHTML = `<i class='bx bx-ruler'></i> Measure`;
+    dom.hintEl.textContent = '';
+    dom.chartEl.style.cursor = '';
+    removeMeasurePanel();
+    if (rerender && state.chart && state.numGrids > 0) renderChart();
+}
+
+// 計測モード中のクリックで計測点を置く（A→B→置き直し）
+dom.chartEl.addEventListener('click', e => {
+    if (!state.measureMode || !state.chart) return;
+    const rect = dom.chartEl.getBoundingClientRect();
+    const t = state.chart.convertFromPixel({ xAxisIndex: 0 }, e.clientX - rect.left);
+    if (t == null || !Number.isFinite(t)) return;
+    const m = state.measure;
+    if (m.tA == null)      m.tA = t;
+    else if (m.tB == null) m.tB = t;
+    else { m.tA = t; m.tB = null; } // 3回目のクリックはAから置き直し
+    renderChart(); // カーソル線の再描画（updateMeasurePanelもrenderChart内で呼ばれる）
+});
+
+/**
+ * timeDataの [t0, t1] 区間のサンプルを集計する（NaNはスキップ）。
+ * @returns {{min:number,max:number,mean:number,rms:number,n:number}|null} 点が無ければnull
+ */
+function computeIntervalStats(timeData, data, t0, t1) {
+    // 二分探索で t0 以上の最初のインデックスを求める
+    let lo = 0, hi = timeData.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (timeData[mid] < t0) lo = mid + 1; else hi = mid; }
+    let min = Infinity, max = -Infinity, sum = 0, sumSq = 0, n = 0;
+    for (let i = lo; i < timeData.length && timeData[i] <= t1; i++) {
+        const v = data[i];
+        if (Number.isNaN(v)) continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+        sum += v; sumSq += v * v; n++;
+    }
+    if (!n) return null;
+    return { min, max, mean: sum / n, rms: Math.sqrt(sumSq / n), n };
+}
+
+const MEASURE_PANEL_ID = 'measure-panel';
+
+function removeMeasurePanel() {
+    document.getElementById(MEASURE_PANEL_ID)?.remove();
+}
+
+/**
+ * 計測パネルを現在のカーソル状態に合わせて再構築する。
+ * データ参照は renderChart が保存したスナップショット（_lastRenderedLookup /
+ * _lastRenderedGroups）のみを使う（守るべき制約と同じ理由で線形検索を避ける）。
+ */
+function updateMeasurePanel() {
+    removeMeasurePanel();
+    if (!state.measureMode) return;
+    const panel = document.createElement('div');
+    panel.id = MEASURE_PANEL_ID;
+    panel.className = 'measure-panel';
+
+    const { tA, tB } = state.measure;
+    if (tA == null || tB == null) {
+        const hint = tA == null
+            ? '1点目（A）をクリック'
+            : `A = ${esc(tA.toFixed(3))} s — 2点目（B）をクリック`;
+        panel.innerHTML = `<div class="measure-title">カーソル計測</div><div class="measure-hint">${hint}</div>`;
+    } else {
+        panel.innerHTML = buildMeasureTableHTML(Math.min(tA, tB), Math.max(tA, tB));
+    }
+    document.querySelector('.chart-container')?.appendChild(panel);
+}
+
+/**
+ * 区間 [t0, t1] の計測テーブルHTMLを構築する。
+ * 行 = 表示中の各チャンネル × 各ファイル（main + sub。subはタイムシフト適用済み）。
+ */
+function buildMeasureTableHTML(t0, t1) {
+    const lookup = _lastRenderedLookup;
+    const { groups: activeGroups, order: activeOrder } =
+        _lastRenderedGroups || { groups: new Map(), order: [] };
+    const mainFile = lookup && lookup.mainFile;
+
+    let html = `<div class="measure-title">カーソル計測　`
+        + `<span class="measure-dt">Δt = ${esc((t1 - t0).toFixed(3))} s`
+        + `（A=${esc(t0.toFixed(3))} / B=${esc(t1.toFixed(3))}）</span></div>`;
+    if (!mainFile) return html + `<div class="measure-hint">データがありません</div>`;
+
+    // 行を構築する共通処理: ファイルのtimeData/データ列から統計を取る
+    const rows = [];
+    const pushRow = (label, color, timeData, data, offset) => {
+        const s = computeIntervalStats(timeData, data, t0 - offset, t1 - offset);
+        if (!s) return;
+        const vA = interpolate(timeData, data, t0 - offset);
+        const vB = interpolate(timeData, data, t1 - offset);
+        rows.push({ label, color, vA, vB, d: vB - vA, ...s });
+    };
+
+    for (const gid of activeOrder) {
+        const grp = activeGroups.get(gid);
+        if (!grp) continue;
+        for (const chName of grp.mergedNames) {
+            const mc = lookup.colByName.get(chName);
+            if (mc && mainFile.colData[mc.id]) {
+                pushRow(chName, mc.color, mainFile.timeData, mainFile.colData[mc.id], 0);
+            }
+            for (const subId of lookup.subIds) {
+                const sf = state.files[subId];
+                const sc = lookup.subColByName.get(subId).get(chName);
+                if (!sc || !sf.colData[sc.id]) continue;
+                pushRow(`${chName} (${sf.shortName})`, sc.color,
+                        sf.timeData, sf.colData[sc.id], sf.offset || 0);
+            }
+        }
+    }
+    if (!rows.length) return html + `<div class="measure-hint">区間内にデータ点がありません</div>`;
+
+    html += `<table><thead><tr>`
+        + `<th>Channel</th><th>A</th><th>B</th><th>Δ</th>`
+        + `<th>min</th><th>max</th><th>mean</th><th>RMS</th>`
+        + `</tr></thead><tbody>`;
+    for (const r of rows) {
+        const f = v => Number.isNaN(v) ? '—' : fmtVal(v);
+        html += `<tr>`
+            + `<td><span class="measure-swatch" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
+            + `<td>${f(r.vA)}</td><td>${f(r.vB)}</td><td>${f(r.d)}</td>`
+            + `<td>${f(r.min)}</td><td>${f(r.max)}</td><td>${f(r.mean)}</td><td>${f(r.rms)}</td>`
+            + `</tr>`;
+    }
+    html += `</tbody></table>`;
+    return html;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 表示範囲の統計サマリ（Stats）: 現在ズームで見えている時間範囲に追従して、
+// 表示中チャンネルごとの min / max / mean / σ をパネル表示する。
+// 計算は計測（Measure）と同じ computeIntervalStats とスナップショットを使う。
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 現在表示中のX軸範囲 [t0, t1] を返す（チャート未描画ならnull）。
+ * dataZoomのstartValue/endValueを優先し、%指定しか無ければ軸のmin/maxから換算する。
+ */
+function getVisibleXRange() {
+    const opt = state.chart?.getOption();
+    const dz = opt?.dataZoom?.[0];
+    const xa = opt?.xAxis?.[0];
+    if (!dz || !xa) return null;
+    let t0 = (typeof dz.startValue === 'number') ? dz.startValue : null;
+    let t1 = (typeof dz.endValue === 'number') ? dz.endValue : null;
+    if (t0 == null || t1 == null) {
+        if (typeof xa.min !== 'number' || typeof xa.max !== 'number') return null;
+        t0 = xa.min + (xa.max - xa.min) * (dz.start ?? 0) / 100;
+        t1 = xa.min + (xa.max - xa.min) * (dz.end ?? 100) / 100;
+    }
+    return [t0, t1];
+}
+
+function toggleStatsPanel() {
+    state.statsPanelVisible = !state.statsPanelVisible;
+    dom.statsBtn.classList.toggle('btn-active', state.statsPanelVisible);
+    updateStatsPanel();
+    saveSettings();
+}
+
+/** 統計サマリパネルを現在の表示範囲に合わせて再構築する（非表示時は消す） */
+function updateStatsPanel() {
+    const existing = document.getElementById('stats-panel');
+    if (!state.statsPanelVisible || !state.chart || state.numGrids === 0) {
+        existing?.remove();
+        return;
+    }
+    const range = getVisibleXRange();
+    if (!range) { existing?.remove(); return; }
+
+    let panel = existing;
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'stats-panel';
+        panel.className = 'stats-panel';
+        document.querySelector('.chart-container')?.appendChild(panel);
+    }
+    panel.innerHTML = buildStatsTableHTML(range[0], range[1]);
+}
+
+/**
+ * 表示範囲 [t0, t1] の統計行（チャンネル × ファイル）を収集する。
+ * 統計パネル（F5）とレポート出力（F9）で共用。
+ * @returns {{label:string, color:string, min:number, max:number, mean:number, sigma:number, n:number}[]}
+ */
+function collectStatsRows(t0, t1) {
+    const lookup = _lastRenderedLookup;
+    const { groups: activeGroups, order: activeOrder } =
+        _lastRenderedGroups || { groups: new Map(), order: [] };
+    const mainFile = lookup && lookup.mainFile;
+    const rows = [];
+    if (!mainFile) return rows;
+
+    const pushRow = (label, color, timeData, data, offset) => {
+        const s = computeIntervalStats(timeData, data, t0 - offset, t1 - offset);
+        if (!s) return;
+        // σ² = RMS² − mean²（数値誤差で負にならないようクランプ）
+        const sigma = Math.sqrt(Math.max(s.rms * s.rms - s.mean * s.mean, 0));
+        rows.push({ label, color, min: s.min, max: s.max, mean: s.mean, sigma, n: s.n });
+    };
+
+    for (const gid of activeOrder) {
+        const grp = activeGroups.get(gid);
+        if (!grp) continue;
+        for (const chName of grp.mergedNames) {
+            const mc = lookup.colByName.get(chName);
+            if (mc && mainFile.colData[mc.id]) {
+                pushRow(chName, mc.color, mainFile.timeData, mainFile.colData[mc.id], 0);
+            }
+            for (const subId of lookup.subIds) {
+                const sf = state.files[subId];
+                const sc = lookup.subColByName.get(subId).get(chName);
+                if (!sc || !sf.colData[sc.id]) continue;
+                pushRow(`${chName} (${sf.shortName})`, sc.color,
+                        sf.timeData, sf.colData[sc.id], sf.offset || 0);
+            }
+        }
+    }
+    return rows;
+}
+
+/** 表示範囲 [t0, t1] の統計テーブルHTML（行 = チャンネル × ファイル） */
+function buildStatsTableHTML(t0, t1) {
+    let html = `<div class="measure-title">表示範囲の統計　`
+        + `<span class="measure-dt">${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s</span></div>`;
+    if (!(_lastRenderedLookup && _lastRenderedLookup.mainFile)) {
+        return html + `<div class="measure-hint">データがありません</div>`;
+    }
+    const rows = collectStatsRows(t0, t1);
+    if (!rows.length) return html + `<div class="measure-hint">表示範囲内にデータ点がありません</div>`;
+
+    html += `<table><thead><tr>`
+        + `<th>Channel</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th>`
+        + `</tr></thead><tbody>`;
+    for (const r of rows) {
+        html += `<tr>`
+            + `<td><span class="measure-swatch" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
+            + `<td>${fmtVal(r.min)}</td><td>${fmtVal(r.max)}</td>`
+            + `<td>${fmtVal(r.mean)}</td><td>${fmtVal(r.sigma)}</td><td>${r.n}</td>`
+            + `</tr>`;
+    }
+    html += `</tbody></table>`;
+    return html;
+}
+
+dom.statsBtn.addEventListener('click', toggleStatsPanel);
+
+// ─────────────────────────────────────────────────────────────
+// イベント検出: 条件式（例 Actual_Speed > 120）を式パーサで評価し、
+// 真（≠0）が連続する区間をメインファイルから抽出して一覧表示・
+// チャート上に markArea でハイライトする。行クリックで区間へズーム。
+// ─────────────────────────────────────────────────────────────
+
+// 区間ハイライトの塗り色（canvas描画のため実値。薄い赤は両テーマで見える）
+const EVENT_AREA_COLOR = 'rgba(239,68,68,0.14)';
+// 検出区間の上限。ノイズ的な条件（例 X != 0）で数万区間できると
+// markAreaの描画とリスト構築が固まるため打ち切る
+const EVENT_MAX_INTERVALS = 300;
+
+/**
+ * 真（NaN以外かつ≠0）が連続する区間を抽出する。
+ * @returns {{list: {t0:number, t1:number}[], truncated: boolean}}
+ */
+function extractTrueIntervals(timeData, vals, cap) {
+    const list = [];
+    let startIdx = null;
+    let truncated = false;
+    const push = (endIdx) => list.push({ t0: timeData[startIdx], t1: timeData[endIdx] });
+    for (let i = 0; i < vals.length; i++) {
+        const v = vals[i];
+        const on = !Number.isNaN(v) && v !== 0;
+        if (on && startIdx === null) startIdx = i;
+        if (!on && startIdx !== null) {
+            push(i - 1);
+            startIdx = null;
+            if (list.length >= cap) { truncated = true; break; }
+        }
+    }
+    if (startIdx !== null && !truncated) push(vals.length - 1);
+    return { list, truncated };
+}
+
+function setEventValidation(text, cls) {
+    dom.eventValidation.textContent = text;
+    dom.eventValidation.className = 'custom-ram-validation' + (cls ? ' ' + cls : '');
+}
+
+/** 検出結果とハイライトをすべて消す */
+function clearEvents(rerender = true) {
+    const had = state.events.intervals.length > 0;
+    state.events = { expr: '', intervals: [] };
+    dom.eventSummary.textContent = '';
+    dom.eventList.innerHTML = '';
+    setEventValidation('', '');
+    if (rerender && had && state.chart && state.numGrids > 0) renderChart();
+}
+
+/** 条件式を評価してイベント区間を検出し、一覧とハイライトを更新する */
+async function detectEvents() {
+    const expr = dom.eventExpr.value.trim();
+    if (!expr) { clearEvents(); return; }
+    const mainFile = getMainFile();
+    if (!mainFile) { setEventValidation('ファイルを読み込んでください', 'error'); return; }
+
+    // 参照カラムをロードしてから検証・評価する（未ロード列はNaN扱いになるため）
+    const mainFileId = getMainFileId();
+    try {
+        await loadColumnsForFile(mainFileId, extractExprNames(expr));
+    } catch (e) { /* ロード失敗は検証エラーとして下で表面化する */ }
+
+    const v = evaluateExprForValidation(expr);
+    if (!v.ok) { setEventValidation(v.text, 'error'); return; }
+    setEventValidation('', '');
+
+    const vals = computeCustomExpr(expr, mainFile);
+    const { list, truncated } = extractTrueIntervals(mainFile.timeData, vals, EVENT_MAX_INTERVALS);
+    state.events = { expr, intervals: list };
+    renderEventList(truncated);
+    renderChart();
+    saveSettings();
+}
+
+/** イベント一覧（サマリ行+区間リスト）を再構築する */
+function renderEventList(truncated) {
+    const { intervals } = state.events;
+    dom.eventList.innerHTML = '';
+
+    if (!intervals.length) {
+        dom.eventSummary.textContent = '条件を満たす区間はありません';
+        return;
+    }
+    dom.eventSummary.innerHTML =
+        `${intervals.length}件${truncated ? `（上限${EVENT_MAX_INTERVALS}件で打ち切り）` : ''}　`
+        + `<button type="button" id="event-clear-btn" class="event-clear-btn">クリア</button>`;
+    dom.eventSummary.querySelector('#event-clear-btn')
+        .addEventListener('click', () => { dom.eventExpr.value = state.events.expr; clearEvents(); });
+
+    intervals.forEach((iv, i) => {
+        const li = document.createElement('li');
+        li.className = 'event-item';
+        li.innerHTML = `<span class="event-idx">${i + 1}</span>`
+            + `<span class="event-range">${esc(iv.t0.toFixed(2))} – ${esc(iv.t1.toFixed(2))} s</span>`
+            + `<span class="event-dur">${esc((iv.t1 - iv.t0).toFixed(2))} s</span>`;
+        li.title = 'クリックでこの区間へズーム';
+        li.addEventListener('click', () => zoomToInterval(iv));
+        dom.eventList.appendChild(li);
+    });
+}
+
+/** 区間の前後に余白を付けてX軸ズームする */
+function zoomToInterval(iv) {
+    if (!state.chart || state.numGrids === 0) return;
+    const pad = Math.max((iv.t1 - iv.t0) * 0.3, 1);
+    // dataZoomIndex:0（X軸スライダー）を対象にする（守るべき制約: index指定必須）
+    state.chart.dispatchAction({
+        type: 'dataZoom', dataZoomIndex: 0,
+        startValue: iv.t0 - pad, endValue: iv.t1 + pad,
+    });
+    recordHistory();
+}
+
+dom.eventDetectBtn.addEventListener('click', detectEvents);
+dom.eventExpr.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); detectEvents(); }
+});
 
 // ─────────────────────────────────────────────────────────────
 // Undo / Redo（Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z）
@@ -5711,6 +6366,7 @@ document.addEventListener('keydown', e => {
         if (state.brushMode) { exitBoxZoom(); return; }
         if (state.shiftMode) { exitShiftMode(); return; }
         if (state.arrangeMode) { exitArrangeMode(); return; }
+        if (state.measureMode) { exitMeasureMode(); return; }
     }
 
     // 単打キー: B / T / R（修飾キーなしのときだけ）
@@ -5731,6 +6387,11 @@ document.addEventListener('keydown', e => {
             resetZoom();
             return;
         }
+        if (e.key === 'm' || e.key === 'M') {
+            e.preventDefault();
+            toggleMeasureMode();
+            return;
+        }
     }
 });
 
@@ -5742,10 +6403,11 @@ document.addEventListener('keydown', e => {
 function showShortcutsModal() {
     const rows = [
         ['?',              'このショートカット一覧を表示'],
-        ['Esc',            'Box Zoom / Time Shift / Arrange モードを抜ける'],
+        ['Esc',            'Box Zoom / Time Shift / Arrange / Measure モードを抜ける'],
         ['B',              'Box Zoom モードを切り替え'],
         ['T',              'Time Shift モードを切り替え（Sub ファイルが必要）'],
         ['R',              'ズームをリセット（全範囲表示）'],
+        ['M',              'カーソル計測モードを切り替え（2回クリックで区間統計）'],
         ['Ctrl + Z',       '直前の操作を元に戻す（ズーム・チャンネル選択・設定など）'],
         ['Ctrl + Y',       '操作をやり直す'],
         ['Ctrl + Shift + Z', '操作をやり直す（Ctrl + Y と同じ）'],
@@ -5753,7 +6415,7 @@ function showShortcutsModal() {
         ['Ctrl + Shift + C', 'チャートをクリップボードにコピー'],
     ];
 
-    let html = `<h3 id="shortcuts-modal-title" style="margin:0 0 12px;color:#818cf8;">キーボードショートカット</h3>`;
+    let html = `<h3 id="shortcuts-modal-title" style="margin:0 0 12px;color:var(--accent-soft);">キーボードショートカット</h3>`;
     html += `<p style="color:#a0a5b1;font-size:11px;margin:0 0 10px;">入力欄にフォーカスがあるときは単打キー (B / T / R / ?) は無効になります。</p>`;
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;">`;
     for (const [key, desc] of rows) {
@@ -5764,29 +6426,21 @@ function showShortcutsModal() {
     }
     html += `</table>`;
 
-    // 既存モーダルがあれば閉じる
-    let overlay = document.getElementById('app-modal-overlay');
-    if (overlay) overlay.remove();
-
-    overlay = document.createElement('div');
-    overlay.id = 'app-modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.setAttribute('aria-labelledby', 'shortcuts-modal-title');
-    modal.style.cssText = 'background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:20px 24px;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;';
-    modal.innerHTML = html
-        + `<div style="text-align:right;margin-top:12px;"><button onclick="this.closest('#app-modal-overlay').remove()" `
-        + `style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>`;
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+    const { modal, close } = createModal(html + MODAL_CLOSE_FOOTER, {
+        modalClass: 'shortcuts-modal',
+        labelledBy: 'shortcuts-modal-title',
+    });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
 }
 
 // ツールバーの ? ボタン（追加予定）からもモーダルを開けるようにする
 $('shortcuts-help-btn')?.addEventListener('click', showShortcutsModal);
+
+// テーマ切替（ライト/ダーク）。見た目のみの設定なのでUndo履歴には積まない
+$('theme-toggle-btn')?.addEventListener('click', () => {
+    applyTheme(state.theme === 'light' ? 'dark' : 'light');
+    saveSettings();
+});
 
 // ─────────────────────────────────────────────────────────────
 // Time shift controls
@@ -5834,6 +6488,7 @@ function enterShiftMode() {
     if (!getSubFileIds().length) return;
     if (state.brushMode) exitBoxZoom();
     if (state.arrangeMode) exitArrangeMode();
+    if (state.measureMode) exitMeasureMode();
 
     // Default shift target = first sub file
     if (!state.shiftFileId || !state.files[state.shiftFileId] || state.files[state.shiftFileId].role !== 'sub') {
@@ -5870,6 +6525,7 @@ function enterArrangeMode() {
     if (state.chartGroups.length < 2) return;
     if (state.brushMode) exitBoxZoom();
     if (state.shiftMode) exitShiftMode();
+    if (state.measureMode) exitMeasureMode();
     state.arrangeMode = true;
     dom.arrangeBtn.classList.add('btn-active');
     dom.arrangeBtn.innerHTML = `<i class='bx bx-x'></i> Exit Arrange`;
@@ -5971,7 +6627,7 @@ function getChartImageDataURL() {
     return state.chart.getDataURL({
         type: 'png',
         pixelRatio: 2,                     // 高解像度（Retina対応）
-        backgroundColor: '#0f1115',         // ダークテーマの背景色
+        backgroundColor: T.bgMain,          // ダークテーマの背景色（styles.css の --bg-main に追従）
     });
 }
 
@@ -6018,7 +6674,226 @@ function exportChartAsPNG() {
     link.click();
     document.body.removeChild(link);
 
-    showExportToast('PNG saved', fileName);
+    showExportToast('PNGを保存しました', fileName);
+}
+
+/**
+ * 表示中の時間範囲 × 表示中チャンネル（Custom RAM含む）をCSVで保存する（F6）。
+ * 行はメインファイルの時間軸（正規化後の秒）。Subファイルの系列は時間軸が
+ * 異なるため含まない。欠損（NaN）は空欄で出力する。
+ */
+function exportVisibleCSV() {
+    const lookup = _lastRenderedLookup;
+    const mainFile = lookup && lookup.mainFile;
+    if (!mainFile || state.numGrids === 0) return;
+    const { groups: activeGroups, order: activeOrder } =
+        _lastRenderedGroups || { groups: new Map(), order: [] };
+
+    const range = getVisibleXRange();
+    const t0 = range ? Math.min(range[0], range[1]) : -Infinity;
+    const t1 = range ? Math.max(range[0], range[1]) : Infinity;
+
+    // 表示順のチャンネル列（メインファイルにデータがあるもののみ・重複除去）
+    const cols = [];
+    const seen = new Set();
+    for (const gid of activeOrder) {
+        const grp = activeGroups.get(gid);
+        if (!grp) continue;
+        for (const chName of grp.mergedNames) {
+            if (seen.has(chName)) continue;
+            seen.add(chName);
+            const col = lookup.colByName.get(chName);
+            if (col && mainFile.colData[col.id]) cols.push(col);
+        }
+    }
+    if (!cols.length) {
+        showWarning('エクスポートできるチャンネルがありません');
+        return;
+    }
+
+    // CSVフィールドのエスケープ（カンマ・引用符・改行を含む名前対策）
+    const q = v => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+
+    const lines = [];
+    lines.push(['Time', ...cols.map(c => q(c.name))].join(','));
+    lines.push(['s',    ...cols.map(c => q(c.unit || ''))].join(','));
+
+    const td = mainFile.timeData;
+    const dataArrs = cols.map(c => mainFile.colData[c.id]);
+    let rows = 0;
+    for (let i = 0; i < td.length; i++) {
+        const t = td[i];
+        if (t < t0 || t > t1) continue;
+        const row = new Array(cols.length + 1);
+        row[0] = t;
+        for (let k = 0; k < dataArrs.length; k++) {
+            const v = dataArrs[k][i];
+            row[k + 1] = Number.isNaN(v) ? '' : v;
+        }
+        lines.push(row.join(','));
+        rows++;
+    }
+    if (!rows) {
+        showWarning('表示範囲内にデータ点がありません');
+        return;
+    }
+
+    const baseName = mainFile.name.replace(/\.(csv|trn)$/i, '');
+    const now = new Date();
+    const stamp = now.getFullYear()
+        + String(now.getMonth() + 1).padStart(2, '0')
+        + String(now.getDate()).padStart(2, '0')
+        + '_'
+        + String(now.getHours()).padStart(2, '0')
+        + String(now.getMinutes()).padStart(2, '0')
+        + String(now.getSeconds()).padStart(2, '0');
+    const fileName = `${baseName}_export_${stamp}.csv`;
+
+    // BOM付きUTF-8（Excelでの文字化け防止）
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showExportToast('CSVを保存しました', `${fileName}（${rows}行 × ${cols.length}チャンネル）`);
+}
+
+/**
+ * チャート画像・ファイル情報・表示範囲の統計・Drive Index・Custom RAM・
+ * イベント検出結果を1枚の自己完結HTMLレポートとして保存する（F9）。
+ */
+function exportReportHTML() {
+    const mainFile = getMainFile();
+    if (!mainFile || state.numGrids === 0) return;
+    const imgURL = getChartImageDataURL();
+    const range = getVisibleXRange() || [mainFile.timeData[0], mainFile.timeData[mainFile.timeData.length - 1]];
+    const [t0, t1] = [Math.min(range[0], range[1]), Math.max(range[0], range[1])];
+    const now = new Date();
+    const fmtNum = v => (v == null || Number.isNaN(v)) ? '—' : fmtVal(v);
+
+    // ── ファイル一覧 ──
+    let filesRows = '';
+    for (const f of Object.values(state.files)) {
+        const td = f.timeData;
+        filesRows += `<tr><td>${f.role === 'main' ? 'Main' : 'Sub'}</td><td>${esc(f.name)}</td>`
+            + `<td class="num">${td.length}</td><td class="num">${f.columns.length}</td>`
+            + `<td class="num">${td[0].toFixed(2)} – ${td[td.length - 1].toFixed(2)} s</td>`
+            + `<td class="num">${(f.offset || 0).toFixed(3)} s</td></tr>`;
+    }
+
+    // ── 表示範囲の統計 ──
+    const statsRows = collectStatsRows(t0, t1);
+    let statsHtml = '';
+    if (statsRows.length) {
+        statsHtml = `<h2>表示範囲の統計（${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s）</h2>`
+            + `<table><thead><tr><th>Channel</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th></tr></thead><tbody>`
+            + statsRows.map(r =>
+                `<tr><td><span class="sw" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
+                + `<td class="num">${fmtNum(r.min)}</td><td class="num">${fmtNum(r.max)}</td>`
+                + `<td class="num">${fmtNum(r.mean)}</td><td class="num">${fmtNum(r.sigma)}</td><td class="num">${r.n}</td></tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    // ── Drive Index（計算済みのときだけ）──
+    let diHtml = '';
+    const diResults = (state.driveIndex.results || []).filter(r => r.result);
+    if (diResults.length) {
+        const metrics = [
+            ['iwr', 'IWR [%]'], ['rmsse', 'RMSSE [km/h]'], ['ascr', 'ASCR [%]'], ['dr', 'DR [%]'],
+            ['er', 'ER [%]'], ['eer', 'EER [%]'], ['distanceKm', '距離 [km]'],
+            ['fuelL', '燃料 [L]'], ['fuelKmPerL', '燃費 [km/L]'], ['fuelLper100km', '燃費 [L/100km]'],
+        ];
+        diHtml = `<h2>Drive Index（${esc(diResults[0].cycleName || '')}）</h2>`
+            + `<table><thead><tr><th>指標</th>`
+            + diResults.map(r => `<th>${esc(r.fileName)}（${r.role}）</th>`).join('')
+            + `</tr></thead><tbody>`
+            + metrics.map(([key, label]) =>
+                `<tr><td>${esc(label)}</td>`
+                + diResults.map(r => `<td class="num">${fmtNum(r.result[key])}</td>`).join('')
+                + `</tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    // ── Custom RAM ──
+    let ramHtml = '';
+    if (state.customRAMs.length) {
+        ramHtml = `<h2>Custom RAM</h2><table><thead><tr><th>名前</th><th>単位</th><th>式</th></tr></thead><tbody>`
+            + state.customRAMs.map(c =>
+                `<tr><td>${esc(c.name)}</td><td>${esc(c.unit || '')}</td><td class="mono">${esc(c.expr)}</td></tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    // ── イベント検出結果 ──
+    let evHtml = '';
+    if (state.events.intervals.length) {
+        const list = state.events.intervals.slice(0, 50);
+        evHtml = `<h2>イベント検出（${esc(state.events.expr)}）: ${state.events.intervals.length}件`
+            + (state.events.intervals.length > 50 ? '（先頭50件のみ表示）' : '') + `</h2>`
+            + `<table><thead><tr><th>#</th><th>開始 [s]</th><th>終了 [s]</th><th>継続 [s]</th></tr></thead><tbody>`
+            + list.map((iv, i) =>
+                `<tr><td class="num">${i + 1}</td><td class="num">${iv.t0.toFixed(2)}</td>`
+                + `<td class="num">${iv.t1.toFixed(2)}</td><td class="num">${(iv.t1 - iv.t0).toFixed(2)}</td></tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>CSV Chart Viewer レポート — ${esc(mainFile.name)}</title>
+<style>
+body { font-family: 'Segoe UI', 'Hiragino Sans', Meiryo, sans-serif; color: #1d2130; margin: 24px auto; max-width: 1100px; padding: 0 16px; }
+h1 { font-size: 20px; border-bottom: 2px solid #6366f1; padding-bottom: 6px; }
+h2 { font-size: 15px; margin: 24px 0 8px; color: #4f46e5; }
+.meta { color: #5b6272; font-size: 12px; }
+table { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+th, td { border: 1px solid #d5d9e2; padding: 4px 10px; text-align: left; }
+th { background: #eef0f5; font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.mono { font-family: Consolas, monospace; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+img.chart { max-width: 100%; border: 1px solid #d5d9e2; border-radius: 6px; margin: 6px 0; }
+@media print { body { margin: 0; } }
+</style></head><body>
+<h1>CSV Chart Viewer レポート</h1>
+<p class="meta">Main: ${esc(mainFile.name)}　|　生成: ${now.toLocaleString('ja-JP')}</p>
+<h2>ファイル</h2>
+<table><thead><tr><th>ロール</th><th>ファイル名</th><th>点数</th><th>チャンネル数</th><th>時間範囲</th><th>Time Shift</th></tr></thead><tbody>${filesRows}</tbody></table>
+<h2>チャート</h2>
+${imgURL ? `<img class="chart" src="${imgURL}" alt="chart">` : '<p class="meta">チャート画像を取得できませんでした</p>'}
+${statsHtml}
+${diHtml}
+${ramHtml}
+${evHtml}
+</body></html>`;
+
+    const baseName = mainFile.name.replace(/\.(csv|trn)$/i, '');
+    const stamp = now.getFullYear()
+        + String(now.getMonth() + 1).padStart(2, '0')
+        + String(now.getDate()).padStart(2, '0')
+        + '_'
+        + String(now.getHours()).padStart(2, '0')
+        + String(now.getMinutes()).padStart(2, '0')
+        + String(now.getSeconds()).padStart(2, '0');
+    const fileName = `${baseName}_report_${stamp}.html`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showExportToast('レポートを保存しました', fileName);
 }
 
 /**
@@ -6038,7 +6913,7 @@ async function copyChartToClipboard() {
         await navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blob })
         ]);
-        showExportToast('Copied!', 'チャート画像をクリップボードにコピーしました');
+        showExportToast('コピーしました', 'チャート画像をクリップボードにコピーしました');
     } catch (e) {
         // file:// で開いている場合やHTTPSでない場合はここに来る
         console.error('[CSV Viewer] Clipboard write failed:', e);
@@ -6054,26 +6929,15 @@ async function copyChartToClipboard() {
  * エラー通知とは別に、短い緑色のフィードバックを出す。
  */
 function showExportToast(title, detail) {
-    let container = document.getElementById('error-toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'error-toast-container';
-        container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:480px;';
-        document.body.appendChild(container);
-    }
-    const toast = document.createElement('div');
-    toast.style.cssText = 'background:#122d1b;border:1px solid #22c55e;border-radius:8px;padding:12px 16px;color:#86efac;font-size:13px;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer;animation:slideIn 0.3s ease;';
-    toast.innerHTML = `<div style="font-weight:600;margin-bottom:2px;color:#4ade80;">${esc(title)}</div>`
-        + `<div style="font-size:11px;color:#86efac;opacity:0.85;">${esc(detail)}</div>`;
-    toast.addEventListener('click', () => toast.remove());
-    container.appendChild(toast);
-    // 3秒で自動的に消える（成功通知なので短めに）
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+    // 成功通知なので短めに自動消去する
+    showToast('success', title, detail, TOAST_TTL_SUCCESS);
 }
 
 // ボタンのクリックイベントを登録
 dom.exportPng.addEventListener('click', exportChartAsPNG);
 dom.copyChart.addEventListener('click', copyChartToClipboard);
+dom.exportCsv.addEventListener('click', exportVisibleCSV);
+dom.exportReport.addEventListener('click', exportReportHTML);
 
 // ─────────────────────────────────────────────────────────────
 // 設定の保存・復元（localStorage）
@@ -6081,6 +6945,11 @@ dom.copyChart.addEventListener('click', copyChartToClipboard);
 
 const STORAGE_KEY = 'csvViewer_settings';
 const PRESETS_STORAGE_KEY = 'csvViewer_presets';
+
+// プリセットの保存上限。localStorage quota(約5MB)超過で既存プリセットまで
+// 巻き込んで失われる前に、保存時点で件数と合計サイズの両方を保護する
+const PRESET_MAX_COUNT = 20;                    // 保存できるプリセットの最大件数
+const PRESET_MAX_JSON_CHARS = 2 * 1024 * 1024;  // 全プリセットのJSON文字列長の上限（約2MB相当）
 
 function serializeChartGroups() {
     return state.chartGroups.map(group => ({
@@ -6106,7 +6975,7 @@ let _storageWarnShown = false;
 let _saveSettingsTimer = null;
 
 /**
- * 設定保存を予約する（500msのdebounce）。
+ * 設定保存を予約する（SAVE_DEBOUNCE_MS のdebounce）。
  * 約18箇所から呼ばれるため、連続操作のたびにJSON.stringifyを即時実行しないようまとめる。
  * 実際の書き込みは saveSettingsNow が行う。
  * @param {string|null} coalesceKey Undo履歴の連続操作統合キー（カラーピッカー等の
@@ -6117,7 +6986,7 @@ function saveSettings(coalesceKey = null) {
     // （debounce後だと「操作直後のCtrl+Z」で最後の操作が履歴に無い事故が起きる）
     recordHistory(coalesceKey);
     clearTimeout(_saveSettingsTimer);
-    _saveSettingsTimer = setTimeout(flushSettingsSave, 500);
+    _saveSettingsTimer = setTimeout(flushSettingsSave, SAVE_DEBOUNCE_MS);
 }
 
 /**
@@ -6176,6 +7045,10 @@ function collectSettings() {
         // サンプリングモード
         samplingMode: dom.sampling.value,
         // チャートの表示設定（見た目のみ。Undo履歴の比較からは除外される）
+        theme: state.theme,
+        // イベント検出の条件式（区間は保存しない。次回は式だけ復元して手動で再検出）
+        eventExpr: dom.eventExpr?.value || '',
+        statsPanel: state.statsPanelVisible,
         fontScale: state.fontScale,
         rowHeightPx: state.rowHeightPx,
         gridHeights: state.gridHeights,
@@ -6298,13 +7171,21 @@ function loadPresets() {
     }
 }
 
-function savePresets(presets) {
+/**
+ * プリセット一式をlocalStorageへ書き込む。
+ * @param {object} presets 全プリセット（name → 設定）
+ * @param {string|null} json シリアライズ済みJSON（呼び出し側でサイズ判定に使った文字列を再利用する）
+ * @returns {boolean} 書き込みに成功したか
+ */
+function savePresets(presets, json = null) {
     try {
-        localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+        localStorage.setItem(PRESETS_STORAGE_KEY, json ?? JSON.stringify(presets));
+        return true;
     } catch (e) {
         // 容量超過時に例外がそのまま飛ぶと「Unhandled error」トーストになり原因が分かりにくい
         showError('プリセットを保存できませんでした',
             'ブラウザの保存領域(localStorage)に書き込めません。容量超過の可能性があります。\n' + (e.message || String(e)));
+        return false;
     }
 }
 
@@ -6328,8 +7209,26 @@ function saveCurrentPreset() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const presets = loadPresets();
+
+    // 件数上限: 新規追加のみ制限する（既存名の上書きは常に許可）
+    const isNew = !Object.prototype.hasOwnProperty.call(presets, trimmed);
+    if (isNew && Object.keys(presets).length >= PRESET_MAX_COUNT) {
+        showWarning(`プリセットは最大${PRESET_MAX_COUNT}件までです`,
+            '不要なプリセットを削除してから保存してください。');
+        return;
+    }
+
     presets[trimmed] = buildPresetSettings();
-    savePresets(presets);
+
+    // サイズ上限: quota超過の例外で既存プリセットごと保存が失われる前に拒否する
+    const json = JSON.stringify(presets);
+    if (json.length > PRESET_MAX_JSON_CHARS) {
+        showWarning('プリセットの合計サイズが上限(約2MB)を超えるため保存できません',
+            '不要なプリセットを削除するか、選択チャンネル数を減らしてから保存してください。');
+        return;
+    }
+
+    if (!savePresets(presets, json)) return; // quota超過等（savePresets内でエラー表示済み）
     renderPresetSelect();
     if (dom.presetSelect) dom.presetSelect.value = trimmed;
     showExportToast('プリセットを保存しました', trimmed);
@@ -6363,6 +7262,349 @@ function deleteSelectedPreset() {
     renderPresetSelect();
     showExportToast('プリセットを削除しました', name);
 }
+
+// ─────────────────────────────────────────────────────────────
+// 差分カーブ生成（F8）: MainとSubの両方に存在するチャンネルから選んで、
+// Main − Sub の差分を Custom RAM（@Δ名_s番号）として一括生成する。
+// 計算はクロスファイル式（名前 - sN:名前）なので、Subのタイムシフト
+// （offset）適用後の時間軸でMainに補間される既存機構をそのまま使う。
+// ─────────────────────────────────────────────────────────────
+
+/** 名前が式のトークナイザを単一識別子として通るか（空白や演算子入りの名前は式にできない） */
+function isExprSafeName(name) {
+    try {
+        const t = tokenizeExpr(name);
+        return t.length === 1 && t[0].type === 'name' && t[0].value === name;
+    } catch (e) {
+        return false;
+    }
+}
+
+function showDiffCurvesModal() {
+    const mainFile = getMainFile();
+    const subIds = getSubFileIds();
+    if (!mainFile || !subIds.length) return;
+
+    let body = '';
+    let candidates = 0;
+    subIds.forEach((subId, i) => {
+        const sf = state.files[subId];
+        const subNames = new Set(sf.columns.map(c => c.name));
+        // 両ファイルに同名で存在し、式に書ける名前だけを候補にする
+        // （既生成の差分 @Δ… は除外）
+        const common = mainFile.columns.filter(c =>
+            subNames.has(c.name) && !c.name.startsWith('@Δ') && isExprSafeName(c.name));
+        if (!common.length) return;
+
+        body += `<h4 style="margin:12px 0 6px;color:#f59e0b;font-size:12px;">s${i + 1}: ${esc(sf.shortName)}</h4>`
+            + `<div class="diff-ch-list">`;
+        for (const c of common) {
+            const newName = `@Δ${c.name}_s${i + 1}`;
+            const exists = mainFile.columns.some(col => col.name === newName);
+            if (!exists) candidates++;
+            body += `<label class="diff-ch-item">`
+                + `<input type="checkbox" data-sub="${i + 1}" data-ch="${esc(c.name)}"${exists ? ' disabled' : ''}>`
+                + `<span${exists ? ' style="opacity:0.45;"' : ''}>${esc(c.name)}</span>`
+                + (exists ? `<span class="diff-exists">生成済み</span>` : '')
+                + `</label>`;
+        }
+        body += `</div>`;
+    });
+
+    if (!body) {
+        showWarning('差分を作れるチャンネルがありません',
+            'MainとSubの両方に同じ名前で存在するチャンネルが対象です。名前が違う場合はChannel Mapではなく、Custom RAMで「Main名 - s1:Sub名」を直接定義してください。');
+        return;
+    }
+
+    const html =
+        `<h3 id="diff-modal-title" style="margin:0 0 8px;color:var(--accent-soft);">差分カーブ生成（Main − Sub）</h3>`
+        + `<p style="color:var(--text-secondary);font-size:11px;margin:0 0 4px;">`
+        + `選んだチャンネルの Main − Sub 差分を Custom RAM（@Δ名_s番号）として追加します。`
+        + `Subはタイムシフト適用後の時間軸でMainに補間されます。</p>`
+        + body
+        + `<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">`
+        + `<button id="diff-generate-btn" class="btn-primary" style="padding:6px 18px;font-size:13px;"${candidates ? '' : ' disabled'}>生成</button>`
+        + `<button class="modal-close-btn" style="background:transparent;color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button>`
+        + `</div>`;
+
+    const { modal, close } = createModal(html, { modalClass: 'diff-modal', labelledBy: 'diff-modal-title' });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
+    modal.querySelector('#diff-generate-btn').addEventListener('click', async () => {
+        const checked = [...modal.querySelectorAll('input[type="checkbox"]:checked')];
+        if (!checked.length) { showWarning('チャンネルを選択してください'); return; }
+        close();
+        for (const cb of checked) {
+            const ch = cb.dataset.ch;
+            const s = cb.dataset.sub;
+            const unit = mainFile.columns.find(c => c.name === ch)?.unit || '';
+            // addCustomRAM が '@' を付けて @Δ名_sN になる。計算・チャート追加・
+            // 永続化・全ファイルへの伝播はCustom RAMの既存経路に任せる
+            await addCustomRAM(`Δ${ch}_s${s}`, `${ch} - s${s}:${ch}`, unit);
+        }
+        showExportToast('差分カーブを追加しました', `${checked.length}件`);
+    });
+}
+
+dom.diffBtn?.addEventListener('click', showDiffCurvesModal);
+
+// ─────────────────────────────────────────────────────────────
+// XYプロット（F7）: 任意チャンネル同士の散布図をモーダルで表示する。
+// main/subを重ね描き（ファイル色）。X/Yは同一ファイル内のペアなので
+// タイムシフトは「表示中の時間範囲のみ」の絞り込みにだけ関係する。
+// ─────────────────────────────────────────────────────────────
+
+// 散布図の最大点数。超える場合は等間隔に間引く（描画の固まり防止）
+const XY_MAX_POINTS = 50000;
+
+async function showXYPlotModal() {
+    const mainFile = getMainFile();
+    if (!mainFile) return;
+
+    const colOptions = mainFile.columns
+        .map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.unit ? ` [${esc(c.unit)}]` : ''}</option>`)
+        .join('');
+    // 既定値: 表示中チャンネルの先頭2つ（無ければ列の先頭2つ）
+    const displayed = currentChannelOrder();
+    const defX = displayed[0] || mainFile.columns[0]?.name || '';
+    const defY = displayed[1] || mainFile.columns[1]?.name || defX;
+
+    const html =
+        `<h3 id="xy-modal-title" style="margin:0 0 8px;color:var(--accent-soft);">XYプロット</h3>`
+        + `<div class="xy-controls">`
+        + `<label>X: <select id="xy-x-select" aria-label="X軸チャンネル">${colOptions}</select></label>`
+        + `<label>Y: <select id="xy-y-select" aria-label="Y軸チャンネル">${colOptions}</select></label>`
+        + `<label class="xy-visible-label"><input type="checkbox" id="xy-visible-only" checked> 表示中の時間範囲のみ</label>`
+        + `</div>`
+        + `<div id="xy-chart" class="xy-chart"></div>`
+        + MODAL_CLOSE_FOOTER;
+
+    const { overlay, modal, close } = createModal(html, { modalClass: 'xy-modal', labelledBy: 'xy-modal-title' });
+    modal.querySelector('.modal-close-btn').addEventListener('click', close);
+
+    const xSel = modal.querySelector('#xy-x-select');
+    const ySel = modal.querySelector('#xy-y-select');
+    const visChk = modal.querySelector('#xy-visible-only');
+    if ([...xSel.options].some(o => o.value === defX)) xSel.value = defX;
+    if ([...ySel.options].some(o => o.value === defY)) ySel.value = defY;
+
+    const chart = echarts.init(modal.querySelector('#xy-chart'), null, { renderer: 'canvas' });
+    // モーダルがどの経路で閉じても（Esc・オーバーレイクリック含む）チャートを破棄する
+    const obs = new MutationObserver(() => {
+        if (!document.body.contains(overlay)) {
+            chart.dispose();
+            obs.disconnect();
+        }
+    });
+    obs.observe(document.body, { childList: true });
+
+    async function renderXY() {
+        const xName = xSel.value, yName = ySel.value;
+        if (!xName || !yName) return;
+        const onlyVisible = visChk.checked;
+        const range = onlyVisible ? getVisibleXRange() : null;
+
+        // 対象チャンネルを全ファイルでロードしてから系列を組み立てる
+        const loads = [];
+        for (const [fid, f] of Object.entries(state.files)) {
+            const names = [xName, yName].filter(n => resolveColumnForFile(f, n));
+            if (names.length) loads.push(loadColumnsForFile(fid, names));
+        }
+        try { await Promise.all(loads); } catch (e) { /* 欠けた列は下でスキップされる */ }
+
+        const series = [];
+        for (const [fid, f] of Object.entries(state.files)) {
+            const xc = resolveColumnForFile(f, xName);
+            const yc = resolveColumnForFile(f, yName);
+            if (!xc || !yc) continue;
+            const xv = f.colData[xc.id], yv = f.colData[yc.id];
+            if (!xv || !yv) continue;
+
+            const offset = f.offset || 0;
+            const t = f.timeData;
+            const pts = [];
+            for (let i = 0; i < t.length; i++) {
+                if (range && (t[i] + offset < range[0] || t[i] + offset > range[1])) continue;
+                const x = xv[i], y = yv[i];
+                if (Number.isNaN(x) || Number.isNaN(y)) continue;
+                pts.push([x, y]);
+            }
+            // 点数上限: 等間隔に間引く
+            let data = pts;
+            if (pts.length > XY_MAX_POINTS) {
+                const stride = Math.ceil(pts.length / XY_MAX_POINTS);
+                data = [];
+                for (let i = 0; i < pts.length; i += stride) data.push(pts[i]);
+            }
+            series.push({
+                name: f.shortName, type: 'scatter',
+                data, symbolSize: 2.5, large: true, largeThreshold: 5000,
+                itemStyle: { color: state.fileColors[fid] || undefined, opacity: 0.75 },
+            });
+        }
+
+        const axisStyle = {
+            nameTextStyle: { color: T.dim },
+            axisLabel: { color: T.dim, formatter: CSVChartOptions.formatYAxisValue },
+            axisLine: { lineStyle: { color: T.axis } },
+            splitLine: { lineStyle: { color: T.grid } },
+        };
+        const unitOf = n => mainFile.columns.find(c => c.name === n)?.unit || '';
+        chart.setOption({
+            animation: false,
+            backgroundColor: 'transparent',
+            legend: { show: series.length > 1, textStyle: { color: T.dim }, top: 0 },
+            grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44 },
+            tooltip: {
+                trigger: 'item',
+                formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
+            },
+            xAxis: { type: 'value', name: `${xName}${unitOf(xName) ? ` (${unitOf(xName)})` : ''}`,
+                     nameLocation: 'middle', nameGap: 28, scale: true, ...axisStyle },
+            yAxis: { type: 'value', name: `${yName}${unitOf(yName) ? ` (${unitOf(yName)})` : ''}`,
+                     scale: true, ...axisStyle },
+            dataZoom: [
+                { type: 'inside', xAxisIndex: 0 },
+                { type: 'inside', yAxisIndex: 0 },
+            ],
+            series,
+        }, { notMerge: true });
+    }
+
+    xSel.addEventListener('change', renderXY);
+    ySel.addEventListener('change', renderXY);
+    visChk.addEventListener('change', renderXY);
+    await renderXY();
+}
+
+dom.xyBtn?.addEventListener('click', showXYPlotModal);
+
+// ─────────────────────────────────────────────────────────────
+// チャンネルセットのお気に入り（F10）: 表示チャンネルの組み合わせに名前を
+// 付けて保存し、ワンクリックで適用する。設定プリセットの軽量版で、
+// 保存するのはチャンネル名の配列（グリッド表示順）のみ。
+// 独立したlocalStorageキーなので Clear All や設定リセットでは消えない。
+// ─────────────────────────────────────────────────────────────
+
+const FAVORITES_STORAGE_KEY = 'csvViewer_channelFavorites';
+const FAVORITES_MAX_COUNT = 30;
+
+function loadChannelFavorites() {
+    try {
+        const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveChannelFavoritesStore(favs) {
+    try {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favs));
+        return true;
+    } catch (e) {
+        showError('お気に入りを保存できませんでした', e.message || String(e));
+        return false;
+    }
+}
+
+function renderChannelFavSelect() {
+    if (!dom.favSelect) return;
+    const favs = loadChannelFavorites();
+    const selected = dom.favSelect.value;
+    dom.favSelect.innerHTML = '<option value="">Favorites...</option>';
+    Object.keys(favs).sort((a, b) => a.localeCompare(b, 'ja')).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        dom.favSelect.appendChild(opt);
+    });
+    if (selected && favs[selected]) dom.favSelect.value = selected;
+}
+
+/** 現在の表示チャンネル名をグリッド表示順で返す（未描画の選択分は末尾） */
+function currentChannelOrder() {
+    const names = [];
+    for (const g of state.chartGroups) {
+        for (const ch of g.channels) {
+            if (!names.includes(ch.name)) names.push(ch.name);
+        }
+    }
+    for (const n of state.selectedNames) {
+        if (!names.includes(n)) names.push(n);
+    }
+    return names;
+}
+
+function saveChannelFavorite() {
+    const names = currentChannelOrder();
+    if (!names.length) {
+        showWarning('保存する表示チャンネルがありません');
+        return;
+    }
+    const name = prompt('保存するお気に入り名を入力してください', dom.favSelect?.value || '');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    const favs = loadChannelFavorites();
+    const isNew = !Object.prototype.hasOwnProperty.call(favs, trimmed);
+    if (isNew && Object.keys(favs).length >= FAVORITES_MAX_COUNT) {
+        showWarning(`お気に入りは最大${FAVORITES_MAX_COUNT}件までです`,
+            '不要なお気に入りを削除してから保存してください。');
+        return;
+    }
+    favs[trimmed] = names;
+    if (!saveChannelFavoritesStore(favs)) return;
+    renderChannelFavSelect();
+    dom.favSelect.value = trimmed;
+    showExportToast('お気に入りを保存しました', `${trimmed}（${names.length}チャンネル）`);
+}
+
+function applyChannelFavorite() {
+    const key = dom.favSelect?.value;
+    if (!key) { showWarning('お気に入りが選択されていません'); return; }
+    const favs = loadChannelFavorites();
+    const names = favs[key];
+    if (!Array.isArray(names)) {
+        showWarning('お気に入りが見つかりません', key);
+        renderChannelFavSelect();
+        return;
+    }
+    const mainFile = getMainFile();
+    if (!mainFile) { showWarning('ファイルを読み込んでください'); return; }
+
+    const colNames = new Set(mainFile.columns.map(c => c.name));
+    const found = names.filter(n => colNames.has(n));
+    const missing = names.filter(n => !colNames.has(n));
+    if (!found.length) {
+        showWarning('お気に入りのチャンネルがMainファイルに1つもありません', names.join(', '));
+        return;
+    }
+
+    // 表示チャンネルを丸ごと置き換える（保存時のグリッド順で単独チャート化）
+    state.selectedNames = new Set(found);
+    state.chartGroups = [];
+    found.forEach(n => addStandaloneChart(n));
+    renderColumnList();
+    ensureColumnsAndRender();
+    saveSettings();
+    showExportToast('お気に入りを適用しました', key
+        + (missing.length ? `（見つからないチャンネル: ${missing.join(', ')}）` : ''));
+}
+
+function deleteChannelFavorite() {
+    const key = dom.favSelect?.value;
+    if (!key) { showWarning('削除するお気に入りが選択されていません'); return; }
+    const favs = loadChannelFavorites();
+    delete favs[key];
+    saveChannelFavoritesStore(favs);
+    renderChannelFavSelect();
+    showExportToast('お気に入りを削除しました', key);
+}
+
+dom.favSave?.addEventListener('click', saveChannelFavorite);
+dom.favApply?.addEventListener('click', applyChannelFavorite);
+dom.favDelete?.addEventListener('click', deleteChannelFavorite);
 
 /**
  * 設定をJSONファイルとしてダウンロードする。
@@ -6434,6 +7676,13 @@ function applySettings(rawSettings) {
     if (s.samplingMode !== undefined) dom.sampling.value = s.samplingMode;
 
     // チャート表示設定を復元
+    if (s.theme === 'light' || s.theme === 'dark') applyTheme(s.theme);
+    if (typeof s.eventExpr === 'string' && dom.eventExpr) dom.eventExpr.value = s.eventExpr;
+    if (s.statsPanel != null) {
+        state.statsPanelVisible = !!s.statsPanel;
+        dom.statsBtn?.classList.toggle('btn-active', state.statsPanelVisible);
+        // パネル本体はファイル読み込み後のrenderChartが構築する
+    }
     if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
         state.fontScale = s.fontScale;
         if (dom.fontScale) dom.fontScale.value = s.fontScale;
@@ -6458,8 +7707,20 @@ function applySettings(rawSettings) {
         }
     }
 
-    // Y軸範囲を復元
-    if (s.yRanges) state.yRanges = s.yRanges;
+    // Y軸範囲を復元。インポートJSON由来のオブジェクトを参照代入すると以後の編集が
+    // 設定オブジェクトと同一実体を書き換えてしまうため、エントリごとにコピーする（B6対策）。
+    // 形式が { min, max } でないエントリは捨てる
+    if (s.yRanges) {
+        const cleaned = {};
+        for (const [name, r] of Object.entries(s.yRanges)) {
+            if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+            cleaned[name] = {
+                min: r.min != null ? String(r.min) : '',
+                max: r.max != null ? String(r.max) : '',
+            };
+        }
+        state.yRanges = cleaned;
+    }
     if (s.channelAliases) state.channelAliases = { ...s.channelAliases };
 
     // 単色モード設定を復元
@@ -6467,7 +7728,16 @@ function applySettings(rawSettings) {
         state.monoColorMode = s.monoColorMode;
         dom.monoColorBtn.classList.toggle('btn-active', state.monoColorMode);
     }
-    if (s.fileColors) state.fileColors = s.fileColors;
+    // ファイル色を復元。参照代入を避けてコピーし、#RRGGBB形式でない値は
+    // インポートJSONで任意文字列を注入できてしまうため捨てる（B6+S1対策）。
+    // 捨てられたファイルはデフォルト色（renderFileListの'#6366f1'）にフォールバックする
+    if (s.fileColors) {
+        const cleaned = {};
+        for (const [fid, color] of Object.entries(s.fileColors)) {
+            if (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)) cleaned[fid] = color;
+        }
+        state.fileColors = cleaned;
+    }
 
     // カスタム走行モード（時間-車速トレース）を復元
     if (Array.isArray(s.customModes)) {
@@ -6566,6 +7836,27 @@ function restoreChartGroupsFromSettings(s, mainFile) {
     }
 }
 
+// 参照先のSubファイルがまだ無くて復元を繰り延べたクロスファイルCustom RAM
+// [{ name, unit, expr }]。後続ファイルのパース完了時に applyDeferredCrossRAMs が再試行する
+let _deferredCrossRAMs = [];
+
+/** 繰り延べたクロスファイルRAMのうち、参照先Subが揃ったものを追加する */
+async function applyDeferredCrossRAMs() {
+    if (!_deferredCrossRAMs.length) return;
+    const subCount = getSubFileIds().length;
+    const ready = [];
+    _deferredCrossRAMs = _deferredCrossRAMs.filter(r => {
+        const refs = extractCrossRefs(r.expr);
+        const maxRef = refs.length
+            ? Math.max(...refs.map(cr => parseInt(cr.fileKey.slice(1), 10))) : 0;
+        if (maxRef <= subCount) { ready.push(r); return false; }
+        return true;
+    });
+    for (const r of ready) {
+        await addCustomRAM(r.name, r.expr, r.unit);
+    }
+}
+
 async function applyPendingSettings() {
     const s = _pendingSettings;
     if (!s) return;
@@ -6619,14 +7910,25 @@ async function applyPendingSettings() {
         for (const name of s.bitManualOff) _bitManualOff.add(name);
     }
 
-    // Custom RAMを復元（まだ追加されていないもののみ）
+    // Custom RAMを復元（まだ追加されていないもののみ）。
+    // クロスファイル式（s1:Name等）は、参照先のSubがまだ読み込まれていないと
+    // 全NaNになって失敗するため、対象Subのパース完了まで繰り延べる
+    // （複数ファイル同時ドロップやセッション自動復元では、この関数は
+    //  最初のファイルの完了時点で走り、_pendingSettingsを消費するため）
     if (s.customRAMs && s.customRAMs.length) {
         const existingNames = new Set(state.customRAMs.map(c => c.name));
+        const subCount = getSubFileIds().length;
         for (const { name, unit = '', expr } of s.customRAMs) {
-            if (!existingNames.has(name)) {
-                await addCustomRAM(name, expr, unit);
-                existingNames.add(name);
+            if (existingNames.has(name)) continue;
+            const refs = extractCrossRefs(expr);
+            const maxRef = refs.length
+                ? Math.max(...refs.map(cr => parseInt(cr.fileKey.slice(1), 10))) : 0;
+            if (maxRef > subCount) {
+                _deferredCrossRAMs.push({ name, unit, expr });
+                continue;
             }
+            await addCustomRAM(name, expr, unit);
+            existingNames.add(name);
         }
     }
     if (timeScaleChanged && state.customRAMs.length) await recomputeCustomRAMs();
@@ -6679,6 +7981,108 @@ function showPendingFiles(fileInfos) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// セッション自動復元（IndexedDB）
+// パース成功時にFile本体を保存し、次回起動時に自動で再読み込みする。
+// ロール・オフセット・選択チャンネルはlocalStorage設定（fileInfosの名前
+// マッチ → applyPendingSettings）の既存機構がそのまま復元する。
+// IndexedDBが使えない環境（プライベートモード等）では黙って無効になる。
+// ─────────────────────────────────────────────────────────────
+
+const SESSION_DB_NAME = 'csvViewerSession';
+const SESSION_STORE = 'files';
+// 保存合計の上限。IndexedDBのquota超過で書き込みが不安定になる前に打ち切る
+const SESSION_TOTAL_MAX_BYTES = 200 * 1024 * 1024;
+
+function openSessionDB() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+        const req = indexedDB.open(SESSION_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(SESSION_STORE)) {
+                db.createObjectStore(SESSION_STORE, { keyPath: 'id' });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+/** 1トランザクションでストア操作を実行する。fnはstoreを受け取りrequestを返してよい */
+async function sessionStoreRun(mode, fn) {
+    const db = await openSessionDB();
+    try {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(SESSION_STORE, mode);
+            const req = fn(tx.objectStore(SESSION_STORE));
+            tx.oncomplete = () => resolve(req ? req.result : undefined);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        });
+    } finally {
+        db.close();
+    }
+}
+
+/** パース済みファイルの本体を自動復元ストアへ保存する（上限超過分はスキップ+通知） */
+async function sessionSaveFile(fileId, file, name) {
+    if (!(file instanceof Blob)) return;
+    const fileName = name || file.name || 'restored.csv';
+    try {
+        const existing = await sessionStoreRun('readonly', s => s.getAll()) || [];
+        const total = existing.filter(r => r.id !== fileId)
+                              .reduce((acc, r) => acc + (r.size || 0), 0);
+        if (total + file.size > SESSION_TOTAL_MAX_BYTES) {
+            showWarning('セッション保存をスキップしました',
+                `保存容量の上限（${Math.round(SESSION_TOTAL_MAX_BYTES / 1048576)}MB）を超えるため、` +
+                `「${fileName}」は次回の自動復元対象になりません。`);
+            return;
+        }
+        await sessionStoreRun('readwrite', s => s.put({
+            id: fileId, name: fileName, size: file.size, addedAt: Date.now(), blob: file,
+        }));
+    } catch (e) {
+        console.warn('[CSV Viewer] セッション保存に失敗:', e);
+    }
+}
+
+async function sessionDeleteFile(fileId) {
+    try { await sessionStoreRun('readwrite', s => s.delete(fileId)); }
+    catch (e) { console.warn('[CSV Viewer] セッション削除に失敗:', e); }
+}
+
+async function sessionClearFiles() {
+    try { await sessionStoreRun('readwrite', s => s.clear()); }
+    catch (e) { console.warn('[CSV Viewer] セッションクリアに失敗:', e); }
+}
+
+/**
+ * 起動時に前回セッションのファイルを自動復元する。
+ * 復元パースが新しいfileIdで再保存するため、読み出し後にストアを一度空にする
+ * （残したままだと次回リロードで同じファイルが重複する）。
+ */
+async function restoreSessionFiles() {
+    let records;
+    try { records = await sessionStoreRun('readonly', s => s.getAll()); }
+    catch (e) { return; }
+    if (!records || !records.length) return;
+    if (Object.keys(state.files).length > 0) return; // 既にファイルがあるなら何もしない
+
+    records.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    try { await sessionStoreRun('readwrite', s => s.clear()); } catch (e) {}
+
+    for (const r of records) {
+        if (!r.blob) continue;
+        // Blobにはファイル名が無いことがあるためFileへ包み直す
+        const f = (typeof File !== 'undefined' && r.blob instanceof File)
+            ? r.blob : new File([r.blob], r.name || 'restored.csv');
+        parseCSV(f);
+    }
+    showToast('success', '前回のセッションを復元しました',
+        `${records.length} ファイルを再読み込みしています…`);
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialise
 // ─────────────────────────────────────────────────────────────
 
@@ -6691,9 +8095,49 @@ dom.presetSave?.addEventListener('click', saveCurrentPreset);
 dom.presetLoad?.addEventListener('click', loadSelectedPreset);
 dom.presetDelete?.addEventListener('click', deleteSelectedPreset);
 renderPresetSelect();
+renderChannelFavSelect();
 
 // 起動時にlocalStorageから設定を復元
 const _savedSettings = loadSettings();
 if (_savedSettings) {
     applySettings(_savedSettings);
 }
+
+// 設定適用後に前回セッションのファイルを自動復元する
+// （ロール等はapplySettingsが積んだ保留設定がパース完了時に適用する）
+restoreSessionFiles();
+
+// ─────────────────────────────────────────────────────────────
+// テスト/デバッグ用の公開面（M9）
+// ─────────────────────────────────────────────────────────────
+// IIFE化によりapp.js内部はグローバルへ一切漏れない。Playwrightスモークテストと
+// 開発時のコンソールデバッグに必要な最小限だけをこの名前空間で公開する。
+// アプリ本体のコードがこの名前空間に依存してはいけない（公開は一方通行）。
+window.__csvViewerDebug = {
+    state,
+    getChartImageDataURL,
+    buildPresetSettings,
+    saveCurrentPreset,
+    T,
+    renderChart,
+    parseExprToAST,
+    evaluateAST,
+    esc,
+    applyTheme,
+    computeIntervalStats,
+    toggleMeasureMode,
+    extractTrueIntervals,
+    detectEvents,
+    computeCustomExpr,
+    toggleStatsPanel,
+    getVisibleXRange,
+    exportVisibleCSV,
+    saveChannelFavorite,
+    applyChannelFavorite,
+    currentChannelOrder,
+    showDiffCurvesModal,
+    exportReportHTML,
+    showXYPlotModal,
+};
+
+})();
