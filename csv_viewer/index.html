@@ -103,6 +103,20 @@
                         <i class='bx bx-search' aria-hidden="true"></i>
                         <input type="text" id="column-search" placeholder="Search channels..." aria-label="チャンネル検索">
                     </div>
+                    <div class="preset-row">
+                        <select id="channel-fav-select" aria-label="チャンネルセットのお気に入り">
+                            <option value="">Favorites...</option>
+                        </select>
+                        <button id="channel-fav-save" class="btn-secondary btn-icon" title="現在の表示チャンネルの組み合わせをお気に入り保存">
+                            <i class='bx bx-star' aria-hidden="true"></i>
+                        </button>
+                        <button id="channel-fav-apply" class="btn-secondary btn-icon" title="選択したお気に入りを適用（表示チャンネルを置き換え）">
+                            <i class='bx bx-play' aria-hidden="true"></i>
+                        </button>
+                        <button id="channel-fav-delete" class="btn-secondary btn-icon" title="選択したお気に入りを削除">
+                            <i class='bx bx-trash' aria-hidden="true"></i>
+                        </button>
+                    </div>
                     <div id="column-list" class="column-list">
                         <div class="placeholder-text">Upload a CSV to see channels</div>
                     </div>

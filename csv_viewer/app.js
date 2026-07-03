@@ -1158,6 +1158,10 @@ const dom = {
     presetSave: $('preset-save-btn'),
     presetLoad: $('preset-load-btn'),
     presetDelete: $('preset-delete-btn'),
+    favSelect: $('channel-fav-select'),
+    favSave:   $('channel-fav-save'),
+    favApply:  $('channel-fav-apply'),
+    favDelete: $('channel-fav-delete'),
     driveIndexBtn: $('drive-index-btn'),
 };
 
@@ -7104,6 +7108,133 @@ function deleteSelectedPreset() {
     showExportToast('プリセットを削除しました', name);
 }
 
+// ─────────────────────────────────────────────────────────────
+// チャンネルセットのお気に入り（F10）: 表示チャンネルの組み合わせに名前を
+// 付けて保存し、ワンクリックで適用する。設定プリセットの軽量版で、
+// 保存するのはチャンネル名の配列（グリッド表示順）のみ。
+// 独立したlocalStorageキーなので Clear All や設定リセットでは消えない。
+// ─────────────────────────────────────────────────────────────
+
+const FAVORITES_STORAGE_KEY = 'csvViewer_channelFavorites';
+const FAVORITES_MAX_COUNT = 30;
+
+function loadChannelFavorites() {
+    try {
+        const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveChannelFavoritesStore(favs) {
+    try {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favs));
+        return true;
+    } catch (e) {
+        showError('お気に入りを保存できませんでした', e.message || String(e));
+        return false;
+    }
+}
+
+function renderChannelFavSelect() {
+    if (!dom.favSelect) return;
+    const favs = loadChannelFavorites();
+    const selected = dom.favSelect.value;
+    dom.favSelect.innerHTML = '<option value="">Favorites...</option>';
+    Object.keys(favs).sort((a, b) => a.localeCompare(b, 'ja')).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        dom.favSelect.appendChild(opt);
+    });
+    if (selected && favs[selected]) dom.favSelect.value = selected;
+}
+
+/** 現在の表示チャンネル名をグリッド表示順で返す（未描画の選択分は末尾） */
+function currentChannelOrder() {
+    const names = [];
+    for (const g of state.chartGroups) {
+        for (const ch of g.channels) {
+            if (!names.includes(ch.name)) names.push(ch.name);
+        }
+    }
+    for (const n of state.selectedNames) {
+        if (!names.includes(n)) names.push(n);
+    }
+    return names;
+}
+
+function saveChannelFavorite() {
+    const names = currentChannelOrder();
+    if (!names.length) {
+        showWarning('保存する表示チャンネルがありません');
+        return;
+    }
+    const name = prompt('保存するお気に入り名を入力してください', dom.favSelect?.value || '');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    const favs = loadChannelFavorites();
+    const isNew = !Object.prototype.hasOwnProperty.call(favs, trimmed);
+    if (isNew && Object.keys(favs).length >= FAVORITES_MAX_COUNT) {
+        showWarning(`お気に入りは最大${FAVORITES_MAX_COUNT}件までです`,
+            '不要なお気に入りを削除してから保存してください。');
+        return;
+    }
+    favs[trimmed] = names;
+    if (!saveChannelFavoritesStore(favs)) return;
+    renderChannelFavSelect();
+    dom.favSelect.value = trimmed;
+    showExportToast('お気に入りを保存しました', `${trimmed}（${names.length}チャンネル）`);
+}
+
+function applyChannelFavorite() {
+    const key = dom.favSelect?.value;
+    if (!key) { showWarning('お気に入りが選択されていません'); return; }
+    const favs = loadChannelFavorites();
+    const names = favs[key];
+    if (!Array.isArray(names)) {
+        showWarning('お気に入りが見つかりません', key);
+        renderChannelFavSelect();
+        return;
+    }
+    const mainFile = getMainFile();
+    if (!mainFile) { showWarning('ファイルを読み込んでください'); return; }
+
+    const colNames = new Set(mainFile.columns.map(c => c.name));
+    const found = names.filter(n => colNames.has(n));
+    const missing = names.filter(n => !colNames.has(n));
+    if (!found.length) {
+        showWarning('お気に入りのチャンネルがMainファイルに1つもありません', names.join(', '));
+        return;
+    }
+
+    // 表示チャンネルを丸ごと置き換える（保存時のグリッド順で単独チャート化）
+    state.selectedNames = new Set(found);
+    state.chartGroups = [];
+    found.forEach(n => addStandaloneChart(n));
+    renderColumnList();
+    ensureColumnsAndRender();
+    saveSettings();
+    showExportToast('お気に入りを適用しました', key
+        + (missing.length ? `（見つからないチャンネル: ${missing.join(', ')}）` : ''));
+}
+
+function deleteChannelFavorite() {
+    const key = dom.favSelect?.value;
+    if (!key) { showWarning('削除するお気に入りが選択されていません'); return; }
+    const favs = loadChannelFavorites();
+    delete favs[key];
+    saveChannelFavoritesStore(favs);
+    renderChannelFavSelect();
+    showExportToast('お気に入りを削除しました', key);
+}
+
+dom.favSave?.addEventListener('click', saveChannelFavorite);
+dom.favApply?.addEventListener('click', applyChannelFavorite);
+dom.favDelete?.addEventListener('click', deleteChannelFavorite);
+
 /**
  * 設定をJSONファイルとしてダウンロードする。
  */
@@ -7561,6 +7692,7 @@ dom.presetSave?.addEventListener('click', saveCurrentPreset);
 dom.presetLoad?.addEventListener('click', loadSelectedPreset);
 dom.presetDelete?.addEventListener('click', deleteSelectedPreset);
 renderPresetSelect();
+renderChannelFavSelect();
 
 // 起動時にlocalStorageから設定を復元
 const _savedSettings = loadSettings();
@@ -7597,6 +7729,9 @@ window.__csvViewerDebug = {
     toggleStatsPanel,
     getVisibleXRange,
     exportVisibleCSV,
+    saveChannelFavorite,
+    applyChannelFavorite,
+    currentChannelOrder,
 };
 
 })();
