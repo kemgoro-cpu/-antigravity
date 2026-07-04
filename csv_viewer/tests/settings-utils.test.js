@@ -92,6 +92,31 @@ function testInputNotMutated() {
     assert.equal(input._version, undefined);
 }
 
+// サイドバー折りたたみ状態(sidebarCollapsed, v5で追加)のマイグレーション
+function testSidebarCollapsedMigration() {
+    // v4(sidebarCollapsedなし)は現行バージョンへ引き上げられること
+    const fromV4 = CSVSettings.migrateSettings({ _version: 4, selectedNames: ['A'] });
+    assert.equal(fromV4.ok, true);
+    assert.equal(fromV4.reason, 'migrated');
+    assert.equal(fromV4.settings._version, CSVSettings.SETTINGS_VERSION);
+
+    // オブジェクトであるべきsidebarCollapsedが壊れた型なら削除されること
+    const broken = CSVSettings.migrateSettings({
+        _version: CSVSettings.SETTINGS_VERSION,
+        sidebarCollapsed: 'broken',
+    });
+    assert.equal(broken.ok, true);
+    assert.equal(broken.settings.sidebarCollapsed, undefined);
+
+    // 正常なsidebarCollapsedはそのまま残ること
+    const ok = CSVSettings.migrateSettings({
+        _version: CSVSettings.SETTINGS_VERSION,
+        sidebarCollapsed: { files: true, channels: false },
+    });
+    assert.equal(ok.reason, 'current');
+    assert.deepEqual(ok.settings.sidebarCollapsed, { files: true, channels: false });
+}
+
 testInvalidInput();
 testNewerVersionRejected();
 testOldFormatMigrated();
@@ -99,5 +124,6 @@ testBrokenKeysDropped();
 testDriveIndexCycleIdMigrated();
 testLegacyCycleIdConsistency();
 testInputNotMutated();
+testSidebarCollapsedMigration();
 
 console.log('settings-utils tests passed');

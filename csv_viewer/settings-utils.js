@@ -5,7 +5,7 @@
     'use strict';
 
     // 現行の設定スキーマバージョン(app.jsのsaveSettingsが書き込む値と一致させること)
-    const SETTINGS_VERSION = 4;
+    const SETTINGS_VERSION = 5;
 
     // 配列であるべきキー(違う型が入っていたら該当キーだけ捨てる)
     const ARRAY_KEYS = ['fileInfos', 'selectedNames', 'customRAMs', 'chartGroups', 'bitManualOff', 'mergedGroups', 'customModes'];
@@ -22,7 +22,7 @@
         return root.DriveIndex.LEGACY_CYCLE_ID;
     }
     // プレーンオブジェクトであるべきキー
-    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights'];
+    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights', 'sidebarCollapsed'];
 
     /**
      * 保存済み設定を現行スキーマに揃える。

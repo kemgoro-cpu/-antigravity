@@ -1096,6 +1096,7 @@ const state = {
     lineWidth:         1.0,    // 線の太さ（一括のデフォルト値）
     channelLineWidths: {},     // チャンネルごとの太さ上書き { channelName: width }。未指定はlineWidthを使う
     showMarkers:       false,  // データ点マーカー（丸印）を表示するか（全体ON/OFF）
+    sidebarCollapsed:  {},     // サイドバーの折りたたみ状態 { sectionId: boolean }
     // ドライビングインデックス（モード走行の走行品質指標＋燃費）
     driveIndex: {
         // 使用チャンネル名（自動検出＋手動上書き）。
@@ -6792,12 +6793,14 @@ setupToolbarDropdown($('view-menu-btn'), $('view-menu-panel'));
 setupToolbarDropdown($('export-menu-btn'), $('export-menu-panel'));
 
 // ─────────────────────────────────────────────────────────────
-// セクション折りたたみ（Files, Settings, Custom RAM）
+// セクション折りたたみ（Files, Settings, Custom RAM, Events, Channels）
 // ─────────────────────────────────────────────────────────────
 
 (function setupCollapsibleSections() {
-    // Channelsセクション以外のcontrol-groupを折りたたみ可能にする
-    const sections = document.querySelectorAll('.sidebar-content > .control-group:not(.active-columns-group)');
+    // Channelsを含む全control-groupを折りたたみ可能にする。
+    // Channelsは.active-columns-group側のCSS(min-height:180px)で
+    // 展開時に画面下へ押し出されないようになっているため折りたたみ対象に含めてよい
+    const sections = document.querySelectorAll('.sidebar-content .control-group');
 
     sections.forEach(section => {
         section.classList.add('collapsible');
@@ -6810,9 +6813,33 @@ setupToolbarDropdown($('export-menu-btn'), $('export-menu-panel'));
         arrow.className = 'bx bx-chevron-down collapse-arrow';
         heading.appendChild(arrow);
 
-        // h3をクリックで折りたたみ/展開を切り替え
-        heading.addEventListener('click', () => {
-            section.classList.toggle('collapsed');
+        const sectionId = section.dataset.section;
+        heading.setAttribute('role', 'button');
+        heading.setAttribute('tabindex', '0');
+        heading.setAttribute('aria-expanded', 'true');
+
+        function toggle() {
+            const collapsed = section.classList.toggle('collapsed');
+            heading.setAttribute('aria-expanded', String(!collapsed));
+            if (sectionId) {
+                state.sidebarCollapsed[sectionId] = collapsed;
+                saveSettings('sidebarCollapse');
+            }
+        }
+
+        // h3をクリックで折りたたみ/展開を切り替え。
+        // ただしh3内の独自クリック処理を持つ子要素（Custom RAMのヘルプアイコン等）は
+        // 二重発火を避けるため対象から除外する
+        heading.addEventListener('click', e => {
+            if (e.target.closest('#custom-ram-help, #channel-source-label')) return;
+            toggle();
+        });
+        // キーボード操作（Enter/Space）にも対応
+        heading.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggle();
+            }
         });
     });
 })();
@@ -7222,7 +7249,7 @@ document.addEventListener('visibilitychange', () => {
 function collectSettings() {
     const sidebar = document.querySelector('.sidebar');
     return {
-        _version: 4,
+        _version: 5,
         // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
         fileInfos: Object.values(state.files).map(f => ({
             name: f.name,
@@ -7263,6 +7290,8 @@ function collectSettings() {
         showMarkers: state.showMarkers,
         // サイドバー幅
         sidebarWidth: sidebar ? sidebar.offsetWidth : null,
+        // サイドバー各セクションの折りたたみ状態（ローカルUI状態。エクスポートJSONには含めない）
+        sidebarCollapsed: { ...state.sidebarCollapsed },
         // Y軸範囲のユーザー設定
         yRanges: state.yRanges,
         // 単色モード設定
@@ -7910,6 +7939,18 @@ function applySettings(rawSettings) {
             const clampedW = Math.max(200, Math.min(window.innerWidth * 0.6, s.sidebarWidth));
             sidebar.style.width = clampedW + 'px';
         }
+    }
+
+    // サイドバー各セクションの折りたたみ状態を復元
+    // （setupCollapsibleSectionsはスクリプト読込時のIIFEで既にh3へclass/arrowを付与済みのため、
+    //   ここでは.collapsedクラスとaria-expandedを反映するだけでよい）
+    if (s.sidebarCollapsed && typeof s.sidebarCollapsed === 'object') {
+        state.sidebarCollapsed = { ...s.sidebarCollapsed };
+        document.querySelectorAll('.sidebar-content .control-group[data-section]').forEach(section => {
+            const collapsed = !!state.sidebarCollapsed[section.dataset.section];
+            section.classList.toggle('collapsed', collapsed);
+            section.querySelector('h3')?.setAttribute('aria-expanded', String(!collapsed));
+        });
     }
 
     // Y軸範囲を復元。インポートJSON由来のオブジェクトを参照代入すると以後の編集が

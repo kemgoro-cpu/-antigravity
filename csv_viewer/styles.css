@@ -137,8 +137,19 @@ body {
 
 .sidebar-content {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* Files/Settings/Custom RAM/Eventsをまとめて内部スクロールさせる。
+   これによりChannelsセクションが画面下に押し出されず、常に一定の高さを確保できる */
+.sidebar-upper {
+    overflow-y: auto;
+    flex: 0 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 18px;
@@ -188,10 +199,14 @@ body {
 }
 
 .active-columns-group {
-    flex: 1;
-    min-height: 0;
+    flex: 1 1 auto;
+    min-height: 180px;  /* Channelsの最低表示高さを保証（画面下に押し出されないように） */
     display: flex;
     flex-direction: column;
+}
+.active-columns-group.collapsed {
+    flex: 0 0 auto;
+    min-height: 0;
 }
 
 .channel-source-label {
