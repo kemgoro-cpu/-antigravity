@@ -829,6 +829,7 @@ function applyTheme(theme) {
         btn.title = state.theme === 'light' ? 'ダークテーマに切替' : 'ライトテーマに切替';
     }
     if (state.chart) renderChart();
+    if (_xyPanel) renderXY(); // 軸色はT.*参照なので再描画するだけで良い
 }
 
 // Chart layout constants (px)
@@ -2611,7 +2612,13 @@ function updateUI() {
 
     const hasFiles = Object.keys(state.files).length > 0;
     dom.clearBtn.disabled = !hasFiles;
-    if (dom.xyBtn) dom.xyBtn.disabled = !getMainFile();
+    const xyMainFile = getMainFile();
+    if (dom.xyBtn) dom.xyBtn.disabled = !xyMainFile;
+    // メインファイル消失→パネルを閉じる。ファイル増減→optionリストを再構築して再描画
+    if (_xyPanel) {
+        if (!xyMainFile) destroyXYPanel();
+        else refreshXYPanelOptions(xyMainFile);
+    }
 
     const hasSub = getSubFileIds().length > 0;
     if (dom.shiftBtn) dom.shiftBtn.disabled = !hasSub;
@@ -7349,135 +7356,351 @@ function showDiffCurvesModal() {
 dom.diffBtn?.addEventListener('click', showDiffCurvesModal);
 
 // ─────────────────────────────────────────────────────────────
-// XYプロット（F7）: 任意チャンネル同士の散布図をモーダルで表示する。
-// main/subを重ね描き（ファイル色）。X/Yは同一ファイル内のペアなので
-// タイムシフトは「表示中の時間範囲のみ」の絞り込みにだけ関係する。
+// XYプロット（F7）: 任意チャンネル同士の散布図をドラッグ可能な
+// フローティングパネルで表示する。main/subを重ね描き（ファイル色）。
+// X/Yは同一ファイル内のペアなので、タイムシフトは「表示中の時間範囲のみ」
+// の絞り込みにだけ関係する。
+//
+// シングルトン + 決定的クリーンアップ: 開いているパネルは常に高々1つ
+// （_xyPanel）。閉じる経路（×ボタン・Esc・メインファイル消失）はすべて
+// destroyXYPanel() に集約し、外部オブジェクト（document等）に張った
+// リスナーは必ず cleanups[] に積んで解除する（MutationObserver方式は
+// 解除漏れの温床になるため使わない）。
 // ─────────────────────────────────────────────────────────────
 
 // 散布図の最大点数。超える場合は等間隔に間引く（描画の固まり防止）
 const XY_MAX_POINTS = 50000;
 
-async function showXYPlotModal() {
-    const mainFile = getMainFile();
-    if (!mainFile) return;
+// 開いているXYパネルの状態。null=非表示。
+// { el, chart, controls, fileRefs, mapData, cleanups[] }
+let _xyPanel = null;
 
-    const colOptions = mainFile.columns
+/** メインファイルの列からX/Yセレクトのoption HTMLを組み立てる */
+function buildXYColumnOptions(mainFile) {
+    return mainFile.columns
         .map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.unit ? ` [${esc(c.unit)}]` : ''}</option>`)
         .join('');
+}
+
+/** パネル本体のinnerHTML。要素はopenXYPlotPanel側でquerySelectorして拾う */
+function buildXYPanelHTML(colOptions) {
+    return `
+        <div class="xy-panel-header" id="xy-panel-header">
+            <span class="xy-panel-title">XYプロット</span>
+            <button class="xy-panel-close" id="xy-panel-close" title="閉じる" aria-label="閉じる"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="xy-controls">
+            <label>X: <select id="xy-x-select" aria-label="X軸チャンネル">${colOptions}</select></label>
+            <button id="xy-swap-btn" class="btn-secondary btn-icon" title="X⇄Yを入替" aria-label="X軸とY軸を入替"><i class='bx bx-transfer-alt'></i></button>
+            <label>Y: <select id="xy-y-select" aria-label="Y軸チャンネル">${colOptions}</select></label>
+            <label class="xy-visible-label"><input type="checkbox" id="xy-visible-only" checked> 表示中の時間範囲のみ</label>
+            <label class="xy-visible-label"><input type="checkbox" id="xy-gradient"> 時間グラデーション</label>
+            <label class="xy-visible-label"><input type="checkbox" id="xy-trajectory"> 軌跡ライン</label>
+            <label class="xy-visible-label"><input type="checkbox" id="xy-regression"> 回帰直線</label>
+            <button id="xy-map-load-btn" class="btn-secondary">マップ読込</button>
+            <button id="xy-map-clear-btn" class="btn-secondary hidden">マップ解除</button>
+            <input type="file" id="xy-map-input" class="hidden" accept=".csv">
+        </div>
+        <div id="xy-readout" class="xy-readout"></div>
+        <div id="xy-chart" class="xy-chart"></div>
+    `;
+}
+
+/** パネルの矩形をビューポート内に収まるようクランプする（ドラッグ・リサイズ・位置復元で共用） */
+function xyClampRect(left, top, width, height) {
+    const w = Math.min(width,  window.innerWidth  - 16);
+    const h = Math.min(height, window.innerHeight - 16);
+    const l = Math.min(Math.max(left, 0), Math.max(0, window.innerWidth  - w));
+    const t = Math.min(Math.max(top,  0), Math.max(0, window.innerHeight - h));
+    return { left: l, top: t, width: w, height: h };
+}
+
+/** パネルのトグル開閉（ツールバーのXYボタン用） */
+function toggleXYPlotPanel() {
+    if (_xyPanel) destroyXYPanel();
+    else openXYPlotPanel();
+}
+
+/**
+ * パネルを閉じて後始末する。どの経路（×ボタン・Esc・メインファイル消失）
+ * から呼ばれても必ずこの1つを通す。先に _xyPanel を null化してから
+ * cleanups→dispose→remove の順で実行することで、cleanups内のイベントで
+ * renderXY等が誤って再入するのを防ぐ。
+ */
+function destroyXYPanel() {
+    if (!_xyPanel) return;
+    const panel = _xyPanel;
+    _xyPanel = null;
+    for (const fn of panel.cleanups) {
+        try { fn(); } catch (e) { console.warn('[CSV Viewer] XYパネルの後始末に失敗:', e); }
+    }
+    panel.chart.dispose();
+    panel.el.remove();
+}
+
+/** パネルヘッダーのドラッグ移動（pointer capture + rAF間引き、ビューポートにクランプ） */
+function setupXYPanelDrag(panel) {
+    const header = panel.controls.header;
+    let drag = null;
+    let rafId = null;
+
+    const onDown = (e) => {
+        if (e.button !== 0 || e.target.closest('#xy-panel-close')) return;
+        const rect = panel.el.getBoundingClientRect();
+        drag = { startX: e.clientX, startY: e.clientY, startLeft: rect.left, startTop: rect.top };
+        header.setPointerCapture(e.pointerId);
+    };
+    const onMove = (e) => {
+        if (!drag || rafId !== null) return;
+        rafId = requestAnimationFrame(() => {
+            rafId = null;
+            if (!drag) return;
+            const rect = panel.el.getBoundingClientRect();
+            const { left, top } = xyClampRect(
+                drag.startLeft + (e.clientX - drag.startX),
+                drag.startTop  + (e.clientY - drag.startY),
+                rect.width, rect.height
+            );
+            panel.el.style.left = `${left}px`;
+            panel.el.style.top  = `${top}px`;
+        });
+    };
+    const onUp = (e) => {
+        if (!drag) return;
+        drag = null;
+        try { header.releasePointerCapture(e.pointerId); } catch (err) { /* 既に解放済みなら無視 */ }
+    };
+
+    header.addEventListener('pointerdown', onDown);
+    header.addEventListener('pointermove', onMove);
+    header.addEventListener('pointerup', onUp);
+    panel.cleanups.push(() => {
+        header.removeEventListener('pointerdown', onDown);
+        header.removeEventListener('pointermove', onMove);
+        header.removeEventListener('pointerup', onUp);
+        if (rafId !== null) cancelAnimationFrame(rafId);
+    });
+}
+
+/** CSS resize:both によるコーナーリサイズをResizeObserverで検知し、rAF間引きでchart.resize()する */
+function setupXYPanelResize(panel) {
+    let rafId = null;
+    const ro = new ResizeObserver(() => {
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(() => {
+            rafId = null;
+            if (!_xyPanel || _xyPanel !== panel) return;
+            // ツールチップ表示中のresizeでエラーになるため先にhideTip（windowリサイズと同パターン）
+            panel.chart.dispatchAction({ type: 'hideTip' });
+            panel.chart.resize();
+        });
+    });
+    ro.observe(panel.el);
+    panel.cleanups.push(() => {
+        ro.disconnect();
+        if (rafId !== null) cancelAnimationFrame(rafId);
+    });
+}
+
+/**
+ * Escキーでパネルを閉じる（バブル相・フォーカストラップ無し=非モーダルのため）。
+ * 本物のモーダル（#app-modal-overlay）が開いている間は無視し、そちらのEscと
+ * 競合しないようにする。パネル内SELECTのドロップダウンを閉じるEscとの
+ * 誤爆防止のため、ターゲットがSELECTのときも無視する。
+ */
+function setupXYPanelEsc(panel) {
+    const handler = (e) => {
+        if (e.key !== 'Escape') return;
+        if (document.getElementById('app-modal-overlay')) return;
+        if (e.target instanceof Element && e.target.tagName === 'SELECT' && panel.el.contains(e.target)) return;
+        destroyXYPanel();
+    };
+    document.addEventListener('keydown', handler);
+    panel.cleanups.push(() => document.removeEventListener('keydown', handler));
+}
+
+/**
+ * 系列組み立て。ファイルごとにX/Y列を解決してscatter系列を作る（項目5〜7で
+ * グラデーション/軌跡/回帰/等高線を合成できるよう、ここで組み立てを完結させる）。
+ * @returns {{series: object[], fileRefs: object[]}}
+ *   fileRefs はカーソル連動ハイライト（項目4）用に、範囲フィルタ前のフル配列を保持する
+ *   （ハイライト精度が間引きに左右されないようにするため）。
+ */
+function buildXYSeries(xName, yName, range) {
+    const series = [];
+    const fileRefs = [];
+    for (const [fid, f] of Object.entries(state.files)) {
+        const xc = resolveColumnForFile(f, xName);
+        const yc = resolveColumnForFile(f, yName);
+        if (!xc || !yc) continue;
+        const xv = f.colData[xc.id], yv = f.colData[yc.id];
+        if (!xv || !yv) continue;
+
+        const offset = f.offset || 0;
+        const t = f.timeData;
+        fileRefs.push({ fid, name: f.shortName, t, xv, yv, offset, color: state.fileColors[fid] || undefined });
+
+        const pts = [];
+        for (let i = 0; i < t.length; i++) {
+            if (range && (t[i] + offset < range[0] || t[i] + offset > range[1])) continue;
+            const x = xv[i], y = yv[i];
+            if (Number.isNaN(x) || Number.isNaN(y)) continue;
+            pts.push([x, y]);
+        }
+        // 点数上限: 等間隔に間引く
+        let data = pts;
+        if (pts.length > XY_MAX_POINTS) {
+            const stride = Math.ceil(pts.length / XY_MAX_POINTS);
+            data = [];
+            for (let i = 0; i < pts.length; i += stride) data.push(pts[i]);
+        }
+        series.push({
+            name: f.shortName, type: 'scatter',
+            data, symbolSize: 2.5, large: true, largeThreshold: 5000,
+            itemStyle: { color: state.fileColors[fid] || undefined, opacity: 0.75 },
+        });
+    }
+    return { series, fileRefs };
+}
+
+/** X/Yセレクトの現在値・チェックボックス状態からチャートを再描画する */
+async function renderXY() {
+    if (!_xyPanel) return;
+    const mainFile = getMainFile();
+    if (!mainFile) { destroyXYPanel(); return; }
+
+    const { chart, controls } = _xyPanel;
+    const xName = controls.xSel.value, yName = controls.ySel.value;
+    if (!xName || !yName) return;
+    const onlyVisible = controls.visChk.checked;
+    const range = onlyVisible ? getVisibleXRange() : null;
+
+    // 対象チャンネルを全ファイルでロードしてから系列を組み立てる
+    const loads = [];
+    for (const [fid, f] of Object.entries(state.files)) {
+        const names = [xName, yName].filter(n => resolveColumnForFile(f, n));
+        if (names.length) loads.push(loadColumnsForFile(fid, names));
+    }
+    try { await Promise.all(loads); } catch (e) { /* 欠けた列は下でスキップされる */ }
+    if (!_xyPanel) return; // ロード待ち中にパネルが閉じられた
+
+    const built = buildXYSeries(xName, yName, range);
+    _xyPanel.fileRefs = built.fileRefs;
+    const series = built.series;
+
+    const axisStyle = {
+        nameTextStyle: { color: T.dim },
+        axisLabel: { color: T.dim, formatter: CSVChartOptions.formatYAxisValue },
+        axisLine: { lineStyle: { color: T.axis } },
+        splitLine: { lineStyle: { color: T.grid } },
+    };
+    const unitOf = n => mainFile.columns.find(c => c.name === n)?.unit || '';
+    chart.setOption({
+        animation: false,
+        backgroundColor: 'transparent',
+        legend: { show: series.length > 1, textStyle: { color: T.dim }, top: 0 },
+        grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44 },
+        tooltip: {
+            trigger: 'item',
+            formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
+        },
+        xAxis: { type: 'value', name: `${xName}${unitOf(xName) ? ` (${unitOf(xName)})` : ''}`,
+                 nameLocation: 'middle', nameGap: 28, scale: true, ...axisStyle },
+        yAxis: { type: 'value', name: `${yName}${unitOf(yName) ? ` (${unitOf(yName)})` : ''}`,
+                 scale: true, ...axisStyle },
+        dataZoom: [
+            { type: 'inside', xAxisIndex: 0 },
+            { type: 'inside', yAxisIndex: 0 },
+        ],
+        series,
+    }, { notMerge: true });
+}
+
+/** ファイル構成変更時、X/Yセレクトのoptionリストを再構築して再描画する（現在値は可能なら維持） */
+function refreshXYPanelOptions(mainFile) {
+    if (!_xyPanel) return;
+    const { controls } = _xyPanel;
+    const curX = controls.xSel.value, curY = controls.ySel.value;
+    const colOptions = buildXYColumnOptions(mainFile);
+    controls.xSel.innerHTML = colOptions;
+    controls.ySel.innerHTML = colOptions;
+    const hasX = [...controls.xSel.options].some(o => o.value === curX);
+    const hasY = [...controls.ySel.options].some(o => o.value === curY);
+    controls.xSel.value = hasX ? curX : (mainFile.columns[0]?.name || '');
+    controls.ySel.value = hasY ? curY : (mainFile.columns[1]?.name || controls.xSel.value);
+    renderXY();
+}
+
+/** X⇄Yのチャンネルを入れ替える */
+function swapXYAxes() {
+    if (!_xyPanel) return;
+    const { xSel, ySel } = _xyPanel.controls;
+    const tmp = xSel.value;
+    xSel.value = ySel.value;
+    ySel.value = tmp;
+    renderXY();
+}
+
+/** ドラッグ可能フローティングパネルを開く（既に開いていれば作り直す） */
+async function openXYPlotPanel() {
+    const mainFile = getMainFile();
+    if (!mainFile) return;
+    if (_xyPanel) destroyXYPanel();
+
+    const el = document.createElement('div');
+    el.className = 'xy-panel';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'XYプロット');
+    el.innerHTML = buildXYPanelHTML(buildXYColumnOptions(mainFile));
+    document.body.appendChild(el);
+
+    // 初期位置: 右上寄り。ビューポートにクランプ（項目3で保存位置の復元に置き換わる）
+    const rect = xyClampRect(window.innerWidth - 664, 72, 640, 520);
+    el.style.left   = `${rect.left}px`;
+    el.style.top    = `${rect.top}px`;
+    el.style.width  = `${rect.width}px`;
+    el.style.height = `${rect.height}px`;
+
+    const chart = echarts.init(el.querySelector('#xy-chart'), null, { renderer: 'canvas' });
+    const controls = {
+        header:  el.querySelector('#xy-panel-header'),
+        closeBtn: el.querySelector('#xy-panel-close'),
+        xSel:    el.querySelector('#xy-x-select'),
+        ySel:    el.querySelector('#xy-y-select'),
+        swapBtn: el.querySelector('#xy-swap-btn'),
+        visChk:  el.querySelector('#xy-visible-only'),
+        gradChk: el.querySelector('#xy-gradient'),
+        trajChk: el.querySelector('#xy-trajectory'),
+        regChk:  el.querySelector('#xy-regression'),
+        mapLoadBtn:  el.querySelector('#xy-map-load-btn'),
+        mapClearBtn: el.querySelector('#xy-map-clear-btn'),
+        mapInput:    el.querySelector('#xy-map-input'),
+        readout: el.querySelector('#xy-readout'),
+    };
+
+    _xyPanel = { el, chart, controls, fileRefs: [], mapData: null, cleanups: [] };
+
     // 既定値: 表示中チャンネルの先頭2つ（無ければ列の先頭2つ）
     const displayed = currentChannelOrder();
     const defX = displayed[0] || mainFile.columns[0]?.name || '';
     const defY = displayed[1] || mainFile.columns[1]?.name || defX;
+    if ([...controls.xSel.options].some(o => o.value === defX)) controls.xSel.value = defX;
+    if ([...controls.ySel.options].some(o => o.value === defY)) controls.ySel.value = defY;
 
-    const html =
-        `<h3 id="xy-modal-title" style="margin:0 0 8px;color:var(--accent-soft);">XYプロット</h3>`
-        + `<div class="xy-controls">`
-        + `<label>X: <select id="xy-x-select" aria-label="X軸チャンネル">${colOptions}</select></label>`
-        + `<label>Y: <select id="xy-y-select" aria-label="Y軸チャンネル">${colOptions}</select></label>`
-        + `<label class="xy-visible-label"><input type="checkbox" id="xy-visible-only" checked> 表示中の時間範囲のみ</label>`
-        + `</div>`
-        + `<div id="xy-chart" class="xy-chart"></div>`
-        + MODAL_CLOSE_FOOTER;
+    setupXYPanelDrag(_xyPanel);
+    setupXYPanelResize(_xyPanel);
+    setupXYPanelEsc(_xyPanel);
 
-    const { overlay, modal, close } = createModal(html, { modalClass: 'xy-modal', labelledBy: 'xy-modal-title' });
-    modal.querySelector('.modal-close-btn').addEventListener('click', close);
+    controls.closeBtn.addEventListener('click', destroyXYPanel);
+    controls.xSel.addEventListener('change', () => renderXY());
+    controls.ySel.addEventListener('change', () => renderXY());
+    controls.swapBtn.addEventListener('click', swapXYAxes);
+    controls.visChk.addEventListener('change', () => renderXY());
 
-    const xSel = modal.querySelector('#xy-x-select');
-    const ySel = modal.querySelector('#xy-y-select');
-    const visChk = modal.querySelector('#xy-visible-only');
-    if ([...xSel.options].some(o => o.value === defX)) xSel.value = defX;
-    if ([...ySel.options].some(o => o.value === defY)) ySel.value = defY;
-
-    const chart = echarts.init(modal.querySelector('#xy-chart'), null, { renderer: 'canvas' });
-    // モーダルがどの経路で閉じても（Esc・オーバーレイクリック含む）チャートを破棄する
-    const obs = new MutationObserver(() => {
-        if (!document.body.contains(overlay)) {
-            chart.dispose();
-            obs.disconnect();
-        }
-    });
-    obs.observe(document.body, { childList: true });
-
-    async function renderXY() {
-        const xName = xSel.value, yName = ySel.value;
-        if (!xName || !yName) return;
-        const onlyVisible = visChk.checked;
-        const range = onlyVisible ? getVisibleXRange() : null;
-
-        // 対象チャンネルを全ファイルでロードしてから系列を組み立てる
-        const loads = [];
-        for (const [fid, f] of Object.entries(state.files)) {
-            const names = [xName, yName].filter(n => resolveColumnForFile(f, n));
-            if (names.length) loads.push(loadColumnsForFile(fid, names));
-        }
-        try { await Promise.all(loads); } catch (e) { /* 欠けた列は下でスキップされる */ }
-
-        const series = [];
-        for (const [fid, f] of Object.entries(state.files)) {
-            const xc = resolveColumnForFile(f, xName);
-            const yc = resolveColumnForFile(f, yName);
-            if (!xc || !yc) continue;
-            const xv = f.colData[xc.id], yv = f.colData[yc.id];
-            if (!xv || !yv) continue;
-
-            const offset = f.offset || 0;
-            const t = f.timeData;
-            const pts = [];
-            for (let i = 0; i < t.length; i++) {
-                if (range && (t[i] + offset < range[0] || t[i] + offset > range[1])) continue;
-                const x = xv[i], y = yv[i];
-                if (Number.isNaN(x) || Number.isNaN(y)) continue;
-                pts.push([x, y]);
-            }
-            // 点数上限: 等間隔に間引く
-            let data = pts;
-            if (pts.length > XY_MAX_POINTS) {
-                const stride = Math.ceil(pts.length / XY_MAX_POINTS);
-                data = [];
-                for (let i = 0; i < pts.length; i += stride) data.push(pts[i]);
-            }
-            series.push({
-                name: f.shortName, type: 'scatter',
-                data, symbolSize: 2.5, large: true, largeThreshold: 5000,
-                itemStyle: { color: state.fileColors[fid] || undefined, opacity: 0.75 },
-            });
-        }
-
-        const axisStyle = {
-            nameTextStyle: { color: T.dim },
-            axisLabel: { color: T.dim, formatter: CSVChartOptions.formatYAxisValue },
-            axisLine: { lineStyle: { color: T.axis } },
-            splitLine: { lineStyle: { color: T.grid } },
-        };
-        const unitOf = n => mainFile.columns.find(c => c.name === n)?.unit || '';
-        chart.setOption({
-            animation: false,
-            backgroundColor: 'transparent',
-            legend: { show: series.length > 1, textStyle: { color: T.dim }, top: 0 },
-            grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44 },
-            tooltip: {
-                trigger: 'item',
-                formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
-            },
-            xAxis: { type: 'value', name: `${xName}${unitOf(xName) ? ` (${unitOf(xName)})` : ''}`,
-                     nameLocation: 'middle', nameGap: 28, scale: true, ...axisStyle },
-            yAxis: { type: 'value', name: `${yName}${unitOf(yName) ? ` (${unitOf(yName)})` : ''}`,
-                     scale: true, ...axisStyle },
-            dataZoom: [
-                { type: 'inside', xAxisIndex: 0 },
-                { type: 'inside', yAxisIndex: 0 },
-            ],
-            series,
-        }, { notMerge: true });
-    }
-
-    xSel.addEventListener('change', renderXY);
-    ySel.addEventListener('change', renderXY);
-    visChk.addEventListener('change', renderXY);
     await renderXY();
 }
 
-dom.xyBtn?.addEventListener('click', showXYPlotModal);
+dom.xyBtn?.addEventListener('click', toggleXYPlotPanel);
 
 // ─────────────────────────────────────────────────────────────
 // チャンネルセットのお気に入り（F10）: 表示チャンネルの組み合わせに名前を
@@ -8137,7 +8360,8 @@ window.__csvViewerDebug = {
     currentChannelOrder,
     showDiffCurvesModal,
     exportReportHTML,
-    showXYPlotModal,
+    toggleXYPlotPanel,
+    buildXYSeries,
 };
 
 })();
