@@ -237,6 +237,114 @@ const MODAL_CLOSE_FOOTER =
     + 'style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:13px;">閉じる</button></div>';
 
 // ─────────────────────────────────────────────────────────────
+// Toolbar dropdown（表示▾ / エクスポート▾メニュー）
+// ─────────────────────────────────────────────────────────────
+
+// 現在開いているドロップダウンのclose関数（同時に1つだけ開く）
+let _openToolbarMenuClose = null;
+
+function isToolbarMenuOpen() {
+    return !!_openToolbarMenuClose;
+}
+
+/**
+ * ツールバーのドロップダウン（表示▾ / エクスポート▾）共通セットアップ。
+ * .toolbar は overflow-x:auto でクリップするため、パネルは position:fixed で
+ * トリガーのgetBoundingClientRectから毎回位置を算出する。
+ * role="menu" のパネル（エクスポート）は項目クリックで閉じる。
+ * それ以外（表示▾、フォームコントロール入り）は操作しても閉じない。
+ * @param {HTMLElement} trigger
+ * @param {HTMLElement} panel
+ */
+function setupToolbarDropdown(trigger, panel) {
+    if (!trigger || !panel) return;
+    const isMenu = panel.getAttribute('role') === 'menu';
+    let outsideClickHandler = null;
+    let keyHandler = null;
+    let resizeHandler = null;
+
+    function getFocusableItems() {
+        return Array.from(panel.querySelectorAll('button, select, input'))
+            .filter(el => !el.disabled && el.offsetParent !== null);
+    }
+
+    function positionPanel() {
+        const r = trigger.getBoundingClientRect();
+        panel.style.top = (r.bottom + 4) + 'px';
+        panel.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+        panel.style.left = 'auto';
+    }
+
+    function close() {
+        panel.classList.add('hidden');
+        trigger.setAttribute('aria-expanded', 'false');
+        if (outsideClickHandler) { document.removeEventListener('mousedown', outsideClickHandler); outsideClickHandler = null; }
+        if (keyHandler) { document.removeEventListener('keydown', keyHandler, true); keyHandler = null; }
+        if (resizeHandler) { window.removeEventListener('resize', resizeHandler); resizeHandler = null; }
+        if (_openToolbarMenuClose === close) _openToolbarMenuClose = null;
+    }
+
+    function open() {
+        // 他に開いているドロップダウンがあれば先に閉じる
+        if (_openToolbarMenuClose) _openToolbarMenuClose();
+
+        positionPanel();
+        panel.classList.remove('hidden');
+        trigger.setAttribute('aria-expanded', 'true');
+        _openToolbarMenuClose = close;
+
+        outsideClickHandler = (e) => {
+            if (!panel.contains(e.target) && !trigger.contains(e.target)) close();
+        };
+        document.addEventListener('mousedown', outsideClickHandler);
+
+        keyHandler = (e) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                close();
+                trigger.focus();
+                return;
+            }
+            if (e.key === 'Tab') { close(); return; }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+                const items = getFocusableItems();
+                if (items.length === 0) return;
+                e.preventDefault();
+                const curIdx = items.indexOf(document.activeElement);
+                let nextIdx;
+                if (e.key === 'Home') nextIdx = 0;
+                else if (e.key === 'End') nextIdx = items.length - 1;
+                else if (e.key === 'ArrowDown') nextIdx = curIdx < 0 ? 0 : (curIdx + 1) % items.length;
+                else nextIdx = curIdx < 0 ? items.length - 1 : (curIdx - 1 + items.length) % items.length;
+                items[nextIdx].focus();
+            }
+        };
+        document.addEventListener('keydown', keyHandler, true);
+
+        resizeHandler = () => positionPanel();
+        window.addEventListener('resize', resizeHandler);
+
+        // role="menu"（エクスポート）だけ開いたら最初の項目にフォーカス。
+        // 表示▾はフォームコントロールなので、開いた直後にフォーカスを奪わない
+        if (isMenu) {
+            const items = getFocusableItems();
+            if (items.length > 0) items[0].focus();
+        }
+    }
+
+    trigger.addEventListener('click', () => {
+        if (panel.classList.contains('hidden')) open(); else close();
+    });
+
+    // role="menu" の項目クリックでは閉じる（表示▾パネルは操作しても閉じたままにしない）
+    if (isMenu) {
+        panel.addEventListener('click', (e) => {
+            if (e.target.closest('button')) close();
+        });
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
 
@@ -6314,15 +6422,17 @@ function updateUndoRedoButtons() {
 
 // キーボードショートカット（全体）
 // - 入力欄にフォーカスがある場合、またはモーダルが開いている場合はすべて無効にする
+// - ツールバーのドロップダウン（表示▾/エクスポート▾）展開中も無効にする
+//   （メニュー内の select 操作や矢印キー巡回中に B/T/R/M がチャートモードを切り替えないように）
 // - Ctrl+S / Ctrl+Shift+C も入力欄・モーダル中では無効（ブラウザ既定に任せる）
 document.addEventListener('keydown', e => {
     const tag = e.target.tagName;
     const inInput = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT');
     const modalOpen = !!document.getElementById('app-modal-overlay');
 
-    // 入力欄・モーダル中はここより下のショートカット全部無効
+    // 入力欄・モーダル中・ドロップダウン展開中はここより下のショートカット全部無効
     // （Custom RAM 式を編集中に Ctrl+S で誤保存、モーダル中に誤操作するのを防ぐ）
-    if (inInput || modalOpen) return;
+    if (inInput || modalOpen || isToolbarMenuOpen()) return;
 
     // Ctrl+S: PNG保存（チャートが保存可能なときだけブラウザの「ページ保存」を上書き）
     if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
@@ -6584,6 +6694,10 @@ function exitArrangeMode() {
         saveSettings(); // サイドバー幅をlocalStorageに保存
     });
 })();
+
+// ツールバーのドロップダウンメニューを有効化
+setupToolbarDropdown($('view-menu-btn'), $('view-menu-panel'));
+setupToolbarDropdown($('export-menu-btn'), $('export-menu-panel'));
 
 // ─────────────────────────────────────────────────────────────
 // セクション折りたたみ（Files, Settings, Custom RAM）
