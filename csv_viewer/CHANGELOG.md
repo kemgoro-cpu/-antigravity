@@ -3,6 +3,67 @@
 開発を引き継ぐ人（人間・AIエージェント問わず）向けの正確な変更記録。
 コミット単位の詳細は `git log` も参照のこと。
 
+## 2026-07-04: XYプロット改善（フローティングパネル化+4機能、Claude Code実施）
+
+XYプロット（F7）のコントラスト不具合修正と、モーダル→ドラッグ可能フローティング
+パネル化、および追加機能4件（グラデーション/軌跡/回帰/等高線マップ）を実装。
+コミット: `4fdad59`（select コントラスト）/ `4c51853`（パネル化+入替）/
+`997a7d7`（設定記憶）/ `456fec3`（カーソル連動）/ `e4eae17`（グラデーション+軌跡）/
+`1058489`（回帰、xy-utils.js新規）/ `bdeca88`（等高線マップ）。
+
+### 追加された機能
+
+1. **selectドロップダウンのコントラスト修正**: `color-scheme` 未宣言 + `option`
+   未指定でダークテーマ時にネイティブポップアップが「明るい背景×ほぼ白の文字」に
+   なっていた。`select { color-scheme: dark }` 等をCSSに追加（XYプロット以外の
+   selectの同種バグも解消）
+2. **モーダル→ドラッグ可能フローティングパネル化**: `createModal()` の全画面
+   オーバーレイを廃止し、`document.body` 直下の `.xy-panel`（バックドロップ無し）
+   にした。表示中もタイムチャートのズーム/パンを操作できる。ヘッダードラッグ・
+   CSS `resize:both` + ResizeObserverによるリサイズ・Esc（本物のモーダルが
+   開いている間とSELECT操作中は無視）に対応
+3. **X⇄Y入替ボタン**
+4. **選択チャンネル・トグル・パネル位置の永続化**: 独立localStorageキー
+   `csvViewer_xyPlot`（チャンネルお気に入りと同じ方式。`collectSettings()` の
+   versioned履歴には入れない＝設定エクスポート/インポートの対象外）
+5. **タイムチャートとのカーソル連動ハイライト**: マウス移動中の時刻に最も近い
+   点をファイル色の縁取りでXY上に表示（`updateAxisPointer`購読、rAF間引き、
+   安定ID `'xy-hl'` の部分setOption）。計測モード（M）のカーソルA/Bにも対応する
+   ダイヤモンドマーカー（`'xy-measure'`）を追加。「表示中の時間範囲のみ」ON時は
+   datazoomから~150ms debounceで再フィルタする
+6. **時間グラデーション着色 + 軌跡ライン**: データ点を`[x,y,t+offset]`の3次元にし、
+   ファイル色の暗→基準→明のcontinuous visualMap（ON時はlarge:false）と、
+   サンプル順の軌跡ライン（時間差が中央値の~3倍を超える箇所は線を切る）を追加
+7. **回帰直線 + 相関係数**: 新規 `xy-utils.js`（UMD）の `linearRegression()` で
+   ファイル毎に回帰し、破線+`#xy-readout`に`y=ax+b R²=…(n=…)`を表示
+8. **等高線マップ重ね合わせ**: `xy-utils.js` に `parseContourMap()`（マトリクス/
+   ロング形式自動判別）・`niceLevels()`・`computeIsoSegments()`（marching
+   squares）・`bilinearZ()`を追加。「マップ読込」でCSVを取り込み、scatterの
+   背面(z:1)にレベル毎の等高線を描画。ツールチップにZ値を追記
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **XYプロットはモーダルではなくフローティングパネル方式**。シングルトン
+  `_xyPanel`（`{ el, chart, controls, fileRefs, mapData, cleanups[] }`）+
+  決定的クリーンアップ。開閉は `toggleXYPlotPanel()` / `destroyXYPanel()` に
+  一本化し、外部リスナー（`document`・`state.chart`）は必ず `cleanups[]` 経由で
+  解除する。**旧来の「モーダル内EChartsはMutationObserverでoverlay除去を監視して
+  破棄する」パターンはXYプロットではもう使わない**（2026-07-03エントリの該当記述は
+  当時の実装の記録として残すが、現行実装はこちらが最新）
+- **XY設定は独立キー `csvViewer_xyPlot` のため、`collectSettings()` /
+  設定エクスポート・インポート・Undo履歴には乗らない**（チャンネルお気に入りと
+  同じ扱い）。マップデータはパネルの状態にのみ保持し、永続化しない
+  （パネルを閉じると消える）
+- **XYプロットの系列は `buildXYSeries()` / `buildXYContourSeries()` で組み立てる**。
+  z-order: 等高線マップ(z:1) → 軌跡ライン(z:4) → 散布図(z:5) → 回帰直線(z:6) →
+  カーソルハイライト(z:20) → 計測A/B(z:21)。安定IDが必要な系列は
+  `'xy-hl'` / `'xy-measure'` / `'xy-reg-'+fid` / `'xy-map-L'+i` を使うこと
+
+### 検証記録
+
+- `npm test` 7本グリーン（新規 `xy-utils.test.js` 20ケース含む）
+- `node --check` で app.js / xy-utils.js の構文確認
+
 ## 2026-07-03: 新機能 第2弾（F5〜F10、Claude Code実施）
 
 `FEATURE_BACKLOG.md` の残り6機能を実装し、バックログ全10件が完了。
