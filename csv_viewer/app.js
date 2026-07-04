@@ -280,6 +280,45 @@ function hslToHex(h, s, l) {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+/** #RRGGBB → {r,g,b}（0-255）。パースできなければnull */
+function hexToRgb(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+    if (!m) return null;
+    return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+}
+
+/** RGB(0-255) → HSL（hは0-360、s/lは0-100） */
+function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    const d = max - min;
+    let h = 0, s = 0;
+    if (d !== 0) {
+        s = d / (1 - Math.abs(2 * l - 1));
+        switch (max) {
+            case r: h = 60 * (((g - b) / d) % 6); break;
+            case g: h = 60 * ((b - r) / d + 2); break;
+            default: h = 60 * ((r - g) / d + 4); break;
+        }
+        if (h < 0) h += 360;
+    }
+    return { h, s: s * 100, l: l * 100 };
+}
+
+/**
+ * hex色の明度をdeltaL（パーセントポイント、0-100スケール）だけシフトする。
+ * XYプロットの時間グラデーション（visualMap）で、ファイル色の暗→基準→明の
+ * 3階調を作るのに使う。パースできない色は変更せずそのまま返す。
+ */
+function shadeColor(hex, deltaL) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+    const l = Math.min(100, Math.max(0, hsl.l + deltaL));
+    return hslToHex(hsl.h, hsl.s, l);
+}
+
 // HTML-escape to safely insert text into innerHTML
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -7692,15 +7731,44 @@ function saveXYSettingsDebounced() {
 }
 
 /**
- * 系列組み立て。ファイルごとにX/Y列を解決してscatter系列を作る（項目5〜7で
- * グラデーション/軌跡/回帰/等高線を合成できるよう、ここで組み立てを完結させる）。
- * @returns {{series: object[], fileRefs: object[]}}
- *   fileRefs はカーソル連動ハイライト（項目4）用に、範囲フィルタ前のフル配列を保持する
- *   （ハイライト精度が間引きに左右されないようにするため）。
+ * サンプル順の[x,y,t]配列から軌跡ライン用のdataを組み立てる。
+ * 前後点の時間差が中央値の~3倍を超えるところは[null,null,null]を挿入して線を切る
+ * （表示範囲フィルタやズーム境界での偽接続を防ぐ）。
  */
-function buildXYSeries(xName, yName, range) {
+function buildXYTrajectoryData(pts) {
+    if (pts.length < 2) return pts.map(p => p.slice());
+    const diffs = [];
+    for (let i = 1; i < pts.length; i++) diffs.push(pts[i][2] - pts[i - 1][2]);
+    const sorted = [...diffs].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const threshold = median > 0 ? median * 3 : Infinity;
+
+    const out = [pts[0].slice()];
+    for (let i = 1; i < pts.length; i++) {
+        if (pts[i][2] - pts[i - 1][2] > threshold) out.push([null, null, null]);
+        out.push(pts[i].slice());
+    }
+    return out;
+}
+
+/**
+ * 系列組み立て。ファイルごとにX/Y列を解決してscatter系列を作る（グラデーション/
+ * 軌跡/回帰/等高線を合成できるよう、ここで組み立てを完結させる）。
+ * @param {string} xName X軸チャンネル名
+ * @param {string} yName Y軸チャンネル名
+ * @param {[number,number]|null} range 「表示中の時間範囲のみ」の[t0,t1]（null=全範囲）
+ * @param {{gradient:boolean, trajectory:boolean}} opts
+ * @returns {{series: object[], fileRefs: object[], scatterRefs: object[]}}
+ *   fileRefs はカーソル連動ハイライト用に、範囲フィルタ前のフル配列を保持する
+ *   （ハイライト精度が間引きに左右されないようにするため）。
+ *   scatterRefs は時間グラデーション（visualMap）が参照するseriesIndexを
+ *   呼び出し側（renderXY）で解決できるよう、各ファイルのscatter系列の
+ *   位置と色・データを返す。
+ */
+function buildXYSeries(xName, yName, range, opts = {}) {
     const series = [];
     const fileRefs = [];
+    const scatterRefs = [];
     for (const [fid, f] of Object.entries(state.files)) {
         const xc = resolveColumnForFile(f, xName);
         const yc = resolveColumnForFile(f, yName);
@@ -7710,14 +7778,18 @@ function buildXYSeries(xName, yName, range) {
 
         const offset = f.offset || 0;
         const t = f.timeData;
-        fileRefs.push({ fid, name: f.shortName, t, xv, yv, offset, color: state.fileColors[fid] || undefined });
+        const color = state.fileColors[fid] || '#6366f1';
+        fileRefs.push({ fid, name: f.shortName, t, xv, yv, offset, color });
 
+        // [x, y, t+offset]の3次元。3次元目は時間グラデーション（visualMap）と
+        // 軌跡ラインのギャップ判定にのみ使う（通常のtooltip/軸表示はx,yのみ参照）
         const pts = [];
         for (let i = 0; i < t.length; i++) {
-            if (range && (t[i] + offset < range[0] || t[i] + offset > range[1])) continue;
+            const tv = t[i] + offset;
+            if (range && (tv < range[0] || tv > range[1])) continue;
             const x = xv[i], y = yv[i];
             if (Number.isNaN(x) || Number.isNaN(y)) continue;
-            pts.push([x, y]);
+            pts.push([x, y, tv]);
         }
         // 点数上限: 等間隔に間引く
         let data = pts;
@@ -7726,13 +7798,25 @@ function buildXYSeries(xName, yName, range) {
             data = [];
             for (let i = 0; i < pts.length; i += stride) data.push(pts[i]);
         }
+
+        if (opts.trajectory && data.length > 1) {
+            series.push({
+                name: f.shortName, type: 'line', showSymbol: false,
+                lineStyle: { width: 1, color, opacity: 0.5 },
+                silent: true, z: 4,
+                data: buildXYTrajectoryData(data),
+            });
+        }
+
+        // 時間グラデーションON時はper-point visual mappingが必要なのでlargeモードを使わない
         series.push({
             name: f.shortName, type: 'scatter',
-            data, symbolSize: 2.5, large: true, largeThreshold: 5000,
-            itemStyle: { color: state.fileColors[fid] || undefined, opacity: 0.75 },
+            data, symbolSize: 2.5, large: !opts.gradient, largeThreshold: 5000, z: 5,
+            itemStyle: { color, opacity: 0.75 },
         });
+        scatterRefs.push({ fid, color, index: series.length - 1, data });
     }
-    return { series, fileRefs };
+    return { series, fileRefs, scatterRefs };
 }
 
 /** X/Yセレクトの現在値・チェックボックス状態からチャートを再描画する */
@@ -7762,7 +7846,11 @@ async function renderXY() {
     // ロード待ち中にパネルが閉じられた、または後続のrenderXY()に追い越された場合は破棄
     if (!_xyPanel || token !== _xyRenderToken) return;
 
-    const built = buildXYSeries(xName, yName, range);
+    const gradientOn = controls.gradChk.checked;
+    const built = buildXYSeries(xName, yName, range, {
+        gradient: gradientOn,
+        trajectory: controls.trajChk.checked,
+    });
     _xyPanel.fileRefs = built.fileRefs;
     const series = [
         ...built.series,
@@ -7773,21 +7861,41 @@ async function renderXY() {
           silent: true, z: 21, symbolSize: 11 },
     ];
 
+    // 時間グラデーション: ファイルごとにcontinuous visualMapを1つ割り当てる（dimension:2=時刻）。
+    // OFF時は明示的に空配列にする（前回のvisualMapを引きずらないため。notMerge:trueなので
+    // 本来は無くても消えるが、意図を明示する）
+    const visualMap = gradientOn
+        ? built.scatterRefs.map(({ color, index, data }) => {
+              let minT = Infinity, maxT = -Infinity;
+              for (const p of data) {
+                  const tv = p[2];
+                  if (Number.isFinite(tv)) { if (tv < minT) minT = tv; if (tv > maxT) maxT = tv; }
+              }
+              if (!Number.isFinite(minT) || !Number.isFinite(maxT) || minT === maxT) return null;
+              return {
+                  type: 'continuous', show: false, dimension: 2, seriesIndex: index,
+                  min: minT, max: maxT,
+                  inRange: { color: [shadeColor(color, -25), color, shadeColor(color, 25)] },
+              };
+          }).filter(Boolean)
+        : [];
+
     const axisStyle = {
         nameTextStyle: { color: T.dim },
         axisLabel: { color: T.dim, formatter: CSVChartOptions.formatYAxisValue },
         axisLine: { lineStyle: { color: T.axis } },
         splitLine: { lineStyle: { color: T.grid } },
     };
+    // レジェンドはファイル名単位（散布図・軌跡ラインが同名で重複しうるので去重する）
+    const legendNames = [...new Set(built.series.map(s => s.name).filter(Boolean))];
     const unitOf = n => mainFile.columns.find(c => c.name === n)?.unit || '';
     chart.setOption({
         animation: false,
         backgroundColor: 'transparent',
         // xy-hl/xy-measureは名前を持たないので自然にレジェンド対象外になるが、
         // 明示的にファイル名だけを指定して確実に除外する
-        legend: { show: built.series.length > 1, textStyle: { color: T.dim }, top: 0,
-                  data: built.series.map(s => s.name) },
-        grid: { left: 70, right: 24, top: built.series.length > 1 ? 30 : 14, bottom: 44 },
+        legend: { show: legendNames.length > 1, textStyle: { color: T.dim }, top: 0, data: legendNames },
+        grid: { left: 70, right: 24, top: legendNames.length > 1 ? 30 : 14, bottom: 44 },
         tooltip: {
             trigger: 'item',
             formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
@@ -7800,6 +7908,7 @@ async function renderXY() {
             { type: 'inside', xAxisIndex: 0 },
             { type: 'inside', yAxisIndex: 0 },
         ],
+        visualMap,
         series,
     }, { notMerge: true });
 }
