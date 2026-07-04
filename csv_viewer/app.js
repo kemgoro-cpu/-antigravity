@@ -345,6 +345,98 @@ function setupToolbarDropdown(trigger, panel) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// リッチツールチップ（初心者向け: ボタン名＋説明＋ショートカットを表示）
+// ─────────────────────────────────────────────────────────────
+
+// ホバー/フォーカスしてから表示するまでの遅延(ms)。連続移動中にちらつかないように
+const TOOLTIP_SHOW_DELAY = 400;
+
+(function setupRichTooltips() {
+    let tooltipEl = null;
+    let showTimer = null;
+    let currentTarget = null;
+
+    function ensureTooltipEl() {
+        if (tooltipEl) return tooltipEl;
+        tooltipEl = document.createElement('div');
+        tooltipEl.id = 'app-tooltip';
+        tooltipEl.setAttribute('aria-hidden', 'true');
+        tooltipEl.innerHTML = '<div class="tip-title"></div><div class="tip-desc"></div><span class="tip-key"></span>';
+        document.body.appendChild(tooltipEl);
+        return tooltipEl;
+    }
+
+    function hide() {
+        clearTimeout(showTimer);
+        showTimer = null;
+        currentTarget = null;
+        if (tooltipEl) tooltipEl.classList.remove('visible');
+    }
+
+    function positionAndShow(target) {
+        const el = ensureTooltipEl();
+        const title = target.getAttribute('data-tip-title');
+        const desc = target.getAttribute('data-tip-desc') || '';
+        const key = target.getAttribute('data-tip-key') || '';
+
+        // disabledなボタンはマウスイベントが発火しないため実質表示されないが、
+        // フォーカス経由(focusin)で来るケースへの保険として明示的に何もしない
+        if (target.disabled) return;
+
+        el.querySelector('.tip-title').textContent = title;
+        el.querySelector('.tip-desc').textContent = desc;
+        const keyEl = el.querySelector('.tip-key');
+        keyEl.textContent = key;
+        keyEl.style.display = key ? '' : 'none';
+
+        el.classList.add('visible');
+
+        const r = target.getBoundingClientRect();
+        const tipRect = el.getBoundingClientRect();
+        const margin = 8;
+
+        let left = r.left + r.width / 2 - tipRect.width / 2;
+        left = Math.max(margin, Math.min(window.innerWidth - tipRect.width - margin, left));
+
+        let top = r.bottom + 8;
+        // 下に収まらなければ上に表示
+        if (top + tipRect.height > window.innerHeight - margin) {
+            top = r.top - tipRect.height - 8;
+        }
+
+        el.style.left = left + 'px';
+        el.style.top = top + 'px';
+    }
+
+    function scheduleShow(target) {
+        if (currentTarget === target) return;
+        clearTimeout(showTimer);
+        currentTarget = target;
+        showTimer = setTimeout(() => positionAndShow(target), TOOLTIP_SHOW_DELAY);
+    }
+
+    document.addEventListener('mouseover', e => {
+        const target = e.target.closest('[data-tip-title]');
+        if (target) scheduleShow(target); else hide();
+    });
+    document.addEventListener('mouseout', e => {
+        if (e.target.closest('[data-tip-title]')) hide();
+    });
+    // キーボード操作でTabフォーカスしたときも同じ内容を表示（アクセシビリティ）
+    document.addEventListener('focusin', e => {
+        const target = e.target.closest('[data-tip-title]');
+        if (target) scheduleShow(target);
+    });
+    document.addEventListener('focusout', e => {
+        if (e.target.closest('[data-tip-title]')) hide();
+    });
+    document.addEventListener('mousedown', hide);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+    window.addEventListener('scroll', hide, true);
+    window.addEventListener('resize', hide);
+})();
+
+// ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
 
@@ -6513,11 +6605,11 @@ document.addEventListener('keydown', e => {
 function showShortcutsModal() {
     const rows = [
         ['?',              'このショートカット一覧を表示'],
-        ['Esc',            'Box Zoom / Time Shift / Arrange / Measure モードを抜ける'],
-        ['B',              'Box Zoom モードを切り替え'],
-        ['T',              'Time Shift モードを切り替え（Sub ファイルが必要）'],
+        ['Esc',            'ボックスズーム / 時間シフト / 並べ替え / 計測 モードを抜ける'],
+        ['B',              'ボックスズーム モードを切り替え'],
+        ['T',              '時間シフト モードを切り替え（Sub ファイルが必要）'],
         ['R',              'ズームをリセット（全範囲表示）'],
-        ['M',              'カーソル計測モードを切り替え（2回クリックで区間統計）'],
+        ['M',              '計測 モードを切り替え（2回クリックで区間統計）'],
         ['Ctrl + Z',       '直前の操作を元に戻す（ズーム・チャンネル選択・設定など）'],
         ['Ctrl + Y',       '操作をやり直す'],
         ['Ctrl + Shift + Z', '操作をやり直す（Ctrl + Y と同じ）'],

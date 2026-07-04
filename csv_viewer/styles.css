@@ -1295,6 +1295,36 @@ input[type="text"]:focus {
 /* 表示▾パネル内のフォームコントロール行は少し余白を広げる */
 .toolbar-menu .sampling-label { padding: 4px 8px; }
 
+/* ── リッチツールチップ（初心者向け: ボタン名＋説明＋ショートカット） ── */
+#app-tooltip {
+    position: fixed;
+    z-index: 500;
+    max-width: 260px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+    padding: 8px 10px;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s;
+}
+#app-tooltip.visible { opacity: 1; visibility: visible; }
+#app-tooltip .tip-title { font-size: 0.78rem; font-weight: 600; color: var(--text-primary); }
+#app-tooltip .tip-desc { font-size: 0.7rem; color: var(--text-secondary); margin-top: 2px; }
+#app-tooltip .tip-key {
+    display: inline-block;
+    margin-top: 5px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--accent-soft);
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
 /* ── Chart Area ───────────────────────────── */
 .chart-container {
     flex: 1;

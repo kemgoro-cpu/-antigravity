@@ -54,13 +54,16 @@
                         <select id="settings-preset-select" aria-label="設定プリセット">
                             <option value="">Preset...</option>
                         </select>
-                        <button id="preset-save-btn" class="btn-secondary btn-icon" title="現在の設定をプリセット保存">
+                        <button id="preset-save-btn" class="btn-secondary btn-icon" aria-label="現在の設定をプリセット保存"
+                                data-tip-title="プリセット保存" data-tip-desc="現在の設定をプリセットとして保存します">
                             <i class='bx bx-save' aria-hidden="true"></i>
                         </button>
-                        <button id="preset-load-btn" class="btn-secondary btn-icon" title="選択したプリセットを適用">
+                        <button id="preset-load-btn" class="btn-secondary btn-icon" aria-label="選択したプリセットを適用"
+                                data-tip-title="プリセット適用" data-tip-desc="選択したプリセットを読み込んで適用します">
                             <i class='bx bx-play' aria-hidden="true"></i>
                         </button>
-                        <button id="preset-delete-btn" class="btn-secondary btn-icon" title="選択したプリセットを削除">
+                        <button id="preset-delete-btn" class="btn-secondary btn-icon" aria-label="選択したプリセットを削除"
+                                data-tip-title="プリセット削除" data-tip-desc="選択したプリセットを削除します">
                             <i class='bx bx-trash' aria-hidden="true"></i>
                         </button>
                     </div>
@@ -69,7 +72,9 @@
                 <!-- Custom RAM -->
                 <div class="control-group">
                     <h3><i class='bx bx-calculator' aria-hidden="true"></i> Custom RAM
-                        <i class='bx bx-help-circle' id="custom-ram-help" title="使える関数の一覧を表示" role="button" tabindex="0" aria-label="使える関数の一覧を表示" style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
+                        <i class='bx bx-help-circle' id="custom-ram-help" role="button" tabindex="0" aria-label="使える関数の一覧を表示"
+                           data-tip-title="関数ヘルプ" data-tip-desc="Custom RAMの計算式で使える関数の一覧を表示します"
+                           style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
                     </h3>
                     <div class="custom-ram-form">
                         <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input" aria-label="Custom RAM名">
@@ -107,13 +112,16 @@
                         <select id="channel-fav-select" aria-label="チャンネルセットのお気に入り">
                             <option value="">Favorites...</option>
                         </select>
-                        <button id="channel-fav-save" class="btn-secondary btn-icon" title="現在の表示チャンネルの組み合わせをお気に入り保存">
+                        <button id="channel-fav-save" class="btn-secondary btn-icon" aria-label="現在の表示チャンネルの組み合わせをお気に入り保存"
+                                data-tip-title="お気に入り保存" data-tip-desc="現在の表示チャンネルの組み合わせをお気に入りに保存します">
                             <i class='bx bx-star' aria-hidden="true"></i>
                         </button>
-                        <button id="channel-fav-apply" class="btn-secondary btn-icon" title="選択したお気に入りを適用（表示チャンネルを置き換え）">
+                        <button id="channel-fav-apply" class="btn-secondary btn-icon" aria-label="選択したお気に入りを適用（表示チャンネルを置き換え）"
+                                data-tip-title="お気に入り適用" data-tip-desc="選択したお気に入りを適用し、表示チャンネルを置き換えます">
                             <i class='bx bx-play' aria-hidden="true"></i>
                         </button>
-                        <button id="channel-fav-delete" class="btn-secondary btn-icon" title="選択したお気に入りを削除">
+                        <button id="channel-fav-delete" class="btn-secondary btn-icon" aria-label="選択したお気に入りを削除"
+                                data-tip-title="お気に入り削除" data-tip-desc="選択したお気に入りを削除します">
                             <i class='bx bx-trash' aria-hidden="true"></i>
                         </button>
                     </div>
