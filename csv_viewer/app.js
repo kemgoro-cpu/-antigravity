@@ -1202,6 +1202,15 @@ function initChart() {
         });
     });
 
+    // ズーム操作にXYプロットの「表示中の時間範囲のみ」を追従させる（~150ms debounce）。
+    // ONのときだけ再フィルタが必要になるので、OFF時は何もしない
+    let _xyDatazoomTimer = null;
+    state.chart.on('datazoom', () => {
+        if (!_xyPanel || !_xyPanel.controls.visChk.checked) return;
+        clearTimeout(_xyDatazoomTimer);
+        _xyDatazoomTimer = setTimeout(() => { if (_xyPanel) renderXY(); }, 150);
+    });
+
     dom.chartEl.addEventListener('mouseleave', () => {
         _lastTooltipParams = null;
         for (const el of _labelEls) el.style.display = 'none';
@@ -4734,6 +4743,24 @@ function interpolate(timeArr, valArr, t) {
     return valArr[lo] + (t - timeArr[lo]) / dt * (valArr[hi] - valArr[lo]);
 }
 
+/**
+ * timeArr内でtに最も近いサンプルのインデックスを二分探索で返す（interpolate()と同形）。
+ * XYプロットのカーソル連動ハイライト（F7）が、間引きしていない元データから
+ * 「今いる時刻に一番近い点」を拾うのに使う。
+ */
+function nearestIndex(timeArr, t) {
+    const n = timeArr.length;
+    if (n === 0) return null;
+    if (t <= timeArr[0])     return 0;
+    if (t >= timeArr[n - 1]) return n - 1;
+    let lo = 0, hi = n - 1;
+    while (lo < hi - 1) {
+        const mid = (lo + hi) >> 1;
+        if (timeArr[mid] <= t) lo = mid; else hi = mid;
+    }
+    return (t - timeArr[lo] <= timeArr[hi] - t) ? lo : hi;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Auto-align: minimize RMSE between main and sub file
 // ─────────────────────────────────────────────────────────────
@@ -5806,6 +5833,7 @@ function enterMeasureMode() {
     dom.hintEl.textContent = 'チャートをクリックして計測点A→Bを指定…';
     dom.chartEl.style.cursor = 'crosshair';
     updateMeasurePanel();
+    updateXYMeasureMarkers(); // XYパネルが開いていればA/Bマーカーもクリア
 }
 
 /**
@@ -5820,6 +5848,7 @@ function exitMeasureMode(rerender = true) {
     dom.hintEl.textContent = '';
     dom.chartEl.style.cursor = '';
     removeMeasurePanel();
+    updateXYMeasureMarkers(); // XYパネルが開いていればA/Bマーカーもクリア
     if (rerender && state.chart && state.numGrids > 0) renderChart();
 }
 
@@ -5833,6 +5862,7 @@ dom.chartEl.addEventListener('click', e => {
     if (m.tA == null)      m.tA = t;
     else if (m.tB == null) m.tB = t;
     else { m.tA = t; m.tB = null; } // 3回目のクリックはAから置き直し
+    updateXYMeasureMarkers(); // XYパネルが開いていればA/Bマーカーを更新
     renderChart(); // カーソル線の再描画（updateMeasurePanelもrenderChart内で呼ばれる）
 });
 
@@ -7521,6 +7551,93 @@ function setupXYPanelEsc(panel) {
     panel.cleanups.push(() => document.removeEventListener('keydown', handler));
 }
 
+/**
+ * カーソル位置(時刻)から各ファイルのハイライト点データを計算する。
+ * fileRefsは間引き前のフル配列なので、ハイライト精度は散布図の間引きに左右されない。
+ * @param {number} cursorTime タイムチャートの現在時刻（メイン基準、offset加算済み）
+ * @returns {object[]} echarts scatter用のdata配列（点ごとにitemStyleでファイル色を指定）
+ */
+function computeXYHighlightData(cursorTime) {
+    if (!_xyPanel || cursorTime == null || !Number.isFinite(cursorTime)) return [];
+    const data = [];
+    for (const ref of _xyPanel.fileRefs) {
+        const localT = cursorTime - ref.offset;
+        const idx = nearestIndex(ref.t, localT);
+        if (idx == null) continue;
+        // サンプル間隔の目安(前後点との平均間隔)の~2倍を超えたら範囲外とみなしスキップ
+        let dt;
+        if (idx > 0 && idx < ref.t.length - 1) dt = (ref.t[idx + 1] - ref.t[idx - 1]) / 2;
+        else if (idx > 0) dt = ref.t[idx] - ref.t[idx - 1];
+        else if (idx < ref.t.length - 1) dt = ref.t[idx + 1] - ref.t[idx];
+        else dt = Infinity;
+        if (!(dt > 0)) dt = Infinity;
+        if (Math.abs(ref.t[idx] - localT) > dt * 2) continue;
+
+        const x = ref.xv[idx], y = ref.yv[idx];
+        if (Number.isNaN(x) || Number.isNaN(y)) continue;
+        data.push({ value: [x, y], itemStyle: { color: ref.color || undefined, borderColor: T.text, borderWidth: 1.5 } });
+    }
+    return data;
+}
+
+/**
+ * 計測モードのカーソルA/B（state.measure.tA/tB）に対応するXY上の点を計算する。
+ * こちらはinterpolate()で補間する（既存の計測パネルの値と一致させるため）。
+ */
+function computeXYMeasureData() {
+    if (!_xyPanel) return [];
+    const data = [];
+    for (const t of [state.measure.tA, state.measure.tB]) {
+        if (t == null) continue;
+        for (const ref of _xyPanel.fileRefs) {
+            const x = interpolate(ref.t, ref.xv, t - ref.offset);
+            const y = interpolate(ref.t, ref.yv, t - ref.offset);
+            if (Number.isNaN(x) || Number.isNaN(y)) continue;
+            data.push({ value: [x, y], itemStyle: { color: ref.color || undefined, borderColor: T.text, borderWidth: 1.5 } });
+        }
+    }
+    return data;
+}
+
+/** 計測A/BマーカーをXYパネルに反映する（安定ID 'xy-measure' の部分setOptionのみ、フル再描画しない） */
+function updateXYMeasureMarkers() {
+    if (!_xyPanel) return;
+    _xyPanel.chart.setOption({ series: [{ id: 'xy-measure', data: computeXYMeasureData() }] });
+}
+
+/**
+ * タイムチャートのカーソル移動(updateAxisPointer)をXYパネルのハイライトに反映する。
+ * メインチャートはaxisPointerがlinkされているため、e.axesInfo[0].valueが時刻になる。
+ * 'globalout'（チャートからマウスが離れた）でハイライトをクリアする。
+ * rAFで間引き、更新は安定ID 'xy-hl' の部分setOptionのみ（フル再描画しない）。
+ */
+function setupXYPanelCursorSync(panel) {
+    if (!state.chart) return;
+    let rafId = null;
+
+    const onAxisPointer = (e) => {
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(() => {
+            rafId = null;
+            if (!_xyPanel || _xyPanel !== panel) return;
+            const t = e?.axesInfo?.[0]?.value;
+            panel.chart.setOption({ series: [{ id: 'xy-hl', data: computeXYHighlightData(t) }] });
+        });
+    };
+    const onGlobalOut = () => {
+        if (!_xyPanel || _xyPanel !== panel) return;
+        panel.chart.setOption({ series: [{ id: 'xy-hl', data: [] }] });
+    };
+
+    state.chart.on('updateAxisPointer', onAxisPointer);
+    state.chart.on('globalout', onGlobalOut);
+    panel.cleanups.push(() => {
+        state.chart.off('updateAxisPointer', onAxisPointer);
+        state.chart.off('globalout', onGlobalOut);
+        if (rafId !== null) cancelAnimationFrame(rafId);
+    });
+}
+
 // ─────────────────────────────────────────────────────────────
 // 設定記憶: XYプロットはUndo履歴付きの collectSettings() には入れず、
 // チャンネルお気に入り（FAVORITES_STORAGE_KEY）と同じ独立localStorageキー方式
@@ -7619,11 +7736,16 @@ function buildXYSeries(xName, yName, range) {
 }
 
 /** X/Yセレクトの現在値・チェックボックス状態からチャートを再描画する */
+// 非同期ロード待ち中に別のrenderXY()呼び出しが割り込んだ場合、古い方の完了を
+// 破棄するためのトークンカウンタ（datazoomのライブ更新等、再入がありうるため）
+let _xyRenderToken = 0;
+
 async function renderXY() {
     if (!_xyPanel) return;
     const mainFile = getMainFile();
     if (!mainFile) { destroyXYPanel(); return; }
 
+    const token = ++_xyRenderToken;
     const { chart, controls } = _xyPanel;
     const xName = controls.xSel.value, yName = controls.ySel.value;
     if (!xName || !yName) return;
@@ -7637,11 +7759,19 @@ async function renderXY() {
         if (names.length) loads.push(loadColumnsForFile(fid, names));
     }
     try { await Promise.all(loads); } catch (e) { /* 欠けた列は下でスキップされる */ }
-    if (!_xyPanel) return; // ロード待ち中にパネルが閉じられた
+    // ロード待ち中にパネルが閉じられた、または後続のrenderXY()に追い越された場合は破棄
+    if (!_xyPanel || token !== _xyRenderToken) return;
 
     const built = buildXYSeries(xName, yName, range);
     _xyPanel.fileRefs = built.fileRefs;
-    const series = built.series;
+    const series = [
+        ...built.series,
+        // カーソル連動ハイライト・計測A/Bマーカー（安定ID）。部分setOptionで
+        // このidだけを差し替えるので、フル再描画のたびに空データで再宣言しておく
+        { id: 'xy-hl', type: 'scatter', data: [], silent: true, z: 20, symbolSize: 12 },
+        { id: 'xy-measure', type: 'scatter', data: computeXYMeasureData(), symbol: 'diamond',
+          silent: true, z: 21, symbolSize: 11 },
+    ];
 
     const axisStyle = {
         nameTextStyle: { color: T.dim },
@@ -7653,8 +7783,11 @@ async function renderXY() {
     chart.setOption({
         animation: false,
         backgroundColor: 'transparent',
-        legend: { show: series.length > 1, textStyle: { color: T.dim }, top: 0 },
-        grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44 },
+        // xy-hl/xy-measureは名前を持たないので自然にレジェンド対象外になるが、
+        // 明示的にファイル名だけを指定して確実に除外する
+        legend: { show: built.series.length > 1, textStyle: { color: T.dim }, top: 0,
+                  data: built.series.map(s => s.name) },
+        grid: { left: 70, right: 24, top: built.series.length > 1 ? 30 : 14, bottom: 44 },
         tooltip: {
             trigger: 'item',
             formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
@@ -7762,6 +7895,7 @@ async function openXYPlotPanel() {
     setupXYPanelDrag(_xyPanel);
     setupXYPanelResize(_xyPanel);
     setupXYPanelEsc(_xyPanel);
+    setupXYPanelCursorSync(_xyPanel);
 
     controls.closeBtn.addEventListener('click', destroyXYPanel);
     controls.xSel.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
