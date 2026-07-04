@@ -298,8 +298,30 @@
             <div class="chart-container">
                 <div id="chart" class="echarts-dom"></div>
                 <div id="chart-overlay" class="chart-overlay">
-                    <i class='bx bx-line-chart icon-large' aria-hidden="true"></i>
-                    <p>Select channels from the sidebar to visualize</p>
+                    <div class="empty-guide">
+                        <h2>チャートを表示するには</h2>
+                        <ol class="empty-steps">
+                            <li>
+                                <span class="step-num">1</span>
+                                <i class='bx bx-cloud-upload' aria-hidden="true"></i>
+                                <strong>ファイルを読み込む</strong>
+                                <p>CSV / TRN を左のエリアにドラッグ&ドロップ</p>
+                                <button id="overlay-browse-btn" class="btn-primary">ファイルを選択</button>
+                            </li>
+                            <li>
+                                <span class="step-num">2</span>
+                                <i class='bx bx-list-check' aria-hidden="true"></i>
+                                <strong>チャンネルを選択</strong>
+                                <p>サイドバーの「チャンネル」から表示したい項目にチェック</p>
+                            </li>
+                            <li>
+                                <span class="step-num">3</span>
+                                <i class='bx bx-line-chart' aria-hidden="true"></i>
+                                <strong>チャートを操作</strong>
+                                <p>ドラッグでズーム、<kbd>?</kbd> でショートカット一覧</p>
+                            </li>
+                        </ol>
+                    </div>
                 </div>
             </div>
         </main>

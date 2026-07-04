@@ -1847,6 +1847,8 @@ dom.fileInput.addEventListener('change', e => {
 });
 // Browse Files ボタン → 非表示の file input を開く（S3: インラインonclickの排除）
 $('browse-files-btn')?.addEventListener('click', () => dom.fileInput.click());
+// 空状態ガイド内の「ファイルを選択」ボタンも同じfile inputを開く
+$('overlay-browse-btn')?.addEventListener('click', () => dom.fileInput.click());
 
 // 対応するファイル拡張子（.csv と .trn）
 const SUPPORTED_EXTENSIONS = ['.csv', '.trn'];

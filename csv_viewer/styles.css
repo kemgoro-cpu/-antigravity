@@ -1456,8 +1456,77 @@ input[type="text"]:focus {
 }
 
 .chart-overlay.hidden { opacity: 0; }
-.icon-large { font-size: 3rem; opacity: 0.2; margin-bottom: 10px; }
-.chart-overlay p { font-size: 0.85rem; opacity: 0.45; }
+
+/* 空状態ガイド（初回起動時にチャートエリアへ表示する3ステップ案内）。
+   overlay自体はpointer-events:noneのまま、表示中だけCTAボタンを押せるようにする */
+.empty-guide { pointer-events: none; max-width: 900px; padding: 0 24px; }
+.chart-overlay:not(.hidden) .empty-guide { pointer-events: auto; }
+
+.empty-guide h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    opacity: 0.7;
+    margin-bottom: 24px;
+}
+
+.empty-steps {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    list-style: none;
+}
+
+.empty-steps li {
+    position: relative;
+    width: 230px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px 16px;
+}
+
+.empty-steps li:not(:last-child)::after {
+    content: '\2192';
+    position: absolute;
+    top: 50%;
+    right: -22px;
+    transform: translateY(-50%);
+    font-size: 1.1rem;
+    opacity: 0.35;
+}
+
+@media (max-width: 800px) {
+    .empty-steps li:not(:last-child)::after { display: none; }
+}
+
+.empty-steps .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    color: var(--accent-soft);
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.empty-steps i { display: block; font-size: 1.8rem; opacity: 0.35; margin-bottom: 8px; }
+.empty-steps strong { display: block; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 4px; }
+.empty-steps p { font-size: 0.72rem; opacity: 0.6; margin-bottom: 10px; }
+.empty-steps .btn-primary { font-size: 0.72rem; padding: 5px 12px; }
+.empty-steps kbd {
+    font-family: 'Roboto Mono', monospace;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: 0.7rem;
+}
 
 /* ── Utils ────────────────────────────────── */
 .hidden { display: none !important; }
