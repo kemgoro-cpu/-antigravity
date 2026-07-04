@@ -7469,6 +7469,7 @@ function setupXYPanelDrag(panel) {
         if (!drag) return;
         drag = null;
         try { header.releasePointerCapture(e.pointerId); } catch (err) { /* 既に解放済みなら無視 */ }
+        saveXYSettingsNow(); // ドラッグ確定時に位置を保存
     };
 
     header.addEventListener('pointerdown', onDown);
@@ -7493,6 +7494,7 @@ function setupXYPanelResize(panel) {
             // ツールチップ表示中のresizeでエラーになるため先にhideTip（windowリサイズと同パターン）
             panel.chart.dispatchAction({ type: 'hideTip' });
             panel.chart.resize();
+            saveXYSettingsDebounced(); // サイズ変更をdebounceして保存
         });
     });
     ro.observe(panel.el);
@@ -7517,6 +7519,59 @@ function setupXYPanelEsc(panel) {
     };
     document.addEventListener('keydown', handler);
     panel.cleanups.push(() => document.removeEventListener('keydown', handler));
+}
+
+// ─────────────────────────────────────────────────────────────
+// 設定記憶: XYプロットはUndo履歴付きの collectSettings() には入れず、
+// チャンネルお気に入り（FAVORITES_STORAGE_KEY）と同じ独立localStorageキー方式
+// にする。Clear All / 設定リセットの影響を受けず、設定エクスポート/インポート
+// にも乗らない（CHANGELOGに明記）。マップデータ（項目7）はセッション内のみで
+// ここには含めない。
+// ─────────────────────────────────────────────────────────────
+
+const XY_STORAGE_KEY = 'csvViewer_xyPlot';
+
+/** 保存済みXYプロット設定を読み込む（無ければ/壊れていればnull） */
+function loadXYSettings() {
+    try {
+        const raw = localStorage.getItem(XY_STORAGE_KEY);
+        const obj = raw ? JSON.parse(raw) : null;
+        return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** 現在のパネル状態（チャンネル・トグル・矩形）を即時保存する */
+function saveXYSettingsNow() {
+    if (!_xyPanel) return;
+    const { controls, el } = _xyPanel;
+    const data = {
+        x: controls.xSel.value,
+        y: controls.ySel.value,
+        visibleOnly: controls.visChk.checked,
+        gradient: controls.gradChk.checked,
+        trajectory: controls.trajChk.checked,
+        regression: controls.regChk.checked,
+        panel: {
+            left:   el.offsetLeft,
+            top:    el.offsetTop,
+            width:  el.offsetWidth,
+            height: el.offsetHeight,
+        },
+    };
+    try {
+        localStorage.setItem(XY_STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+        showError('XYプロットの設定を保存できませんでした', e.message || String(e));
+    }
+}
+
+let _xySaveTimer = null;
+/** ドラッグ中/リサイズ中のような連続イベント向けdebounce保存（~300ms） */
+function saveXYSettingsDebounced() {
+    clearTimeout(_xySaveTimer);
+    _xySaveTimer = setTimeout(saveXYSettingsNow, 300);
 }
 
 /**
@@ -7638,6 +7693,7 @@ function swapXYAxes() {
     const tmp = xSel.value;
     xSel.value = ySel.value;
     ySel.value = tmp;
+    saveXYSettingsNow();
     renderXY();
 }
 
@@ -7654,8 +7710,15 @@ async function openXYPlotPanel() {
     el.innerHTML = buildXYPanelHTML(buildXYColumnOptions(mainFile));
     document.body.appendChild(el);
 
-    // 初期位置: 右上寄り。ビューポートにクランプ（項目3で保存位置の復元に置き換わる）
-    const rect = xyClampRect(window.innerWidth - 664, 72, 640, 520);
+    const saved = loadXYSettings();
+
+    // パネル矩形: 保存値があれば復元し、無ければ既定位置（右上寄り）。ビューポートにクランプ
+    const rect = xyClampRect(
+        saved?.panel?.left   ?? (window.innerWidth - 664),
+        saved?.panel?.top    ?? 72,
+        saved?.panel?.width  ?? 640,
+        saved?.panel?.height ?? 520
+    );
     el.style.left   = `${rect.left}px`;
     el.style.top    = `${rect.top}px`;
     el.style.width  = `${rect.width}px`;
@@ -7680,22 +7743,34 @@ async function openXYPlotPanel() {
 
     _xyPanel = { el, chart, controls, fileRefs: [], mapData: null, cleanups: [] };
 
-    // 既定値: 表示中チャンネルの先頭2つ（無ければ列の先頭2つ）
+    // 既定値: 表示中チャンネルの先頭2つ（無ければ列の先頭2つ）。
+    // 保存X/Yは現mainファイルにoptionが存在する場合のみ適用し、無ければ従来デフォルトにする
     const displayed = currentChannelOrder();
     const defX = displayed[0] || mainFile.columns[0]?.name || '';
     const defY = displayed[1] || mainFile.columns[1]?.name || defX;
-    if ([...controls.xSel.options].some(o => o.value === defX)) controls.xSel.value = defX;
-    if ([...controls.ySel.options].some(o => o.value === defY)) controls.ySel.value = defY;
+    const hasSavedX = saved && [...controls.xSel.options].some(o => o.value === saved.x);
+    const hasSavedY = saved && [...controls.ySel.options].some(o => o.value === saved.y);
+    const wantX = hasSavedX ? saved.x : defX;
+    const wantY = hasSavedY ? saved.y : defY;
+    if ([...controls.xSel.options].some(o => o.value === wantX)) controls.xSel.value = wantX;
+    if ([...controls.ySel.options].some(o => o.value === wantY)) controls.ySel.value = wantY;
+    controls.visChk.checked  = saved ? !!saved.visibleOnly : true;
+    controls.gradChk.checked = !!saved?.gradient;
+    controls.trajChk.checked = !!saved?.trajectory;
+    controls.regChk.checked  = !!saved?.regression;
 
     setupXYPanelDrag(_xyPanel);
     setupXYPanelResize(_xyPanel);
     setupXYPanelEsc(_xyPanel);
 
     controls.closeBtn.addEventListener('click', destroyXYPanel);
-    controls.xSel.addEventListener('change', () => renderXY());
-    controls.ySel.addEventListener('change', () => renderXY());
+    controls.xSel.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
+    controls.ySel.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
     controls.swapBtn.addEventListener('click', swapXYAxes);
-    controls.visChk.addEventListener('change', () => renderXY());
+    controls.visChk.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
+    controls.gradChk.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
+    controls.trajChk.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
+    controls.regChk.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
 
     await renderXY();
 }
