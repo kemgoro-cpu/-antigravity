@@ -6570,8 +6570,7 @@ function exitArrangeMode() {
         if (!dragging) return;
         // マウス移動量からサイドバー幅を計算
         const newW = Math.max(200, Math.min(window.innerWidth * 0.6, startW + (e.clientX - startX)));
-        sidebar.style.width    = newW + 'px';
-        sidebar.style.minWidth = newW + 'px';
+        sidebar.style.width = newW + 'px';
         // チャートがあればリサイズイベントを発火（グラフの再描画）
         if (state.chart) state.chart.resize();
     });
@@ -7698,12 +7697,12 @@ function applySettings(rawSettings) {
     const _smc = document.getElementById('show-markers-chk');
     if (_smc) _smc.checked = state.showMarkers;
 
-    // サイドバー幅を復元
+    // サイドバー幅を復元（ドラッグ操作と同じ範囲にクランプ。minWidthは固定しない）
     if (s.sidebarWidth) {
         const sidebar = document.querySelector('.sidebar');
         if (sidebar) {
-            sidebar.style.width    = s.sidebarWidth + 'px';
-            sidebar.style.minWidth = s.sidebarWidth + 'px';
+            const clampedW = Math.max(200, Math.min(window.innerWidth * 0.6, s.sidebarWidth));
+            sidebar.style.width = clampedW + 'px';
         }
     }
 
