@@ -71,6 +71,13 @@
     --chart-crosshair: rgba(15, 20, 40, 0.4);
 }
 
+/* select要素のネイティブポップアップ（ドロップダウン一覧）のコントラスト対策。
+   color-scheme未宣言だとChromium系は「明るい背景×ほぼ白の文字」で描画してしまい、
+   ダークテーマのチャンネル名が読めなくなる。option側はFirefox系のフォールバック。 */
+select { color-scheme: dark; }
+:root[data-theme="light"] select { color-scheme: light; }
+select option { background: var(--bg-surface); color: var(--text-primary); }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
