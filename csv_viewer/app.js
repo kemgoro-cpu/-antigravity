@@ -90,10 +90,10 @@ function showWarning(message, detail) {
 
 // Catch all unhandled errors
 window.addEventListener('error', e => {
-    showError('Unhandled error', `${e.message}\n at ${e.filename}:${e.lineno}:${e.colno}`);
+    showError('予期しないエラー', `${e.message}\n at ${e.filename}:${e.lineno}:${e.colno}`);
 });
 window.addEventListener('unhandledrejection', e => {
-    showError('Unhandled promise rejection', String(e.reason));
+    showError('予期しないPromiseエラー', String(e.reason));
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -1781,7 +1781,7 @@ function showChartGroupModal(groupId) {
             <button class="btn-secondary btn-icon chart-group-detach" title="独立チャートへ分離"><i class='bx bx-unlink'></i></button>
         </div>`).join('');
     const { modal, close } = createModal(`
-        <h3 id="chart-group-title">Overlay Settings</h3>
+        <h3 id="chart-group-title">重ね合わせ設定</h3>
         <div class="chart-group-rows">${rows}</div>
         <div class="modal-actions"><button class="btn-primary chart-group-done">完了</button></div>`, {
         modalClass: 'chart-group-modal',
@@ -1904,7 +1904,7 @@ function renderParseJobs() {
             const job = state.parseJobs.get(e.currentTarget.dataset.cancelJob);
             if (job) {
                 job.cancelled = true;
-                updateParseJob(job, 'Cancelling...', job.rows);
+                updateParseJob(job, 'キャンセル中...', job.rows);
             }
         });
     });
@@ -1984,7 +1984,7 @@ async function parseCSV(file) {
             : requestedEncoding;
     } catch (e) {
         finishParseJob(parseJob);
-        showError(`File read error: ${file.name}`, e.stack || e.message);
+        showError(`ファイル読み込みエラー: ${file.name}`, e.stack || e.message);
         return;
     }
     console.log(`[CSV Viewer] parseCSV: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, format=${trn ? 'TRN(whitespace)' : 'CSV(auto)'}, encoding=${encoding}, mode=${requestedEncoding})`);
@@ -1992,10 +1992,10 @@ async function parseCSV(file) {
     if (trn) {
         // TRNファイル: テキストを読み込んで空白→タブに変換してからパースする
         try {
-            updateParseJob(parseJob, 'Decoding TRN...', 0);
+            updateParseJob(parseJob, 'TRNをデコード中...', 0);
             const text = await readFileAsDecodedText(file, encoding);
             const converted = convertWhitespaceToTabs(text);
-            updateParseJob(parseJob, 'Parsing header...', 0);
+            updateParseJob(parseJob, 'ヘッダーを解析中...', 0);
             // Phase 1: Preview parse（先頭50行だけ抽出してヘッダー検出）
             const previewLines = converted.split('\n').slice(0, 50).join('\n');
             const previewRes = Papa.parse(previewLines, {
@@ -2008,12 +2008,12 @@ async function parseCSV(file) {
             onHeaderParsed(fileId, file.name, converted, previewRes.data, '\t', encoding, requestedEncoding, parseJob, headerHints);
         } catch (e) {
             finishParseJob(parseJob);
-            showError(`TRN parse failed: ${file.name}`, e.stack || e.message);
+            showError(`TRNのパースに失敗しました: ${file.name}`, e.stack || e.message);
         }
     } else {
         // CSVファイル: PapaParseに直接Fileオブジェクトを渡す
         try {
-            updateParseJob(parseJob, 'Parsing header...', 0);
+            updateParseJob(parseJob, 'ヘッダーを解析中...', 0);
             Papa.parse(file, {
                 encoding,
                 header: false,
@@ -2025,17 +2025,17 @@ async function parseCSV(file) {
                         onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding, requestedEncoding, parseJob, headerHints);
                     } catch (e) {
                         finishParseJob(parseJob);
-                        showError(`Header parse failed: ${file.name}`, e.stack || e.message);
+                        showError(`ヘッダーのパースに失敗しました: ${file.name}`, e.stack || e.message);
                     }
                 },
                 error: err => {
                     finishParseJob(parseJob);
-                    showError(`CSV parse error: ${file.name}`, err.message || String(err));
+                    showError(`CSVのパースエラー: ${file.name}`, err.message || String(err));
                 },
             });
         } catch (e) {
             finishParseJob(parseJob);
-            showError(`Failed to start parsing: ${file.name}`, e.stack || e.message);
+            showError(`パースを開始できませんでした: ${file.name}`, e.stack || e.message);
         }
     }
 }
@@ -2133,7 +2133,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
         finishParseJob(parseJob);
         showError(
             `チャンネルが見つかりません: ${fileName}`,
-            `Name Row (${nameRow + 1}) に Time 列以外のチャンネル名がありません。ヘッダー行を確認してください。`
+            `名前行 (${nameRow + 1}) に Time 列以外のチャンネル名がありません。ヘッダー行を確認してください。`
         );
         return;
     }
@@ -2145,7 +2145,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
     let rowIdx = 0;
 
     console.log(`[CSV Viewer] Phase 2: streaming time data for ${fileName} (dataStart=${dataStart}, timeIdx=${timeIdx})`);
-    updateParseJob(parseJob, 'Loading time data...', 0);
+    updateParseJob(parseJob, '時間データを読み込み中...', 0);
 
     try {
         Papa.parse(file, {
@@ -2251,17 +2251,17 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     // モード走行データ（目標・実測車速あり）ならドライビングインデックスを自動計算
                     computeDriveIndex().catch(e => console.warn('[DriveIndex] auto compute failed:', e));
                 } catch (e) {
-                    showError(`Failed to process time data: ${fileName}`, e.stack || e.message);
+                    showError(`時間データの処理に失敗しました: ${fileName}`, e.stack || e.message);
                 }
             },
             error: err => {
                 finishParseJob(parseJob);
-                showError(`Time data parse error: ${fileName}`, err.message || String(err));
+                showError(`時間データのパースエラー: ${fileName}`, err.message || String(err));
             },
         });
     } catch (e) {
         finishParseJob(parseJob);
-        showError(`Failed to start time streaming: ${fileName}`, e.stack || e.message);
+        showError(`時間データのストリーミングを開始できませんでした: ${fileName}`, e.stack || e.message);
     }
 }
 
@@ -2303,8 +2303,8 @@ function loadColumnsForFile(fileId, colNames) {
                 await f.file.slice(0, 1).text();
             } catch (e) {
                 showError(
-                    `File re-read failed: ${f.name}`,
-                    `File object is no longer accessible. This may be caused by browser security policy or the file was moved/deleted.\n${e.message}`
+                    `ファイルの再読み込みに失敗しました: ${f.name}`,
+                    `ファイルに再アクセスできません。ブラウザのセキュリティポリシー、またはファイルが移動・削除された可能性があります。\n${e.message}`
                 );
                 return;
             }
@@ -2359,19 +2359,19 @@ function loadColumnsForFile(fileId, colNames) {
                             // Bitチャンネル自動検出
                             detectBitChannels(f);
                         } catch (e) {
-                            showError(`Failed to store column data: ${f.name}`, e.stack || e.message);
+                            showError(`チャンネルデータの保存に失敗しました: ${f.name}`, e.stack || e.message);
                         }
                         resolve();
                     },
                     error: function(err) {
                         finishParseJob(loadJob);
-                        showError(`Column parse error: ${f.name}`, err.message || String(err));
+                        showError(`チャンネルのパースエラー: ${f.name}`, err.message || String(err));
                         resolve();
                     },
                 });
             } catch (e) {
                 finishParseJob(loadJob);
-                showError(`Failed to start column loading: ${f.name}`, e.stack || e.message);
+                showError(`チャンネルの読み込みを開始できませんでした: ${f.name}`, e.stack || e.message);
                 resolve();
             }
         });
@@ -2380,7 +2380,7 @@ function loadColumnsForFile(fileId, colNames) {
     // Clean up queue entry when done
     // ジョブが失敗してもMapから必ず削除する（拒否済みPromiseが残ると以降の読み込みが永久に失敗するため）
     const cleanup = queueJob
-        .catch(e => showError(`Column load failed: ${f.name}`, e.stack || e.message))
+        .catch(e => showError(`チャンネルの読み込みに失敗しました: ${f.name}`, e.stack || e.message))
         .then(() => {
             if (_parseQueue.get(fileId) === cleanup) _parseQueue.delete(fileId);
         });
@@ -2409,7 +2409,7 @@ async function ensureColumnsAndRender() {
         renderColumnList(); // Bitバッジの反映
         renderChart();
     } catch (e) {
-        showError('Failed to load column data', e.stack || e.message);
+        showError('チャンネルデータの読み込みに失敗しました', e.stack || e.message);
         renderChart();
     }
 }
@@ -2623,7 +2623,7 @@ function autoNormalizeTimeScales({ notify = true } = {}) {
     if (notify && changes.length) {
         showWarning(
             'Time単位を自動調整しました',
-            `${changes.join(', ')} を秒基準に揃えました。Parse Info で判定結果を確認できます。`
+            `${changes.join(', ')} を秒基準に揃えました。パース情報で判定結果を確認できます。`
         );
     }
 }
@@ -2672,7 +2672,7 @@ function updateParsePreview(fileRecord) {
     if (!dom.parsePreview || !fileRecord) return;
     const hi = fileRecord.headerInfo;
     const encodingLabel = hi.encodingMode === 'auto'
-        ? `Auto → ${hi.encoding}`
+        ? `自動 → ${hi.encoding}`
         : hi.encoding;
     const channelNames = fileRecord.columns.slice(0, 5).map(c => c.name).join(', ');
     const more = fileRecord.columns.length > 5 ? `, +${fileRecord.columns.length - 5}` : '';
@@ -2682,10 +2682,10 @@ function updateParsePreview(fileRecord) {
     dom.parsePreview.innerHTML = `
         <div class="parse-preview-title" title="${esc(fileRecord.name)}">${esc(fileRecord.name)}</div>
         <dl class="parse-preview-grid">
-            <dt>Encoding</dt><dd>${esc(encodingLabel)}</dd>
-            <dt>Rows</dt><dd>Name ${hi.nameRow + 1}, Unit ${hi.unitRow >= 0 ? hi.unitRow + 1 : '-'}, Data ${hi.dataStart + 1}</dd>
-            <dt>Time</dt><dd>${esc(timeHeader)} (${esc(getTimeScaleLabel(fileRecord))})</dd>
-            <dt>Data</dt><dd>${fileRecord.timeData.length} points / ${fileRecord.columns.length} channels</dd>
+            <dt>文字コード</dt><dd>${esc(encodingLabel)}</dd>
+            <dt>行</dt><dd>名前 ${hi.nameRow + 1}, 単位 ${hi.unitRow >= 0 ? hi.unitRow + 1 : '-'}, データ ${hi.dataStart + 1}</dd>
+            <dt>時間</dt><dd>${esc(timeHeader)} (${esc(getTimeScaleLabel(fileRecord))})</dd>
+            <dt>データ</dt><dd>${fileRecord.timeData.length} 点 / ${fileRecord.columns.length} チャンネル</dd>
         </dl>
         <div class="parse-preview-channels" title="${esc(channelNames + more)}">${esc(channelNames + more || 'チャンネルなし')}</div>
     `;
@@ -2844,13 +2844,13 @@ function renderFileList() {
         const effectiveTimeUnit = f.headerInfo?.timeScaleUnit === 'ms' ? 'ms' : 's';
         const timeUnitRow = `
             <div class="file-time-unit-row">
-                <span class="time-unit-label">Time</span>
+                <span class="time-unit-label">時間</span>
                 <select class="time-unit-select" data-time-unit-id="${fid}"
                     title="このファイルのTime列の元単位を指定">
                     <option value="s"${effectiveTimeUnit === 's' ? ' selected' : ''}>s</option>
                     <option value="ms"${effectiveTimeUnit === 'ms' ? ' selected' : ''}>ms</option>
                 </select>
-                <span class="time-unit-source">${f.headerInfo?.timeScaleSource === 'manual' ? 'Manual' : 'Auto'}</span>
+                <span class="time-unit-source">${f.headerInfo?.timeScaleSource === 'manual' ? '手動' : '自動'}</span>
             </div>`;
 
         const offsetRow = isMain ? '' : `
@@ -2859,8 +2859,8 @@ function renderFileList() {
                 <input type="number" class="offset-input" step="0.001"
                     value="${f.offset.toFixed(3)}"
                     data-offset-id="${fid}"
-                    title="Time offset applied to this sub file (seconds)">
-                <button class="btn-auto" data-auto-id="${fid}" title="Auto-align to main">Auto</button>
+                    title="このSubファイルに適用する時間オフセット（秒）">
+                <button class="btn-auto" data-auto-id="${fid}" title="Mainに自動整合">自動</button>
             </div>`;
 
         // バッジ表示: Main=M, Sub=s1,s2,...（Custom RAM式で使うID）
@@ -2899,7 +2899,7 @@ function renderFileList() {
             li.querySelector('.file-item-top').addEventListener('click', e => {
                 if (e.target.closest('.remove-file') || e.target.closest('.role-badge')) return;
                 state.shiftFileId = fid;
-                dom.hintEl.textContent = `Drag chart ← → to shift: ${f.shortName}`;
+                dom.hintEl.textContent = `チャートを左右にドラッグして時間シフト: ${f.shortName}`;
                 renderFileList();
             });
         }
@@ -2997,7 +2997,7 @@ function showDebugModal(fileId) {
 
     // --- セクション1: headerInfo（パース設定）---
     // id を振ることで aria-labelledby からモーダルタイトルを参照できる
-    let html = `<h3 id="debug-modal-title" style="margin:0 0 12px;color:var(--accent-soft);">Parse Info</h3>`;
+    let html = `<h3 id="debug-modal-title" style="margin:0 0 12px;color:var(--accent-soft);">パース情報（デバッグ）</h3>`;
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;margin-bottom:16px;">`;
     const infoRows = [
         ['ファイル名', f.name],
@@ -3029,12 +3029,12 @@ function showDebugModal(fileId) {
         const head = Array.from(td.slice(0, 10)).map((v, i) => `[${i}] ${v}`);
         const tail = td.length > 10 ? Array.from(td.slice(-5)).map((v, i) => `[${td.length - 5 + i}] ${v}`) : [];
         html += head.join('<br>');
-        if (tail.length) html += `<br><span style="color:#a0a5b1;">... (${td.length} points total)</span><br>` + tail.join('<br>');
+        if (tail.length) html += `<br><span style="color:#a0a5b1;">...（全${td.length}点）</span><br>` + tail.join('<br>');
     }
     html += `</div>`;
 
     // --- セクション3: columns一覧 ---
-    html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">Columns</h3>`;
+    html += `<h3 style="margin:0 0 8px;color:var(--accent-soft);">カラム一覧</h3>`;
     html += `<div style="font-size:11px;max-height:120px;overflow-y:auto;margin-bottom:16px;">`;
     html += `<table style="border-collapse:collapse;width:100%;">`;
     html += `<tr style="color:#a0a5b1;"><td style="padding:2px 6px;">idx</td><td style="padding:2px 6px;">name</td><td style="padding:2px 6px;">unit</td><td style="padding:2px 6px;">loaded</td></tr>`;
@@ -3550,10 +3550,10 @@ function showCustomRAMEditModal(id) {
         <h3 id="custom-edit-title">Custom RAM を編集</h3>
         <p class="custom-edit-name">${esc(cr.name)}<span class="custom-edit-hint">（名前は変更できません）</span></p>
         <label class="custom-edit-label">式</label>
-        <input type="text" class="custom-ram-input custom-edit-expr-input" value="${esc(cr.expr)}" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" autocomplete="off">
+        <input type="text" class="custom-ram-input custom-edit-expr-input" value="${esc(cr.expr)}" placeholder="例: sqrt(pow(X,2) + pow(Y,2))" autocomplete="off">
         <div class="custom-ram-validation custom-edit-validation"></div>
         <label class="custom-edit-label">単位（任意）</label>
-        <input type="text" class="custom-ram-input custom-edit-unit-input" value="${esc(cr.unit || '')}" placeholder="Unit (optional)">
+        <input type="text" class="custom-ram-input custom-edit-unit-input" value="${esc(cr.unit || '')}" placeholder="単位（任意）">
         <div class="modal-actions">
             <button class="btn-secondary custom-edit-cancel">キャンセル</button>
             <button class="btn-primary custom-edit-save">保存</button>
@@ -4632,7 +4632,7 @@ function renderColumnList() {
     if (dom.colHdr) dom.colHdr.textContent = mainFile ? `(${mainFile.shortName})` : '';
 
     if (!mainFile) {
-        dom.colList.innerHTML = '<div class="placeholder-text">Upload a CSV to see channels</div>';
+        dom.colList.innerHTML = '<div class="placeholder-text">CSVを読み込むとチャンネルが表示されます</div>';
         return;
     }
 
@@ -4861,7 +4861,7 @@ function showChannelMapModal(mainName) {
             : '<div class="alias-empty">候補がありません</div>';
 
         modal.innerHTML = `
-            <h3 id="channel-map-title" style="margin:0 0 10px;color:var(--accent-soft);">Channel Map</h3>
+            <h3 id="channel-map-title" style="margin:0 0 10px;color:var(--accent-soft);">チャンネルマップ</h3>
             <div class="alias-main">
                 <div class="alias-main-label">Main</div>
                 <div class="alias-main-name">${esc(mainName)}${mainCol.unit ? ` <span>(${esc(mainCol.unit)})</span>` : ''}</div>
@@ -5436,7 +5436,7 @@ function renderChart() {
     const warningKey = CSVChartOptions.deriveNarrowWarningKey(narrowPlotWidth, groupLayouts.map(l => l.axisCount));
     if (warningKey && state.axisLayoutWarningKey !== warningKey) {
         state.axisLayoutWarningKey = warningKey;
-        showWarning('Y軸が多いため描画領域が狭くなっています', 'Overlay Settings で軸を共有すると表示幅を広げられます。');
+        showWarning('Y軸が多いため描画領域が狭くなっています', '重ね合わせ設定で軸を共有すると表示幅を広げられます。');
     } else if (!warningKey) {
         state.axisLayoutWarningKey = '';
     }
@@ -5931,8 +5931,8 @@ function enterBoxZoom() {
     if (state.measureMode) exitMeasureMode();
     state.brushMode = true;
     dom.zoomBtn.classList.add('btn-active');
-    dom.zoomBtn.innerHTML = `<i class='bx bx-x'></i> Cancel Zoom`;
-    dom.hintEl.textContent = 'Drag to select zoom range…';
+    dom.zoomBtn.innerHTML = `<i class='bx bx-x'></i> <span class="btn-label">キャンセル</span>`;
+    dom.hintEl.textContent = 'ドラッグしてズーム範囲を選択…';
     state.chart.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'lineX', brushMode: 'single' } });
 }
 
@@ -5940,7 +5940,7 @@ function exitBoxZoom() {
     if (!state.chart) return;
     state.brushMode = false;
     dom.zoomBtn.classList.remove('btn-active');
-    dom.zoomBtn.innerHTML = `<i class='bx bx-selection'></i> Box Zoom`;
+    dom.zoomBtn.innerHTML = `<i class='bx bx-selection'></i> <span class="btn-label">ボックスズーム</span>`;
     dom.hintEl.textContent = '';
     state.chart.dispatchAction({ type: 'brush', areas: [] });
     state.chart.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
@@ -5996,7 +5996,7 @@ function enterMeasureMode() {
     state.measureMode = true;
     state.measure = { tA: null, tB: null };
     dom.measureBtn.classList.add('btn-active');
-    dom.measureBtn.innerHTML = `<i class='bx bx-x'></i> Cancel`;
+    dom.measureBtn.innerHTML = `<i class='bx bx-x'></i> <span class="btn-label">キャンセル</span>`;
     dom.hintEl.textContent = 'チャートをクリックして計測点A→Bを指定…';
     dom.chartEl.style.cursor = 'crosshair';
     updateMeasurePanel();
@@ -6010,7 +6010,7 @@ function exitMeasureMode(rerender = true) {
     state.measureMode = false;
     state.measure = { tA: null, tB: null };
     dom.measureBtn?.classList.remove('btn-active');
-    if (dom.measureBtn) dom.measureBtn.innerHTML = `<i class='bx bx-ruler'></i> Measure`;
+    if (dom.measureBtn) dom.measureBtn.innerHTML = `<i class='bx bx-ruler'></i> <span class="btn-label">計測</span>`;
     dom.hintEl.textContent = '';
     dom.chartEl.style.cursor = '';
     removeMeasurePanel();
@@ -6125,7 +6125,7 @@ function buildMeasureTableHTML(t0, t1) {
     if (!rows.length) return html + `<div class="measure-hint">区間内にデータ点がありません</div>`;
 
     html += `<table><thead><tr>`
-        + `<th>Channel</th><th>A</th><th>B</th><th>Δ</th>`
+        + `<th>チャンネル</th><th>A</th><th>B</th><th>Δ</th>`
         + `<th>min</th><th>max</th><th>mean</th><th>RMS</th>`
         + `</tr></thead><tbody>`;
     for (const r of rows) {
@@ -6244,7 +6244,7 @@ function buildStatsTableHTML(t0, t1) {
     if (!rows.length) return html + `<div class="measure-hint">表示範囲内にデータ点がありません</div>`;
 
     html += `<table><thead><tr>`
-        + `<th>Channel</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th>`
+        + `<th>チャンネル</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th>`
         + `</tr></thead><tbody>`;
     for (const r of rows) {
         html += `<tr>`
@@ -6700,8 +6700,8 @@ function enterShiftMode() {
 
     state.shiftMode = true;
     dom.shiftBtn.classList.add('btn-active');
-    dom.shiftBtn.innerHTML = `<i class='bx bx-x'></i> Exit Shift`;
-    dom.hintEl.textContent = `Drag chart ← → to shift: ${state.files[state.shiftFileId]?.shortName ?? ''}`;
+    dom.shiftBtn.innerHTML = `<i class='bx bx-x'></i> <span class="btn-label">シフト終了</span>`;
+    dom.hintEl.textContent = `チャートを左右にドラッグして時間シフト: ${state.files[state.shiftFileId]?.shortName ?? ''}`;
     dom.chartEl.style.cursor = 'grab';
 
     renderFileList();
@@ -6712,7 +6712,7 @@ function exitShiftMode() {
     state.shiftMode = false;
     state.shiftDrag = null;
     dom.shiftBtn.classList.remove('btn-active');
-    dom.shiftBtn.innerHTML = `<i class='bx bx-transfer-alt'></i> Time Shift`;
+    dom.shiftBtn.innerHTML = `<i class='bx bx-transfer-alt'></i> <span class="btn-label">時間シフト</span>`;
     dom.hintEl.textContent = '';
     dom.chartEl.style.cursor = '';
 
@@ -6731,15 +6731,15 @@ function enterArrangeMode() {
     if (state.measureMode) exitMeasureMode();
     state.arrangeMode = true;
     dom.arrangeBtn.classList.add('btn-active');
-    dom.arrangeBtn.innerHTML = `<i class='bx bx-x'></i> Exit Arrange`;
-    dom.hintEl.textContent = 'Drag chart panels up or down to reorder';
+    dom.arrangeBtn.innerHTML = `<i class='bx bx-x'></i> <span class="btn-label">並べ替え終了</span>`;
+    dom.hintEl.textContent = 'チャートパネルを上下にドラッグして並べ替え';
     renderChart();
 }
 
 function exitArrangeMode() {
     state.arrangeMode = false;
     dom.arrangeBtn.classList.remove('btn-active');
-    dom.arrangeBtn.innerHTML = `<i class='bx bx-sort-alt-2'></i> Arrange`;
+    dom.arrangeBtn.innerHTML = `<i class='bx bx-sort-alt-2'></i> <span class="btn-label">並べ替え</span>`;
     dom.hintEl.textContent = '';
     removeArrangeOverlay();
     renderChart();
@@ -7026,7 +7026,7 @@ function exportReportHTML() {
     let statsHtml = '';
     if (statsRows.length) {
         statsHtml = `<h2>表示範囲の統計（${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s）</h2>`
-            + `<table><thead><tr><th>Channel</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th></tr></thead><tbody>`
+            + `<table><thead><tr><th>チャンネル</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th></tr></thead><tbody>`
             + statsRows.map(r =>
                 `<tr><td><span class="sw" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
                 + `<td class="num">${fmtNum(r.min)}</td><td class="num">${fmtNum(r.max)}</td>`
@@ -7096,7 +7096,7 @@ img.chart { max-width: 100%; border: 1px solid #d5d9e2; border-radius: 6px; marg
 <h1>CSV Chart Viewer レポート</h1>
 <p class="meta">Main: ${esc(mainFile.name)}　|　生成: ${now.toLocaleString('ja-JP')}</p>
 <h2>ファイル</h2>
-<table><thead><tr><th>ロール</th><th>ファイル名</th><th>点数</th><th>チャンネル数</th><th>時間範囲</th><th>Time Shift</th></tr></thead><tbody>${filesRows}</tbody></table>
+<table><thead><tr><th>ロール</th><th>ファイル名</th><th>点数</th><th>チャンネル数</th><th>時間範囲</th><th>時間シフト</th></tr></thead><tbody>${filesRows}</tbody></table>
 <h2>チャート</h2>
 ${imgURL ? `<img class="chart" src="${imgURL}" alt="chart">` : '<p class="meta">チャート画像を取得できませんでした</p>'}
 ${statsHtml}
@@ -7427,7 +7427,7 @@ function renderPresetSelect() {
     if (!dom.presetSelect) return;
     const presets = loadPresets();
     const selected = dom.presetSelect.value;
-    dom.presetSelect.innerHTML = '<option value="">Preset...</option>';
+    dom.presetSelect.innerHTML = '<option value="">プリセット…</option>';
     Object.keys(presets).sort((a, b) => a.localeCompare(b, 'ja')).forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
@@ -7747,7 +7747,7 @@ function renderChannelFavSelect() {
     if (!dom.favSelect) return;
     const favs = loadChannelFavorites();
     const selected = dom.favSelect.value;
-    dom.favSelect.innerHTML = '<option value="">Favorites...</option>';
+    dom.favSelect.innerHTML = '<option value="">お気に入り…</option>';
     Object.keys(favs).sort((a, b) => a.localeCompare(b, 'ja')).forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;

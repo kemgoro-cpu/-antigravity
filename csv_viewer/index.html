@@ -21,12 +21,12 @@
 
                 <!-- File Upload -->
                 <div class="control-group" data-section="files">
-                    <h3><i class='bx bx-upload' aria-hidden="true"></i> Files</h3>
+                    <h3><i class='bx bx-upload' aria-hidden="true"></i> ファイル</h3>
                     <div id="drop-zone" class="drop-zone">
                         <i class='bx bx-cloud-upload' aria-hidden="true"></i>
-                        <p>Drag & Drop files here</p>
+                        <p>ここにファイルをドラッグ&ドロップ</p>
                         <p class="small">CSV / TRN</p>
-                        <button id="browse-files-btn" class="btn-primary">Browse Files</button>
+                        <button id="browse-files-btn" class="btn-primary">ファイルを選択</button>
                         <input type="file" id="file-input" multiple accept=".csv,.trn" class="hidden">
                     </div>
                     <div id="parse-status-list" class="parse-status-list"></div>
@@ -35,15 +35,15 @@
 
                 <!-- Parse Settings -->
                 <div class="control-group" data-section="parse">
-                    <h3><i class='bx bx-cog' aria-hidden="true"></i> Settings</h3>
+                    <h3><i class='bx bx-cog' aria-hidden="true"></i> 読み込み設定</h3>
                     <div class="settings-grid">
-                        <label for="name-row-idx">Name Row:</label>
+                        <label for="name-row-idx">名前行:</label>
                         <input type="number" id="name-row-idx" value="1" min="1">
-                        <label for="unit-row-idx">Unit Row:</label>
+                        <label for="unit-row-idx">単位行:</label>
                         <input type="number" id="unit-row-idx" value="2" min="1">
-                        <label for="encoding-mode">Encoding:</label>
+                        <label for="encoding-mode">文字コード:</label>
                         <select id="encoding-mode" aria-label="CSV文字コード">
-                            <option value="auto" selected>Auto</option>
+                            <option value="auto" selected>自動</option>
                             <option value="utf-8">UTF-8</option>
                             <option value="shift-jis">Shift_JIS</option>
                             <option value="utf-16le">UTF-16LE</option>
@@ -53,7 +53,7 @@
                     <div id="parse-preview" class="parse-preview hidden"></div>
                     <div class="preset-row">
                         <select id="settings-preset-select" aria-label="設定プリセット">
-                            <option value="">Preset...</option>
+                            <option value="">プリセット…</option>
                         </select>
                         <button id="preset-save-btn" class="btn-secondary btn-icon" aria-label="現在の設定をプリセット保存"
                                 data-tip-title="プリセット保存" data-tip-desc="現在の設定をプリセットとして保存します">
@@ -78,13 +78,13 @@
                            style="cursor:pointer;margin-left:auto;font-size:1rem;opacity:0.5;"></i>
                     </h3>
                     <div class="custom-ram-form">
-                        <input type="text" id="custom-ram-name" placeholder="Name" class="custom-ram-input" aria-label="Custom RAM名">
-                        <input type="text" id="custom-ram-unit" placeholder="Unit (optional)" class="custom-ram-input" aria-label="Custom RAM単位（省略可）">
+                        <input type="text" id="custom-ram-name" placeholder="名前" class="custom-ram-input" aria-label="Custom RAM名">
+                        <input type="text" id="custom-ram-unit" placeholder="単位（任意）" class="custom-ram-input" aria-label="Custom RAM単位（省略可）">
                         <div style="position:relative;flex:1;">
-                            <input type="text" id="custom-ram-expr" placeholder="e.g. sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off" aria-label="Custom RAM計算式">
+                            <input type="text" id="custom-ram-expr" placeholder="例: sqrt(pow(X,2) + pow(Y,2))" class="custom-ram-input" autocomplete="off" aria-label="Custom RAM計算式">
                             <ul id="custom-ram-suggest" class="custom-ram-suggest"></ul>
                         </div>
-                        <button id="custom-ram-add" class="btn-primary btn-sm">Add</button>
+                        <button id="custom-ram-add" class="btn-primary btn-sm">追加</button>
                     </div>
                     <div id="custom-ram-validation" class="custom-ram-validation"></div>
                     <ul id="custom-ram-list" class="custom-ram-list"></ul>
@@ -92,9 +92,9 @@
 
                 <!-- Event Detection -->
                 <div class="control-group" data-section="events">
-                    <h3><i class='bx bx-flag' aria-hidden="true"></i> Events</h3>
+                    <h3><i class='bx bx-flag' aria-hidden="true"></i> イベント検出</h3>
                     <div class="event-form">
-                        <input type="text" id="event-expr" placeholder="e.g. Actual_Speed > 120" class="custom-ram-input" autocomplete="off" aria-label="イベント検出の条件式">
+                        <input type="text" id="event-expr" placeholder="例: Actual_Speed > 120" class="custom-ram-input" autocomplete="off" aria-label="イベント検出の条件式">
                         <button id="event-detect-btn" class="btn-primary btn-sm">検出</button>
                     </div>
                     <div id="event-validation" class="custom-ram-validation"></div>
@@ -106,14 +106,14 @@
 
                 <!-- Channel Selection (main file only) -->
                 <div class="control-group active-columns-group" data-section="channels">
-                    <h3><i class='bx bx-list-ul' aria-hidden="true"></i> Channels <span id="channel-source-label" class="channel-source-label"></span></h3>
+                    <h3><i class='bx bx-list-ul' aria-hidden="true"></i> チャンネル <span id="channel-source-label" class="channel-source-label"></span></h3>
                     <div class="search-box">
                         <i class='bx bx-search' aria-hidden="true"></i>
-                        <input type="text" id="column-search" placeholder="Search channels..." aria-label="チャンネル検索">
+                        <input type="text" id="column-search" placeholder="チャンネルを検索…" aria-label="チャンネル検索">
                     </div>
                     <div class="preset-row">
                         <select id="channel-fav-select" aria-label="チャンネルセットのお気に入り">
-                            <option value="">Favorites...</option>
+                            <option value="">お気に入り…</option>
                         </select>
                         <button id="channel-fav-save" class="btn-secondary btn-icon" aria-label="現在の表示チャンネルの組み合わせをお気に入り保存"
                                 data-tip-title="お気に入り保存" data-tip-desc="現在の表示チャンネルの組み合わせをお気に入りに保存します">
@@ -129,7 +129,7 @@
                         </button>
                     </div>
                     <div id="column-list" class="column-list">
-                        <div class="placeholder-text">Upload a CSV to see channels</div>
+                        <div class="placeholder-text">CSVを読み込むとチャンネルが表示されます</div>
                     </div>
                 </div>
 
