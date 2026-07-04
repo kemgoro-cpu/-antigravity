@@ -7844,7 +7844,7 @@ function buildXYSeries(xName, yName, range, opts = {}) {
  * #xy-readoutに回帰結果（ファイル毎: y=ax+b, R², n）を色スウォッチ付きで表示する。
  * 対象が無ければ空にする。
  */
-function renderXYReadout(regressionInfo) {
+function renderXYReadout(regressionInfo, mapData) {
     if (!_xyPanel) return;
     const lines = regressionInfo.map(r => {
         const swatch = `<span class="measure-swatch" style="background:${esc(r.color)}"></span>`;
@@ -7852,7 +7852,40 @@ function renderXYReadout(regressionInfo) {
         return `${swatch}${esc(r.name)}: y = ${r.slope.toFixed(4)}x ${sign} ${Math.abs(r.intercept).toFixed(4)}`
             + `　R²=${r.r2.toFixed(4)} (n=${r.n})`;
     });
+    if (mapData && mapData.ok) {
+        const levels = CSVXYUtils.niceLevels(mapData.zmin, mapData.zmax, 10);
+        lines.push(`マップ: ${esc(mapData.name)}  z: ${fmtVal(mapData.zmin)}〜${fmtVal(mapData.zmax)}（${levels.length}レベル）`);
+    }
     _xyPanel.controls.readout.innerHTML = lines.join('<br>');
+}
+
+/**
+ * 等高線マップ（背景に重ねる等高線）の系列を組み立てる。X/Yチャンネル選択とは
+ * 独立（読み込んだCSVのx,y平面をそのままXY散布図の座標系に重ねる想定）。
+ * レベル毎に1系列（線分をnullで連結）にすることで、常に~10系列程度で済む。
+ * scatterの背面(z:1)・silent（等高線自体はクリック/ホバー対象にしない）。
+ */
+function buildXYContourSeries(mapData) {
+    if (!mapData || !mapData.ok) return [];
+    const levels = CSVXYUtils.niceLevels(mapData.zmin, mapData.zmax, 10);
+    const series = [];
+    for (let i = 0; i < levels.length; i++) {
+        const level = levels[i];
+        const segs = CSVXYUtils.computeIsoSegments(mapData.xs, mapData.ys, mapData.zz, level);
+        if (!segs.length) continue;
+        const data = [];
+        for (const [p1, p2] of segs) {
+            if (data.length) data.push([null, null]);
+            data.push(p1, p2);
+        }
+        series.push({
+            id: `xy-map-L${i}`, type: 'line', showSymbol: false, silent: true, z: 1,
+            lineStyle: { color: T.dim, opacity: 0.55, width: 1 },
+            endLabel: { show: true, formatter: () => fmtVal(level), color: T.dim, fontSize: 10 },
+            data,
+        });
+    }
+    return series;
 }
 
 /** X/Yセレクトの現在値・チェックボックス状態からチャートを再描画する */
@@ -7889,8 +7922,13 @@ async function renderXY() {
         regression: controls.regChk.checked,
     });
     _xyPanel.fileRefs = built.fileRefs;
-    renderXYReadout(built.regressionInfo);
+    renderXYReadout(built.regressionInfo, _xyPanel.mapData);
+
+    // 等高線マップ（あれば）はscatter群より前＝背面(z:1)に置く。visualMapのseriesIndexは
+    // 最終series配列の位置を見るので、このオフセット分をscatterRefs.indexに加算する
+    const contourSeries = buildXYContourSeries(_xyPanel.mapData);
     const series = [
+        ...contourSeries,
         ...built.series,
         // カーソル連動ハイライト・計測A/Bマーカー（安定ID）。部分setOptionで
         // このidだけを差し替えるので、フル再描画のたびに空データで再宣言しておく
@@ -7911,7 +7949,7 @@ async function renderXY() {
               }
               if (!Number.isFinite(minT) || !Number.isFinite(maxT) || minT === maxT) return null;
               return {
-                  type: 'continuous', show: false, dimension: 2, seriesIndex: index,
+                  type: 'continuous', show: false, dimension: 2, seriesIndex: contourSeries.length + index,
                   min: minT, max: maxT,
                   inRange: { color: [shadeColor(color, -25), color, shadeColor(color, 25)] },
               };
@@ -7936,7 +7974,16 @@ async function renderXY() {
         grid: { left: 70, right: 24, top: legendNames.length > 1 ? 30 : 14, bottom: 44 },
         tooltip: {
             trigger: 'item',
-            formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
+            formatter: p => {
+                let html = `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`;
+                // マップ読込時のみ、カーソル点のZ値をbilinearZで読み取って追記する
+                const map = _xyPanel?.mapData;
+                if (map && map.ok) {
+                    const z = CSVXYUtils.bilinearZ(map.xs, map.ys, map.zz, p.value[0], p.value[1]);
+                    if (Number.isFinite(z)) html += `<br>Z: ${fmtVal(z)}`;
+                }
+                return html;
+            },
         },
         xAxis: { type: 'value', name: `${xName}${unitOf(xName) ? ` (${unitOf(xName)})` : ''}`,
                  nameLocation: 'middle', nameGap: 28, scale: true, ...axisStyle },
@@ -7974,6 +8021,42 @@ function swapXYAxes() {
     xSel.value = ySel.value;
     ySel.value = tmp;
     saveXYSettingsNow();
+    renderXY();
+}
+
+/**
+ * 「マップ読込」で選んだCSVファイルを等高線マップとして読み込む。
+ * 既存のメインファイル読込（Papa.parse）と同様の使い方だが、マップCSVは
+ * 全体を一度にパースするだけでよいので簡略化している。
+ * マップデータはパネルの状態（_xyPanel.mapData）にのみ保持し、
+ * 永続化しない（セッション内のみ。パネルを閉じると消える）。
+ */
+function loadXYContourMap(file) {
+    Papa.parse(file, {
+        skipEmptyLines: true,
+        complete: res => {
+            if (!_xyPanel) return; // パース完了までにパネルが閉じられた
+            const parsed = CSVXYUtils.parseContourMap(res.data);
+            if (!parsed.ok) {
+                showWarning(
+                    `マップの読み込みに失敗しました: ${file.name}`,
+                    '先頭行=X・先頭列=Yの行列形式、またはx,y,zの3列（ヘッダー任意）のCSVを指定してください。'
+                );
+                return;
+            }
+            _xyPanel.mapData = { ...parsed, name: file.name };
+            _xyPanel.controls.mapClearBtn.classList.remove('hidden');
+            renderXY();
+        },
+        error: err => showWarning(`マップの読み込みに失敗しました: ${file.name}`, err.message || String(err)),
+    });
+}
+
+/** 読み込み済みの等高線マップを解除する */
+function clearXYContourMap() {
+    if (!_xyPanel) return;
+    _xyPanel.mapData = null;
+    _xyPanel.controls.mapClearBtn.classList.add('hidden');
     renderXY();
 }
 
@@ -8052,6 +8135,13 @@ async function openXYPlotPanel() {
     controls.gradChk.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
     controls.trajChk.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
     controls.regChk.addEventListener('change', () => { saveXYSettingsNow(); renderXY(); });
+    controls.mapLoadBtn.addEventListener('click', () => controls.mapInput.click());
+    controls.mapInput.addEventListener('change', () => {
+        const file = controls.mapInput.files[0];
+        controls.mapInput.value = ''; // 同じファイルを連続して選び直せるようにする
+        if (file) loadXYContourMap(file);
+    });
+    controls.mapClearBtn.addEventListener('click', clearXYContourMap);
 
     await renderXY();
 }
