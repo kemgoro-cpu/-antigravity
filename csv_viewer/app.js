@@ -7757,18 +7757,20 @@ function buildXYTrajectoryData(pts) {
  * @param {string} xName X軸チャンネル名
  * @param {string} yName Y軸チャンネル名
  * @param {[number,number]|null} range 「表示中の時間範囲のみ」の[t0,t1]（null=全範囲）
- * @param {{gradient:boolean, trajectory:boolean}} opts
- * @returns {{series: object[], fileRefs: object[], scatterRefs: object[]}}
+ * @param {{gradient:boolean, trajectory:boolean, regression:boolean}} opts
+ * @returns {{series: object[], fileRefs: object[], scatterRefs: object[], regressionInfo: object[]}}
  *   fileRefs はカーソル連動ハイライト用に、範囲フィルタ前のフル配列を保持する
  *   （ハイライト精度が間引きに左右されないようにするため）。
  *   scatterRefs は時間グラデーション（visualMap）が参照するseriesIndexを
  *   呼び出し側（renderXY）で解決できるよう、各ファイルのscatter系列の
  *   位置と色・データを返す。
+ *   regressionInfo は#xy-readout表示用の回帰結果（ファイル毎）。
  */
 function buildXYSeries(xName, yName, range, opts = {}) {
     const series = [];
     const fileRefs = [];
     const scatterRefs = [];
+    const regressionInfo = [];
     for (const [fid, f] of Object.entries(state.files)) {
         const xc = resolveColumnForFile(f, xName);
         const yc = resolveColumnForFile(f, yName);
@@ -7815,8 +7817,42 @@ function buildXYSeries(xName, yName, range, opts = {}) {
             itemStyle: { color, opacity: 0.75 },
         });
         scatterRefs.push({ fid, color, index: series.length - 1, data });
+
+        if (opts.regression) {
+            // 回帰はフィルタ後・間引き前の全点で行う（間引きは表示上限のためだけなので精度に影響させない）
+            const reg = CSVXYUtils.linearRegression(pts.map(p => p[0]), pts.map(p => p[1]));
+            if (reg) {
+                const xMin = Math.min(...pts.map(p => p[0]));
+                const xMax = Math.max(...pts.map(p => p[0]));
+                series.push({
+                    id: `xy-reg-${fid}`, name: f.shortName, type: 'line',
+                    showSymbol: false, silent: true, z: 6,
+                    lineStyle: { color, type: 'dashed', width: 1.5 },
+                    data: [
+                        [xMin, reg.slope * xMin + reg.intercept],
+                        [xMax, reg.slope * xMax + reg.intercept],
+                    ],
+                });
+                regressionInfo.push({ fid, name: f.shortName, color, ...reg });
+            }
+        }
     }
-    return { series, fileRefs, scatterRefs };
+    return { series, fileRefs, scatterRefs, regressionInfo };
+}
+
+/**
+ * #xy-readoutに回帰結果（ファイル毎: y=ax+b, R², n）を色スウォッチ付きで表示する。
+ * 対象が無ければ空にする。
+ */
+function renderXYReadout(regressionInfo) {
+    if (!_xyPanel) return;
+    const lines = regressionInfo.map(r => {
+        const swatch = `<span class="measure-swatch" style="background:${esc(r.color)}"></span>`;
+        const sign = r.intercept >= 0 ? '+' : '−';
+        return `${swatch}${esc(r.name)}: y = ${r.slope.toFixed(4)}x ${sign} ${Math.abs(r.intercept).toFixed(4)}`
+            + `　R²=${r.r2.toFixed(4)} (n=${r.n})`;
+    });
+    _xyPanel.controls.readout.innerHTML = lines.join('<br>');
 }
 
 /** X/Yセレクトの現在値・チェックボックス状態からチャートを再描画する */
@@ -7850,8 +7886,10 @@ async function renderXY() {
     const built = buildXYSeries(xName, yName, range, {
         gradient: gradientOn,
         trajectory: controls.trajChk.checked,
+        regression: controls.regChk.checked,
     });
     _xyPanel.fileRefs = built.fileRefs;
+    renderXYReadout(built.regressionInfo);
     const series = [
         ...built.series,
         // カーソル連動ハイライト・計測A/Bマーカー（安定ID）。部分setOptionで
