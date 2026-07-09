@@ -3,6 +3,212 @@
 開発を引き継ぐ人（人間・AIエージェント問わず）向けの正確な変更記録。
 コミット単位の詳細は `git log` も参照のこと。
 
+## 2026-07-04: UI/UXリデザイン（FullHD対応・初心者向け改善、Claude Code実施）
+
+機能増加によりFullHD(1920x1080)でもツールバーの右側ボタンが隠れ、サイドバーの
+Channelsセクションが画面下に押し出される問題に対応。初心者にも分かりやすい
+UIを目指した6フェーズの改修。
+
+### 変更内容
+
+1. **サイドバー幅復元の不具合修正**: 復元時に`minWidth`まで固定していたため、
+   一度リサイズすると再び縮小できなくなっていた。`width`のみ設定しクランプする
+2. **ツールバーのドロップダウン化**: 約26個のコントロールが1行に収まらず
+   右側が隠れていた問題に対応。表示設定(サンプリング/フォント/線幅/マーカー/
+   単色モード)を「表示▾」、出力系(PNG/コピー/CSV/レポート/設定入出力)を
+   「エクスポート▾」に集約。頻用操作はトップレベルボタンのまま維持。
+   `setupToolbarDropdown`で開閉・キーボード操作(矢印/Home/End/Esc/Tab)・
+   クリック外閉じ・排他制御を実装。1500px以下ではラベルを隠しアイコンのみに
+3. **リッチツールチップ**: ネイティブ`title`属性のみで機能が分かりにくかった
+   ため、ホバー/キーボードフォーカスで名前・説明・ショートカットを表示する
+   `#app-tooltip`を追加。ツールバー全ボタン・サイドバーのアイコンボタンを
+   `data-tip-*`属性に移行
+4. **サイドバーのアコーディオン化+状態保存**: Files/Settings/Custom RAM/Events
+   を`.sidebar-upper`で内部スクロールさせ、Channelsは常に最低180pxの表示高さを
+   確保。Channels含む全セクションを折りたたみ可能にし、状態を
+   `state.sidebarCollapsed`としてlocalStorageへ永続化
+   (`SETTINGS_VERSION` 4→5)
+5. **UI文言の日本語統一**: ボタンラベル・サイドバー見出し・プレースホルダー・
+   パース進捗・エラー/警告トースト・モード切替ラベルなどの英語表記を日本語に
+   統一。Custom RAM/Drive Index/LTTB等の技術用語は維持
+6. **空状態ガイドの強化**: チャート未表示時のプレースホルダーを
+   「①ファイルを読み込む→②チャンネルを選択→③チャートを操作」の
+   3ステップ案内カードに置き換え
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **`buildSettingsForExport`の`_version`は独立系統**（現在3）。localStorage
+  スキーマの`SETTINGS_VERSION`(現在5)と混同しないこと。サイドバー折りたたみ
+  など純粋なローカルUI状態はエクスポートJSONに含めない
+- **ツールバーの`.toolbar-menu`パネルは`position:fixed`**。`.toolbar`が
+  `overflow-x:auto`のため`absolute`だとクリップされる
+- **ドロップダウン展開中は単打ショートカット(B/T/R/M)を無効化**する
+  `isToolbarMenuOpen()`ガードがグローバルkeydownハンドラに入っている
+- **モード切替ボタン(zoom/measure/shift/arrange)のinnerHTML書き換えは
+  `<span class="btn-label">`を必ず維持**すること（狭幅でのラベル非表示に必要）
+
+## 2026-07-03: 新機能 第2弾（F5〜F10、Claude Code実施）
+
+`FEATURE_BACKLOG.md` の残り6機能を実装し、バックログ全10件が完了。
+コミット: `90f63fc`（F5）/ `bedfc0a`（F6）/ `b831065`（F10）/ `a88ee55`（F8）/
+`0e02714`（F9）/ `347f787`（F7）。
+
+### 追加された機能
+
+1. **表示範囲の統計サマリ（F5）**: Statsボタン。ズームに追従して min/max/mean/σ を
+   パネル表示。集計は計測と共通の `computeIntervalStats` + `collectStatsRows`
+2. **表示データのCSVエクスポート（F6）**: CSVボタン。表示範囲×表示チャンネル
+   （Custom RAM含む）をBOM付きUTF-8で保存。メインファイルの時間軸基準
+3. **XYプロット（F7）**: XYボタン。任意チャンネル同士の散布図モーダル。
+   main/sub重ね描き、「表示中の時間範囲のみ」連動、5万点超は間引き
+4. **Main−Sub差分カーブ（F8）**: Diffボタン。両ファイルに同名で存在する
+   チャンネルから選んで `@Δ名_sN`（式 `名前 - sN:名前`）を一括生成
+5. **HTMLレポート出力（F9）**: Reportボタン。チャート画像・ファイル情報・
+   統計・Drive Index・Custom RAM・イベント一覧を自己完結HTMLで保存
+6. **チャンネルセットのお気に入り（F10）**: Channelsセクションの★行。
+   表示チャンネルの組み合わせを保存・ワンクリック適用。
+   独立キー `csvViewer_channelFavorites`（Clear Allで消えない）。上限30件
+
+### 挙動が変わった修正（バグ修正）
+
+1. **クロスファイルCustom RAMの復元失敗**: `s1:` 参照を含むRAMが、参照先Sub
+   ファイルの読み込み前に評価されて失敗・消失していた（複数ファイル同時
+   ドロップとセッション自動復元で発生）。参照先Subが揃うまで
+   `_deferredCrossRAMs` へ繰り延べ、後続パース完了時に再試行するようにした
+2. **addCustomRAMのalert**: 2箇所（重複名・評価失敗）をトースト通知へ統一
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **表示範囲の取得は `getVisibleXRange()` を使う**（F5/F6/F7が共用。
+  dataZoomのstartValue優先・%換算フォールバック込み）
+- **区間統計は `computeIntervalStats` / `collectStatsRows` を使う**（F2/F5/F9が共用）
+- **モーダル内にEChartsを作る場合は、閉じるあらゆる経路で `dispose()` する**
+  （XYプロットはMutationObserverでoverlay除去を監視して破棄している）
+- **ツールバーのボタン活性はrenderChartの2分岐（グリッド0/あり）と
+  `updateUI()` の両方を確認する**（exportCsv/exportReport/statsBtn/measureBtn は
+  renderChart、diffBtn=Sub有無・xyBtn=Main有無 は updateUI）
+
+### 検証記録
+
+- `npm test` 6本グリーン
+- Playwright実ブラウザスモーク10本・計111チェック全PASS（第1弾4本の回帰含む。
+  CSV/レポートは実ダウンロード内容の照合、統計は愚直計算との数値一致、
+  差分カーブは main−sub との全点一致まで検証）
+
+## 2026-07-03: 新機能 第1弾（F1〜F4、Claude Code実施）
+
+`FEATURE_BACKLOG.md` の第1弾4機能を実装。コミット: `fd87195`（F1）/ `d2e803e`（F2）/
+`22eb106`（F3）/ `db72eb8`（F4）。各機能の仕様はバックログ本文を参照。
+
+### 追加された機能
+
+1. **ライト/ダークテーマ切替（F1）**: ツールバー右のトグルボタン。
+   `:root[data-theme="light"]` でCSSトークンを差し替え、`refreshThemeColors()` が
+   ECharts用実値（`T`）を再解決して再描画する。設定キー `theme` で永続化
+2. **カーソル計測（F2、ショートカット M）**: チャート2クリックで計測点A/Bを設置。
+   区間のΔtと表示チャンネルごとのA/B/Δ/min/max/mean/RMSをパネル表示。
+   Subファイルはタイムシフト適用済みの時間軸で集計
+3. **しきい値イベント検出（F3）**: サイドバーのEventsセクション。条件式
+   （例 `Actual_Speed > 120`）で真区間をメインファイルから検出し、一覧+markArea
+   ハイライト+行クリックでズーム。**式パーサに比較演算子（`> < >= <= == !=`）と
+   論理演算子（`&& ||`）を追加**（Custom RAMでも使用可。結果は1/0、NaNは伝播）
+4. **セッション自動復元（F4）**: パース成功時に元ファイルをIndexedDB
+   （`csvViewerSession`）へ保存し、次回起動時に自動再読み込み。ロール・選択等は
+   既存のlocalStorage復元機構が適用する
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **チャートへ渡す色を増やすときはCSSトークン＋`cssVar()`経由にする**
+  （`refreshThemeColors()` に追加。ハードコードするとライトテーマに追従しない）。
+  DOM側のインライン色は `var(--accent-soft)` 等のCSS変数を直接書いてよい
+- **式パーサの優先順位**: `|| < && < 比較 < 加減 < 乗除 < べき乗 < 単項`。
+  演算レベルを増やすときは `parseExpr`→`parseLogicalOr`→…の階層に挿入し、
+  深度ガード（`parseFactor`）を迂回しないこと
+- **計測（`state.measure`）とイベント区間（`state.events.intervals`）は永続化しない**。
+  設定に入るのは条件式 `eventExpr` のみ（`VISUAL_ONLY_KEYS` 登録済み）。
+  イベント区間はメインの時間軸基準なので、メイン切替・削除・Clear Allで
+  `clearEvents(false)` を呼んで破棄する
+- **ファイルの削除経路を増やしたらセッションストアの掃除も追加する**
+  （`sessionDeleteFile` / `sessionClearFiles`）。保存は Phase 2 complete の
+  `sessionSaveFile(fileId, _origFileById.get(fileId), fileName)` のみで行う
+  （TRNはパイプライン内が変換済みテキストのため、元Fileは `_origFileById` が持つ）
+- **モード追加時は相互排他に組み込む**: enter系で他モードをexitし、
+  マウス操作ガード（`state.shiftMode || state.brushMode || state.arrangeMode ||
+  state.measureMode`）とEsc処理・ショートカット一覧に追加する
+
+### 検証記録
+
+- `npm test` 6本グリーン（chart-options-utilsにテーマ引数のケースを追加）
+- Playwright実ブラウザスモーク4本・計53チェック全PASS
+  （テーマ切替/計測/イベント検出/セッション復元。各機能の数値検証を含む）
+- ライト/ダーク両テーマのスクリーンショット目視確認
+
+## 2026-07-02: 改善バックログ全面実施（Claude Code実施）
+
+全体コードレビューで作成した `IMPROVEMENT_BACKLOG.md`（29タスク）を7フェーズで実施。
+各タスクの詳細・見送り理由はバックログ冒頭の「実施状況」を参照。コミット: `0973dd1`〜`ff0f928`。
+
+### 新規ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `package.json` + `scripts/run-tests.js` | `npm test` で全テスト一括実行（失敗時は非0終了） |
+| `chart-options-utils.js` | チャートオプション構築の純粋関数群（UMD、グローバル名 `CSVChartOptions`）。描画系定数 `CONSTANTS` の単一情報源 |
+| `tests/chart-options-utils.test.js` | 16ケース。テストは計6本になった |
+
+移動: `generate_nedc.js` → `scripts/`（シード付き乱数化で出力が決定的に）
+
+### 挙動が変わった修正（バグ修正）
+
+1. **複数ファイル同時ドロップのMainロール競合**: ロール判定を `state.files` 挿入直前
+   （Phase 2 completeコールバック内）へ移動。CSV経路の非同期パースで両方Mainになる競合を解消
+2. **`.trn` のスペース入りチャンネル名**: 区切りを「パイプ/タブ/連続2個以上の空白」に変更
+   （`parser-utils.js` の `convertWhitespaceToTabs`）。既存サンプル3本の変換結果はバイト一致
+3. **ゾーン外ドロップでの全状態消失**: windowレベルの `dragover`/`drop` ガードを追加
+4. **並行パース中のヘッダー検出値汚染**: 行ヒントをパース開始時に固定し引数で受け渡し。
+   `dom.nameRow` への書き戻しはUI表示専用になった
+5. **`LEGACY_CYCLE_ID` の二重定義**: `drive-index-utils.js` を単一情報源に統一（`mdc: null` が正）。
+   settings-utils は読み込み順の都合で `migrateSettings` 実行時に遅延参照する
+6. **設定インポートの参照代入**: `applySettings` の `yRanges`/`fileColors` をコピー+形式検証に。
+   `fileColors` は `#RRGGBB` 検証（不正値は破棄しデフォルト色へ）
+
+### 守るべき制約（今後の開発向け・追加分）
+
+- **チャート描画系の定数（`BIT_WEIGHT` 等）は `chart-options-utils.js` の `CONSTANTS` を編集する**
+  （app.js側に重複定義を作らないこと）
+- **app.jsはIIFEで包まれている**。トップレベルの関数・変数はwindowへ漏れない。
+  テスト/コンソールから触る必要があるものは末尾の `window.__csvViewerDebug` に追加する
+  （現在: state / getChartImageDataURL / buildPresetSettings / saveCurrentPreset / T /
+  renderChart / parseExprToAST / evaluateAST / esc）
+- **テーマ色は `styles.css` の `:root` トークンが単一情報源**。ECharts用の実値は起動時に
+  `cssVar()` で解決（`T` 定数）。PNG背景も `--bg-main` に追従する
+- **ユーザー向け文言は日本語が主言語**（READMEの言語ポリシー参照）。トーストは
+  `showToast(kind, message, detail, ttl)` に一本化済み（showError等は薄いラッパー）
+- **モーダルは `createModal(contentHtml, opts)` で作る**（`setupModalA11y` を直接呼ばない）。
+  例外は独自機構の `showAlignChannelModal` のみ
+- **`updatePerGridLabels` はrender時スナップショット（`_lastRenderedLookup`）だけを参照する**。
+  ホバー経路に `columns.find` 等の線形検索を書き戻さないこと
+- **式パーサ**: ネスト深度上限 `EXPR_MAX_DEPTH = 200`。関数のarityは
+  `_builtinFuncArity`（`CUSTOM_RAM_FUNCTIONS` から導出）で検証時にチェックされる
+- **プリセット保存**は件数上限 `PRESET_MAX_COUNT = 20`・サイズ上限
+  `PRESET_MAX_JSON_CHARS`（約2MB）で保護されている
+
+### 意図的な見送り（理由付き）
+
+- **PF1（点配列キャッシュ）**: 実測で `getActiveGroups` はrender時間140.3msのうち2.4ms（1.7%）。
+  `setOption` が支配的でキャッシュ無効化リスクに見合わない（2026-06-11の見送り判断を実測で追認）
+- **U5（メッセージカタログへの全集約）**: 文字列の大半が状態と密結合のテンプレートリテラルで
+  コスト過大。言語ポリシーのREADME明文化で代替（翻訳要件が出たら再検討）
+
+### 検証済み事項（2026-07-02時点）
+
+- `npm test` 6本合格、`node --check` 全JSクリーン
+- Playwrightスモーク（フェーズごとに実施）: 2ファイル同時読込のMain/Sub判定、
+  モーダル群の開閉・Escape・フォーカストラップ、トースト上限・aria-live、
+  ホバー値のリファクタ前後一致（3位置×5グリッド×2ファイル）、
+  `getOption()` 構造スナップショットのM1/M9前後byte一致、
+  IIFE化後のwindow漏れゼロ（218名）、プリセット上限動作
+
 ## 2026-06-11 (3): チャート縦幅調整・チャンネル名表示改善・フォントサイズ設定（Claude Code実施）
 
 ### 新規ファイル

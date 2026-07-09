@@ -14,7 +14,14 @@ csv_viewer/
 ├─ settings-utils.js   … 設定のバージョンチェック・マイグレーション（同上）
 ├─ history-utils.js    … Undo/Redo統合履歴のロジック（同上）
 ├─ layout-utils.js     … フォントプリセット・グリッド高さ配分（同上）
+├─ chart-options-utils.js … チャートのEChartsオプション構築ヘルパー（同上）
+├─ drive-index-utils.js … ドライビングインデックス（走行モード判定）のロジック（同上）
+├─ drive-cycles-data.js … 標準走行モード（NEDC / WLTC等）の目標車速データ
 ├─ styles.css
+├─ package.json        … npm test 用（依存ライブラリなし）
+├─ scripts/
+│   ├─ run-tests.js       … 全テストを順次実行するランナー（npm test の実体）
+│   └─ generate_nedc.js   … NEDCサンプルTRN生成スクリプト（開発用）
 ├─ tests/              … Nodeで実行する単体テスト
 └─ lib/                … 同梱ライブラリ（ECharts, PapaParse等）
 ```
@@ -84,6 +91,16 @@ Settings の Encoding で読み込み文字コードを指定できます。
 - チャートの縦幅調整: ツールバーの `Fit / − / ＋` で全体を段階調整（入りきらない分は縦スクロール）。グリッドの下端境界をドラッグすると個別に高さ変更でき、境界のダブルクリックでそのチャートだけ自動に戻る
 - チャートのフォントサイズ: ツールバーで 小 / 標準 / 大 / 特大 を選択（チャンネル名・軸の数値・ホバー値が連動）。長いチャンネル名はチャート高さに収まらない分が「…」で自動省略される
 - Channel Map で、名前が違うSub側チャンネルをMainチャンネルへ対応付け
+- ライト / ダークテーマ切替（ツールバー右の太陽 / 月アイコン。選択は保存される）
+- カーソル計測（ツールバーの Measure、ショートカット M）: チャートを2回クリックすると、区間の Δt と表示チャンネルごとの A / B / Δ / min / max / mean / RMS をパネル表示。Esc で解除
+- イベント検出（サイドバーの Events）: 条件式（例 `Actual_Speed > 120`）を満たす区間を検出して一覧表示+チャート上をハイライト。行クリックで該当区間へズーム
+- セッション自動復元: 読み込んだファイルはブラウザ（IndexedDB）に保存され、次回起動時に選択状態ごと自動復元される（ファイル削除 / Clear All で保存も消える。合計200MBまで）
+- 表示範囲の統計サマリ（ツールバーの Stats）: 見えている範囲の min / max / mean / σ をズームに追従して表示
+- 表示データの CSV エクスポート（ツールバーの CSV）: 表示中の時間範囲 × 表示チャンネル（Custom RAM の計算結果を含む）を CSV 保存
+- XY プロット（ツールバーの XY）: 任意チャンネル同士の散布図（例: 車速 vs 燃料流量）。main / sub 重ね描き、表示中の時間範囲との連動
+- 差分カーブ生成（ツールバーの Diff、Sub があるとき）: Main と Sub の同名チャンネルから選んで Main − Sub の差分を Custom RAM として一括生成
+- HTML レポート出力（ツールバーの Report）: チャート画像・ファイル情報・統計・Drive Index・Custom RAM・イベント一覧を1枚の HTML に保存
+- チャンネルセットのお気に入り（Channels の ★）: よく見るチャンネルの組み合わせを保存してワンクリック適用（Clear All でも消えない）
 
 ## Custom RAM
 
@@ -95,9 +112,11 @@ Settings の Encoding で読み込み文字コードを指定できます。
 RPM / 60
 Torque * RPM * 3.14159 / 30
 sqrt(pow(X, 2) + pow(Y, 2))
+SPD > 60 && GEAR == 4
 ```
 
 Sub ファイルのチャンネルは `s1:チャンネル名` の形式で参照できます。
+比較（`> < >= <= == !=`）と論理（`&& ||`）も使えます（結果は 1 / 0 の系列。イベント検出の条件式と同じ文法）。使える関数と演算子の一覧は Custom RAM 見出し横の「?」から確認できます。
 
 ## チャート配置と複数Y軸
 
@@ -128,32 +147,58 @@ Main と Sub で同じ物理値なのにチャンネル名が違う場合、Chan
 
 ## 開発メモ
 
-ブラウザ不要のユーティリティテストは次のコマンドで実行できます。
+ブラウザ不要のユーティリティテスト（全6本: parser / settings / history / layout / chart-options / drive-index）は
+`csv_viewer/` で次のコマンドを実行すると一括で走ります（1本でも失敗すると非0終了）。
 
 ```bash
-rtk node tests/parser-utils.test.js
-rtk node tests/settings-utils.test.js
-rtk node tests/history-utils.test.js
-rtk node tests/layout-utils.test.js
+npm test
 ```
+
+従来どおり `node tests/<name>.test.js` で1本ずつ実行することもできます
+（parser-utils / settings-utils / history-utils / layout-utils / chart-options-utils / drive-index-utils）。
 
 構文チェック:
 
 ```bash
-rtk node --check app.js
-rtk node --check parser-utils.js
-rtk node --check settings-utils.js
-rtk node --check history-utils.js
+node --check app.js
+node --check parser-utils.js
+node --check settings-utils.js
+node --check history-utils.js
+node --check layout-utils.js
+node --check chart-options-utils.js
+node --check drive-index-utils.js
+node --check drive-cycles-data.js
 ```
+
+同梱サンプル `NEDC_sample_A/B/C.trn` は `node scripts/generate_nedc.js` で再生成できます。
+乱数はシード固定（mulberry32）のため出力は決定的で、何度実行しても同じ内容になります。
+出力先は省略時 `csv_viewer/` 直下（コミット済みサンプルを上書き）で、
+`node scripts/generate_nedc.js <出力ディレクトリ>` で変更できます。
 
 設定の保存形式（`_version`）を変更するときは、`settings-utils.js` の
 `SETTINGS_VERSION` とマイグレーション処理、テストを必ずセットで更新してください。
 
+### UI文言の言語ポリシー
+
+- **ユーザー向けメッセージ（トースト・モーダル・検証メッセージ・確認ダイアログ）は日本語が主言語。**
+  新しいメッセージを追加するときは日本語で書くこと。
+- **ツールバー等の短い操作ラベル（Clear All / Box Zoom / Save PNG / Fit 等）は
+  計測ツールの慣習として英語を維持する。**
+- エラートーストの詳細欄に載せる技術情報（例外メッセージ・ファイル名・スタック等）は
+  原文のまま表示してよい。
+- メッセージカタログ（`messages.js` 等）への全文字列集約は、翻訳・多言語化の要件が
+  出るまで実施しない（文字列の大半がテンプレートリテラルで状態と密結合しており、
+  現時点では抽出コストとリグレッションリスクが利益を上回るため）。
+
+チャートのテーマ色は `styles.css` の `:root` トークンが単一情報源。
+EChartsはCSS変数を解釈しないため、app.js 起動時に `cssVar()`（`T` 定数の構築）で
+実値へ解決している。`--bg-main` 等を変更するとチャート・PNG出力の背景も追従する。
+
 ## 同梱ライブラリ
 
-| ライブラリ | 用途 |
-|---|---|
-| ECharts | チャート描画 |
-| PapaParse | CSV パース |
-| Inter / Roboto Mono | UI フォント |
-| Boxicons | アイコン |
+| ライブラリ | バージョン | 用途 |
+|---|---|---|
+| ECharts | 5.5.0 | チャート描画 |
+| PapaParse | 5.4.1 | CSV パース |
+| Inter / Roboto Mono | 不明（同梱ファイルにバージョン記録なし） | UI フォント |
+| Boxicons | 不明（同梱ファイルにバージョン記録なし） | アイコン |

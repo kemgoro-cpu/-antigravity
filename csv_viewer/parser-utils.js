@@ -2,8 +2,13 @@
     'use strict';
 
     function convertWhitespaceToTabs(text) {
+        // 区切りとして扱うのは「パイプ」「タブ」「連続2個以上の空白」。
+        // 単一スペースは区切りにしない（Vehicle Speed のようなスペース入り
+        // チャンネル名が2列に分割されて以降の全行がずれるのを防ぐ）。
+        // .trnの実フォーマットは列間が4個以上の空白なので、この規則で
+        // 既存サンプルのパース結果は変わらない。
         return text.split('\n')
-            .map(line => line.replace(/\|/g, ' ').trim().replace(/\s+/g, '\t'))
+            .map(line => line.replace(/\|/g, '\t').trim().replace(/\s{2,}|\t/g, '\t'))
             .join('\n');
     }
 
