@@ -4,3 +4,6 @@
 
 # Claude Codeのローカル設定(個人環境依存)
 .claude/settings.local.json
+
+# Dev Control Tower の登録メタデータ（ローカル管理のため無視）
+.devcontrol/
