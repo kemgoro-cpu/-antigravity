@@ -35,6 +35,9 @@
     //   total    : 総時間[s]（モード判別の主キー）
     //   maxSpeed : 最大目標車速[km/h]（判別のタイブレーク・表示用）
     //   phases   : フェーズ境界 [{ name, start, end }]（秒）
+    //   shortName: 目標車速チャンネル名に使う短縮名（'@MDC' の 'MDC' の部分）。
+    //              name は「WLTC Class 3b (3フェーズ)」のように空白や括弧を含み、
+    //              Custom RAM の式に書けないため別に持つ（cycleChannelName 参照）。
     //
     // WLTC Class 3 は 3a/3b で同じフェーズ区切り（Low/Extra-High は共通、Medium/High の
     // 車速波形のみクラス差）。3フェーズ版（日本国内型）は Extra-High を除いた Low+Medium+High。
@@ -51,7 +54,7 @@
 
     const CYCLE_REGISTRY = [
         {
-            id: 'nedc', name: 'NEDC', traceId: 'nedc', total: 1180, maxSpeed: 120,
+            id: 'nedc', name: 'NEDC', shortName: 'NEDC', traceId: 'nedc', total: 1180, maxSpeed: 120,
             phases: [
                 { name: 'Urban (UDC)',        start: 0,   end: 780  },
                 { name: 'Extra-Urban (EUDC)', start: 780, end: 1180 },
@@ -59,25 +62,25 @@
         },
         // 判別時の既定優先のため、より一般的な 3b を先に置く（同一総時間の同点は先頭を採用）。
         {
-            id: 'wltc3b_4', name: 'WLTC Class 3b (4フェーズ)', traceId: 'wltc_3b',
+            id: 'wltc3b_4', name: 'WLTC Class 3b (4フェーズ)', shortName: 'WLTC3b_4', traceId: 'wltc_3b',
             total: 1800, maxSpeed: 131.3, phases: wltcPhases4(),
         },
         {
-            id: 'wltc3b_3', name: 'WLTC Class 3b (3フェーズ)', traceId: 'wltc_3b', trimEnd: 1477,
+            id: 'wltc3b_3', name: 'WLTC Class 3b (3フェーズ)', shortName: 'WLTC3b_3', traceId: 'wltc_3b', trimEnd: 1477,
             total: 1477, maxSpeed: 97.4, phases: wltcPhases3(),
         },
         {
-            id: 'wltc3a_4', name: 'WLTC Class 3a (4フェーズ)', traceId: 'wltc_3a',
+            id: 'wltc3a_4', name: 'WLTC Class 3a (4フェーズ)', shortName: 'WLTC3a_4', traceId: 'wltc_3a',
             total: 1800, maxSpeed: 131.3, phases: wltcPhases4(),
         },
         {
-            id: 'wltc3a_3', name: 'WLTC Class 3a (3フェーズ)', traceId: 'wltc_3a', trimEnd: 1477,
+            id: 'wltc3a_3', name: 'WLTC Class 3a (3フェーズ)', shortName: 'WLTC3a_3', traceId: 'wltc_3a', trimEnd: 1477,
             total: 1477, maxSpeed: 97.4, phases: wltcPhases3(),
         },
         // MDC（マレーシア）。1478点=0..1477秒。フェーズ点数 Low451 / Medium650 / High377。
         // 境界は WLTC と同じ「前フェーズの end ＝ 次フェーズの start」の共有境界方式で表す。
         {
-            id: 'mdc', name: 'MDC (Malaysian Driving Cycle)', traceId: 'mdc',
+            id: 'mdc', name: 'MDC (Malaysian Driving Cycle)', shortName: 'MDC', traceId: 'mdc',
             total: 1477, maxSpeed: 105.8,
             phases: [
                 { name: 'Low',    start: 0,    end: 451  },
@@ -101,6 +104,34 @@
      */
     function resolveCycleId(id) {
         return (id && LEGACY_CYCLE_ID[id]) || id;
+    }
+
+    // Custom RAM の式パーサ（app.js の tokenizeExpr）が識別子の区切りとして扱う文字。
+    // これらがチャンネル名に混ざると式に書けなくなるため、名前生成時に取り除く。
+    // ※ tokenizeExpr 側の正規表現と対応させること（片方だけ変えると名前が式で壊れる）。
+    const CHANNEL_NAME_FORBIDDEN = /[\s+\-*/()^,<>=!&|]/g;
+    // 合成チャンネルであることを示す既存のプレフィックス群（app.js の addCustomRAM 参照）。
+    // 元の名前に既に付いていた場合、二重付与しないよう先頭から落とす。
+    const CHANNEL_NAME_PREFIX = /^[@#$%]+/;
+
+    /**
+     * 走行モード定義から、目標車速チャンネルの名前（'@MDC' など）を作る。
+     *
+     * 内蔵モードは shortName をそのまま使う。ユーザー定義モード（customModes）は
+     * 任意の名前を付けられるため、式パーサが識別子として扱えない文字を取り除く。
+     * 取り除いた結果が空になる名前（'+ + +' など）は id にフォールバックする。
+     *
+     * @param {{id:string, shortName?:string, name?:string}} mode 走行モード定義
+     * @returns {string|null} '@' 始まりのチャンネル名。mode が無ければ null
+     */
+    function cycleChannelName(mode) {
+        if (!mode) return null;
+        const base = mode.shortName || mode.name || mode.id || '';
+        const safe = String(base).replace(CHANNEL_NAME_PREFIX, '').replace(CHANNEL_NAME_FORBIDDEN, '');
+        // 全部落ちてしまったら id で代用する（id も同じ規則で均す）
+        const fallback = String(mode.id || '').replace(CHANNEL_NAME_PREFIX, '').replace(CHANNEL_NAME_FORBIDDEN, '');
+        const body = safe || fallback;
+        return body ? '@' + body : null;
     }
 
     /**
@@ -458,6 +489,7 @@
         resampleTrace,
         resampleTo1Hz,
         resolveCycleId,
+        cycleChannelName,
         getCycleTrace,
         alignActualToCycle,
         detectCycle,

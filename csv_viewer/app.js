@@ -3206,8 +3206,13 @@ async function addCustomRAM(name, expr, unit = '') {
     // Prefix with @ if not already starting with a special character
     if (!/^[@#$%]/.test(name)) name = '@' + name;
     // Prevent duplicate names
-    if (mainFile.columns.some(c => c.name === name)) {
-        showWarning(`チャンネル "${name}" は既に存在します`);
+    const clash = mainFile.columns.find(c => c.name === name);
+    if (clash) {
+        // 走行モードの目標車速チャンネルは判別結果から自動生成される予約名なので、
+        // 「既に存在します」だけでは理由が分からない。何とぶつかったかを伝える。
+        showWarning(clash.isCycleTrace
+            ? `"${name}" は判別した走行モードの目標車速チャンネルとして自動生成される名前です。別の名前を付けてください`
+            : `チャンネル "${name}" は既に存在します`);
         return;
     }
 
@@ -3370,8 +3375,10 @@ async function recomputeCustomRAMs() {
     if (state.customRAMs.length === 0) return;
 
     // 全ファイルから既存のCustom RAMカラムを削除
+    // サイクル目標列（@MDC等）は isCustom だが syncCycleTraceColumns が管理する別物なので残す。
+    // colData 側は id が 'cycle_' 始まりで 'custom_' に一致しないため元から消えない。
     for (const [fid, f] of Object.entries(state.files)) {
-        f.columns = f.columns.filter(c => !c.isCustom);
+        f.columns = f.columns.filter(c => !c.isCustom || c.isCycleTrace);
         for (const key of Object.keys(f.colData)) {
             if (key.startsWith('custom_')) delete f.colData[key];
         }
@@ -3703,6 +3710,110 @@ function pickBestCycleByAlignment(mTime, mActual, candidateIds) {
 }
 
 /**
+ * 判別した走行モードの目標車速トレースを、各ファイルの合成チャンネル（'@MDC' 等）として同期する。
+ *
+ * Custom RAM と違って「式」ではなく判別結果から導かれる派生データなので、
+ * state.customRAMs には登録せず、毎回すべて作り直す（＝状態が判別結果ひとつに従う）。
+ * これによりモード変更・目標をCSV列へ切替・判別失敗のいずれでも古い線が残らない。
+ *
+ * 実測時間軸への写像は computeDriveIndex が既に求めた align（start/end）を使うため、
+ * 手動整合・自動整合・区間スケール補正がそのまま反映される。
+ *
+ * @returns {boolean} チャンネル構成（名前の集合）が前回から変化したか
+ */
+function syncCycleTraceColumns() {
+    // 変化検出用に、現在のサイクル列名を先に控える
+    const before = new Set();
+    for (const f of Object.values(state.files)) {
+        for (const c of f.columns) if (c.isCycleTrace) before.add(c.name);
+    }
+
+    // いったん全ファイルからサイクル列を撤去する（作り直す前提）
+    for (const f of Object.values(state.files)) {
+        for (const c of f.columns) {
+            if (c.isCycleTrace) delete f.colData[c.id];
+        }
+        f.columns = f.columns.filter(c => !c.isCycleTrace);
+    }
+
+    const after = new Set();
+    const results = (state.driveIndex && state.driveIndex.results) || [];
+    for (const entry of results) {
+        // align があるのは「モードの法規トレースを目標にした」ファイルだけ。
+        // 目標にCSV列を指定している場合は元の列がそのまま使えるので作らない。
+        if (!entry.align) continue;
+        const f = state.files[entry.fileId];
+        if (!f || !f.timeData || !f.timeData.length) continue;
+
+        const mode = driveModeById(entry.effectiveId);
+        const name = window.DriveIndex.cycleChannelName(mode);
+        const tr   = window.DriveIndex.getCycleTrace(entry.effectiveId, state.customModes);
+        if (!name || !tr || tr.time.length < 2) continue;
+        // 同名の実チャンネルがあると式の名前解決が曖昧になるため作らない
+        if (f.columns.some(c => c.name === name)) continue;
+
+        // トレース時間 → 実測時間へ写像（computeDriveIndex の targetTimeM と同じ式）
+        const traceT0  = tr.time[0];
+        const cycleDur = tr.time[tr.time.length - 1] - traceT0;
+        const scale    = cycleDur > 0 ? (entry.align.end - entry.align.start) / cycleDur : 1;
+        const tM = tr.time.map(t => entry.align.start + (t - traceT0) * scale);
+
+        // ファイル自身の時間軸へリサンプル。サイクル窓の外はNaN＝線を引かない
+        const td  = f.timeData;
+        const out = new Float32Array(td.length);
+        const tFirst = tM[0], tLast = tM[tM.length - 1];
+        for (let i = 0; i < td.length; i++) {
+            const t = td[i];
+            out[i] = (t < tFirst || t > tLast) ? NaN : interpolateArray(tM, tr.speed, t, tM.length);
+        }
+
+        // isCustom: 合成列の既定の作法（遅延パースとBit判定の対象から外れる）
+        // isCycleTrace: この関数だけが管理する列であることの目印（Custom RAM再計算から保護）
+        const colId = 'cycle_' + entry.fileId;
+        f.columns.unshift({
+            id: colId, name, unit: 'km/h', idx: -1,
+            color: SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length],
+            isCustom: true, isCycleTrace: true, isCrossFile: false,
+        });
+        f.colData[colId] = out;
+        state.bitChannels.delete(name);   // 目標車速はBitチャンネルではない
+        after.add(name);
+    }
+
+    if (before.size !== after.size) return true;
+    for (const n of after) if (!before.has(n)) return true;
+    return false;
+}
+
+/** 目標車速チャンネル（@MDC 等）を参照している Custom RAM があるか */
+function customRAMsUseCycleTrace() {
+    const names = new Set();
+    for (const f of Object.values(state.files)) {
+        for (const c of f.columns) if (c.isCycleTrace) names.add(c.name);
+    }
+    if (!names.size) return false;
+    return state.customRAMs.some(cr => extractExprNames(cr.expr).some(n => names.has(n)));
+}
+
+/**
+ * 目標車速チャンネルを同期し、構成が変わっていればUIと依存計算を追従させる。
+ * computeDriveIndex から呼ぶ（判別結果が確定した後）。
+ */
+async function applyCycleTraceColumns() {
+    if (!window.DriveIndex) return;
+    const changed = syncCycleTraceColumns();
+    if (!changed) return;
+
+    // '@MDC' を参照する Custom RAM は、列が生える前に計算されていると全NaNのままになる。
+    // （ファイル読込時は Custom RAM 生成 → computeDriveIndex の順で走るため）
+    // 参照しているRAMがある時だけ再計算する（毎回やると重い）。
+    if (customRAMsUseCycleTrace()) await recomputeCustomRAMs();
+
+    renderColumnList();
+    renderChart();
+}
+
+/**
  * 実測車速チャンネルと走行モードが揃えば指標・燃費を計算し state.driveIndex に格納する。
  * 目標車速は原則「選択モードの法規トレース」を使う（di.channels.target にCSV列名がある場合のみその列を目標にする）。
  * @returns {Promise<object|null>}
@@ -3779,6 +3890,8 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     if (!actualName || (useModeTrace && !modeTrace)) {
         di.results = [];
         di.lastResult = null;
+        // 結果を捨てたので、前回の判別で作った目標車速チャンネルも撤去する
+        await applyCycleTraceColumns();
         updateDriveIndexButton();
         return null;
     }
@@ -3886,6 +3999,8 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         detectedId:   mainEntry.detectedId,
         channels:     mainEntry.channels,
     } : null;
+    // 判別結果が確定したので、目標車速チャンネル（@MDC 等）を作り直す
+    await applyCycleTraceColumns();
     updateDriveIndexButton();
     return di.results;
 }
@@ -4273,8 +4388,9 @@ dom.driveIndexBtn?.addEventListener('click', showDriveIndexModal);
 function getWordAtCursor(input) {
     const pos = input.selectionStart;
     const text = input.value.substring(0, pos);
-    // 演算子・括弧・空白で区切った最後のトークンを取得
-    const m = text.match(/((?:[a-zA-Z_]\w*:)?[a-zA-Z_]\w*)$/);
+    // 演算子・括弧・空白で区切った最後のトークンを取得。
+    // 合成チャンネルは '@' 始まり（@MDC / @Integral_Fuel 等）なので語頭の @ も単語に含める。
+    const m = text.match(/(@?(?:[a-zA-Z_]\w*:)?[a-zA-Z_]\w*)$/);
     return m ? { word: m[1], start: pos - m[1].length, end: pos } : null;
 }
 
@@ -4312,7 +4428,9 @@ function buildSuggestions(partial) {
         if (mainFile) {
             for (const col of mainFile.columns) {
                 if (col.name.toLowerCase().startsWith(lower)) {
-                    results.push({ text: col.name, type: col.isCustom ? 'Custom' : 'CH' });
+                    // 走行モードの目標車速は Custom RAM と区別が付くようラベルを分ける
+                    const type = col.isCycleTrace ? 'Mode' : (col.isCustom ? 'Custom' : 'CH');
+                    results.push({ text: col.name, type });
                 }
             }
         }

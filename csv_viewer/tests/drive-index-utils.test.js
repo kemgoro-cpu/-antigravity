@@ -47,6 +47,37 @@ function distKm(speed) {
     assert.strictEqual(w3.trimEnd, 1477);
 }
 
+// ── 目標車速チャンネル名（@MDC 等） ──
+{
+    // app.js の tokenizeExpr が識別子の区切りに使う文字。これが名前に混ざると式に書けない。
+    const FORBIDDEN = /[\s+\-*/()^,<>=!&|]/;
+
+    // 全内蔵モードが shortName を持ち、式に書ける文字だけで構成されていること
+    const shorts = DriveIndex.CYCLE_REGISTRY.map(c => c.shortName);
+    for (const c of DriveIndex.CYCLE_REGISTRY) {
+        assert.ok(c.shortName, 'shortName が無い: ' + c.id);
+        assert.ok(!FORBIDDEN.test(c.shortName), 'shortName に式パーサの区切り文字: ' + c.shortName);
+    }
+    // 短縮名が衝突すると別モードのチャンネルが同名になってしまう
+    assert.strictEqual(new Set(shorts).size, shorts.length, 'shortName が重複している: ' + shorts);
+
+    const byId = id => DriveIndex.CYCLE_REGISTRY.find(c => c.id === id);
+    assert.strictEqual(DriveIndex.cycleChannelName(byId('mdc')), '@MDC');
+    assert.strictEqual(DriveIndex.cycleChannelName(byId('nedc')), '@NEDC');
+    assert.strictEqual(DriveIndex.cycleChannelName(byId('wltc3b_3')), '@WLTC3b_3');
+    assert.strictEqual(DriveIndex.cycleChannelName(byId('wltc3a_4')), '@WLTC3a_4');
+
+    // ユーザー定義モード: shortName が無いので name から区切り文字を除去する
+    assert.strictEqual(DriveIndex.cycleChannelName({ id: 'cm_1', name: 'MDC (試作 2)' }), '@MDC試作2');
+    assert.strictEqual(DriveIndex.cycleChannelName({ id: 'cm_2', name: 'A+B/C' }), '@ABC');
+    // 既に @ が付いた名前でも二重にならない
+    assert.strictEqual(DriveIndex.cycleChannelName({ id: 'cm_3', name: '@Already' }), '@Already');
+    // 除去すると空になる名前は id にフォールバック
+    assert.strictEqual(DriveIndex.cycleChannelName({ id: 'cm_4', name: '+ + +' }), '@cm_4');
+    // mode が無ければ null（呼び出し側でガードできる）
+    assert.strictEqual(DriveIndex.cycleChannelName(null), null);
+}
+
 // ── 旧IDの読み替え ──
 {
     assert.strictEqual(DriveIndex.resolveCycleId('wltc3'), 'wltc3b_4');
