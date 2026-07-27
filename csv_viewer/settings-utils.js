@@ -11,8 +11,8 @@
     const ARRAY_KEYS = ['fileInfos', 'selectedNames', 'customRAMs', 'chartGroups', 'bitManualOff', 'mergedGroups', 'customModes'];
 
     // 旧ドライビングインデックスのサイクルID読み替えマップ（v3以前 → v4）。
-    // 単一情報源は drive-index-utils.js の DriveIndex.LEGACY_CYCLE_ID
-    // （'wltc3' → 'wltc3b_4'、内蔵廃止の 'mdc' → null＝自動判別に戻す）。
+    // 単一情報源は drive-index-utils.js の DriveIndex.LEGACY_CYCLE_ID（現在は 'wltc3' → 'wltc3b_4' のみ）。
+    // マップに無いIDは読み替えず素通しする（'mdc' は内蔵へ復帰したため読み替え不要）。
     // index.html では settings-utils.js が drive-index-utils.js より先に読み込まれるため、
     // モジュール初期化時ではなく migrateSettings 実行時に遅延参照する。
     function getLegacyCycleIdMap() {

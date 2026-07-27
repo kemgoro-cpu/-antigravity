@@ -59,8 +59,9 @@ function testDriveIndexCycleIdMigrated() {
     assert.equal(r1.settings.driveIndex.cycleId, 'wltc3b_4');   // 旧 WLTC 4-phase → 3b 4フェーズ
     assert.deepEqual(r1.settings.driveIndex.channels, {});      // 他のキーは保持
 
+    // MDCは実データを得て内蔵へ復帰したため、旧設定の 'mdc' は読み替えずそのまま解決される
     const r2 = CSVSettings.migrateSettings({ _version: 3, driveIndex: { cycleId: 'mdc' } });
-    assert.equal(r2.settings.driveIndex.cycleId, null);         // 内蔵廃止MDC → 自動判別
+    assert.equal(r2.settings.driveIndex.cycleId, 'mdc');
 
     // 現行IDはそのまま
     const r3 = CSVSettings.migrateSettings({ _version: CSVSettings.SETTINGS_VERSION, driveIndex: { cycleId: 'nedc' } });

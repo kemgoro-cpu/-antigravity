@@ -33,11 +33,14 @@
     //   traceId  : drive-cycles-data.js (DriveCycleData) の目標車速トレースのキー
     //   trimEnd  : トレースの打ち切り時間[s]（WLTC 3フェーズ版を 4フェーズ版から導出するため）
     //   total    : 総時間[s]（モード判別の主キー）
-    //   maxSpeed : 最大目標車速[km/h]（補助・表示用）
+    //   maxSpeed : 最大目標車速[km/h]（判別のタイブレーク・表示用）
     //   phases   : フェーズ境界 [{ name, start, end }]（秒）
     //
     // WLTC Class 3 は 3a/3b で同じフェーズ区切り（Low/Extra-High は共通、Medium/High の
     // 車速波形のみクラス差）。3フェーズ版（日本国内型）は Extra-High を除いた Low+Medium+High。
+    //
+    // 注意: MDC と WLTC 3フェーズ版は総時間が両方 1477 秒で total が同点になる。
+    // 長さだけでは区別できないため、detectCycle は maxSpeed でタイブレークする（下記参照）。
     // ─────────────────────────────────────────────────────────────
     const WLTC_LOW    = { name: 'Low',        start: 0,    end: 589  };
     const WLTC_MED    = { name: 'Medium',     start: 589,  end: 1022 };
@@ -71,18 +74,30 @@
             id: 'wltc3a_3', name: 'WLTC Class 3a (3フェーズ)', traceId: 'wltc_3a', trimEnd: 1477,
             total: 1477, maxSpeed: 97.4, phases: wltcPhases3(),
         },
+        // MDC（マレーシア）。1478点=0..1477秒。フェーズ点数 Low451 / Medium650 / High377。
+        // 境界は WLTC と同じ「前フェーズの end ＝ 次フェーズの start」の共有境界方式で表す。
+        {
+            id: 'mdc', name: 'MDC (Malaysian Driving Cycle)', traceId: 'mdc',
+            total: 1477, maxSpeed: 105.8,
+            phases: [
+                { name: 'Low',    start: 0,    end: 451  },
+                { name: 'Medium', start: 451,  end: 1101 },
+                { name: 'High',   start: 1101, end: 1477 },
+            ],
+        },
     ];
 
     // 旧サイクルIDの読み替えマップ（設定マイグレーション・後方互換用）。単一情報源はここ。
     // settings-utils.jsのマイグレーションもこのマップを参照する（v3以前 → v4）。
     //   'wltc3'（旧 WLTC 4-phase Class 3）→ 'wltc3b_4'。
-    //   'mdc'（内蔵廃止。独自モードで扱う）→ null（保存設定のcycleIdを自動判別に戻す）。
-    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4', mdc: null };
+    // 'mdc' は以前「内蔵廃止 → null（自動判別に戻す）」だったが、実データを入手して
+    // 内蔵レジストリへ復帰させたため読み替え対象から外した（旧設定の 'mdc' はそのまま解決される）。
+    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4' };
 
     /**
      * 旧サイクルIDを現行IDへ読み替える（未知IDはそのまま返す）。
-     * null読み替え（mdc等の廃止ID）は「現行IDが存在しない」ことを意味するため、
-     * 実行時解決では素通しになる（呼び出し側のレジストリ照合でnullに落ちる）。
+     * 値が null のエントリは「現行IDが存在しない」ことを意味し、実行時解決では素通しになる
+     * （呼び出し側のレジストリ照合でnullに落ちる）。現在そのようなエントリは無い。
      */
     function resolveCycleId(id) {
         return (id && LEGACY_CYCLE_ID[id]) || id;
@@ -310,35 +325,84 @@
         return { rmsse, iwr, ascr, dr, er, eer, distanceKm, fuelL, fuelKmPerL, fuelLper100km };
     }
 
+    // 総時間が同点とみなす閾値（相対誤差の差）。浮動小数の誤差だけを吸収する極小値。
+    const CYCLE_TIE_EPS = 1e-9;
+    // 同点候補を最高車速で選び分けるときに「決め手あり」とみなす最小差[km/h]。
+    // 実測車速はオーバーシュートで数km/h上振れするため、この程度の余裕を要求する。
+    const CYCLE_MAXSPEED_MARGIN = 3;
+    // 長さ判別で選ばれた候補の最高車速が実測とこれ以上食い違ったら、長さ判別自体を信用しない[km/h]。
+    // 計測ログは前後に余分データを含むことが多く、その分だけ総時間が伸びて別サイクルの
+    // 許容差内に迷い込む（例: 前後120秒付きMDC=1717秒 が WLTC 4フェーズ版1800秒 に一致してしまう）。
+    // 車速レンジが大きく違えばそれは別サイクルなので、波形照合へ回す。
+    const CYCLE_MAXSPEED_MISMATCH = 10;
+
     /**
      * 目標車速トレースの総時間から既知サイクルを判別する。
-     * @returns {{ id, name, phases, confidence, total, maxSpeed }}
+     *
+     * 総時間が同点になる組（MDC と WLTC 3フェーズ版はどちらも 1477 秒）があるため、
+     * 同点時は最高車速でタイブレークする。決め手が無ければ ambiguous=true を立てて返し、
+     * 呼び出し側が波形照合（app.js の pickBestCycleByAlignment）へ委ねられるようにする。
+     *
+     * @param {number[]} timeArr  時間軸[s]
+     * @param {number[]} [speedArr] 車速[km/h]。省略可だが、渡さないと同点を解けない
+     * @returns {{ id, name, phases, confidence, total, maxSpeed, ambiguous, speedMismatch, candidates }}
      *   未判別時は id=null / phases=[] を返す（呼び出し側は全体のみ表示する）。
+     *   ambiguous    : 総時間が同点で、最高車速でも決め切れなかった（暫定で先頭候補を返している）
+     *   speedMismatch: 選んだ候補の最高車速が実測とかけ離れており、長さ判別の結論を信用できない
+     *   candidates   : 総時間が同点だった候補のID一覧（1件なら同点なし）
      */
     function detectCycle(timeArr, speedArr) {
         if (!timeArr || timeArr.length < 2) return null;
         const total = timeArr[timeArr.length - 1] - timeArr[0];
         let maxSpeed = 0;
-        // speedArr（実測 or 目標車速）は省略可。あれば最高車速を補助情報として算出。
+        // speedArr（実測 or 目標車速）は省略可。あれば最高車速を算出しタイブレークに使う。
         if (speedArr) {
             for (let i = 0; i < speedArr.length; i++) {
                 const v = speedArr[i];
                 if (isFinite(v) && v > maxSpeed) maxSpeed = v;
             }
         }
+
         // 総時間が最も近い候補を選ぶ（許容差±5%以内なら採用）
-        let best = null, bestErr = Infinity;
+        let bestErr = Infinity;
         for (const c of CYCLE_REGISTRY) {
             const err = Math.abs(total - c.total) / c.total;
-            if (err < bestErr) { bestErr = err; best = c; }
+            if (err < bestErr) bestErr = err;
         }
-        if (!best || bestErr > 0.05) {
-            return { id: null, name: '未判別', phases: [], confidence: 0, total, maxSpeed };
+        if (!isFinite(bestErr) || bestErr > 0.05) {
+            return {
+                id: null, name: '未判別', phases: [], confidence: 0,
+                total, maxSpeed, ambiguous: false, speedMismatch: false, candidates: [],
+            };
         }
+
+        // 最小誤差と実質同じ候補（＝総時間が同点）を全部集める。レジストリ順を保つ。
+        const ties = CYCLE_REGISTRY.filter(
+            c => Math.abs(Math.abs(total - c.total) / c.total - bestErr) < CYCLE_TIE_EPS,
+        );
+
+        let best = ties[0];              // 既定は従来どおりレジストリ先頭（後方互換）
+        let ambiguous = ties.length > 1;
+        if (ties.length > 1 && maxSpeed > 0) {
+            // 実測の最高車速に最も近い候補を採る。ただし2位との差が小さければ決め手なしとする。
+            const scored = ties
+                .map(c => ({ c, d: Math.abs(c.maxSpeed - maxSpeed) }))
+                .sort((x, y) => x.d - y.d);
+            if (scored[1].d - scored[0].d >= CYCLE_MAXSPEED_MARGIN) {
+                best = scored[0].c;
+                ambiguous = false;
+            }
+        }
+
+        // 選んだ候補の車速レンジが実測とかけ離れていれば、長さ判別の結論自体を疑う
+        const speedMismatch = maxSpeed > 0
+            && Math.abs(best.maxSpeed - maxSpeed) > CYCLE_MAXSPEED_MISMATCH;
+
         return {
             id: best.id, name: best.name,
             phases: best.phases.map(p => ({ ...p })),
             confidence: 1 - bestErr, total, maxSpeed,
+            ambiguous, speedMismatch, candidates: ties.map(c => c.id),
         };
     }
 

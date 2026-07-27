@@ -16,7 +16,7 @@ csv_viewer/
 ├─ layout-utils.js     … フォントプリセット・グリッド高さ配分（同上）
 ├─ chart-options-utils.js … チャートのEChartsオプション構築ヘルパー（同上）
 ├─ drive-index-utils.js … ドライビングインデックス（走行モード判定）のロジック（同上）
-├─ drive-cycles-data.js … 標準走行モード（NEDC / WLTC等）の目標車速データ
+├─ drive-cycles-data.js … 標準走行モード（NEDC / WLTC Class 3a・3b / MDC）の目標車速データ
 ├─ styles.css
 ├─ package.json        … npm test 用（依存ライブラリなし）
 ├─ scripts/

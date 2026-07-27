@@ -3675,13 +3675,23 @@ function getEffectivePhases(effectiveId) {
 /**
  * 実測車速に最も一致する走行モードを、各モードのトレースとの整合RMSEで選ぶ。
  * 前後に余分データがあっても（総時間で判定する detectCycle と違い）正しく判別できる。
+ *
+ * candidateIds を渡すと、その中だけから選ぶ。総時間判別が同点で決着しなかった時に
+ * 「同点だった候補の中から波形で選ぶ」ために使う。
+ * 全モードを対象にすると、実測より短いサイクル（例: 1180秒のNEDC）が1477秒の窓内を
+ * スライドして偶然低いRMSEを出し、本来の答えに勝ってしまうため、絞り込みが必要。
+ *
+ * @param {string[]} [candidateIds] 対象を限定するモードID一覧（省略時は全モード）
  * @returns {{ id, name, align }|null}
  */
-function pickBestCycleByAlignment(mTime, mActual) {
+function pickBestCycleByAlignment(mTime, mActual, candidateIds) {
     if (!mTime || !mActual || mTime.length < 2) return null;
     const mDur = mTime[mTime.length - 1] - mTime[0];
+    const modes = candidateIds && candidateIds.length
+        ? allDriveModes().filter(m => candidateIds.includes(m.id))
+        : allDriveModes();
     let best = null, bestRmse = Infinity;
-    for (const mode of allDriveModes()) {
+    for (const mode of modes) {
         const tr = window.DriveIndex.getCycleTrace(mode.id, state.customModes);
         if (!tr || tr.time.length < 2) continue;
         const Tdur = tr.time[tr.time.length - 1] - tr.time[0];
@@ -3723,22 +3733,39 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     if (mainActualCol) await loadColumnsForFile(getMainFileId(), [mainActualCol.name]);
     const mainActual = mainActualCol ? mainFile.colData[mainActualCol.id] : null;
 
-    // 実効モードID: 手動選択 > 総時間判別（軽量・高速） > （それで一致しなければ）車速ベストフィット。
-    //   前後に余分データがあると総時間判別は外れるため、その場合のみ波形ベストフィットにフォールバックする。
+    // 実効モードID: 手動選択 > 総時間判別（軽量・高速） > （それで決まらなければ）車速ベストフィット。
+    //   前後に余分データがあると総時間判別は外れるため、その場合は波形ベストフィットにフォールバックする。
     //   ファイル読込時の自動計算でもフォールバックを行う（ここを省略すると「前後に余分データがある
     //   ファイルはファイルを開いただけでは認識されない」という本末転倒になるため）。
+    //   また MDC と WLTC 3フェーズ版は総時間が同じ1477秒で判別が同点になる。detectCycle は
+    //   最高車速でタイブレークするが、決め手が無ければ ambiguous を立てるので波形照合に委ねる。
     const explicitId = window.DriveIndex.resolveCycleId(di.cycleId);
     let effectiveId, detName;
     if (explicitId) {
         effectiveId = explicitId; detName = '—';
     } else {
-        const det = window.DriveIndex.detectCycle(mainFile.timeData, null);
-        if (det && det.id) {
+        // 最高車速でのタイブレークを効かせるため、実測車速も渡す
+        const det = window.DriveIndex.detectCycle(mainFile.timeData, mainActual);
+        if (det && det.id && !det.ambiguous && !det.speedMismatch) {
             effectiveId = det.id; detName = det.name;
         } else if (di.autoAlign && mainActual) {
-            const best = pickBestCycleByAlignment(mainFile.timeData, mainActual);
-            effectiveId = best ? best.id : null;
-            detName = best ? best.name : '未判別';
+            // 同点で決着しなかっただけなら、その同点候補の中だけを波形照合すればよい。
+            // 一方 speedMismatch（車速レンジが候補と食い違う＝前後の余分データで総時間が
+            // 伸び、無関係なサイクルに一致してしまった疑い）のときは候補自体が信用できないので、
+            // 絞り込まず全モードから探す。長さが全く一致しない場合（det.id が null）も同様。
+            const narrowTo = (det && det.ambiguous && !det.speedMismatch) ? det.candidates : null;
+            const best = pickBestCycleByAlignment(mainFile.timeData, mainActual, narrowTo);
+            if (best) {
+                effectiveId = best.id; detName = best.name;
+            } else if (det && det.id) {
+                // 波形照合でも決まらなかった場合、同点候補の暫定先頭を使う（未判別に落とさない）
+                effectiveId = det.id; detName = det.name;
+            } else {
+                effectiveId = null; detName = '未判別';
+            }
+        } else if (det && det.id) {
+            // 波形照合が使えない（自動整合オフ／実測車速なし）ときも暫定先頭を採用する
+            effectiveId = det.id; detName = det.name;
         } else {
             effectiveId = null; detName = '未判別';
         }

@@ -31,7 +31,7 @@ function distKm(speed) {
 // ── レジストリ（4バリアント＋NEDC） ──
 {
     const ids = DriveIndex.CYCLE_REGISTRY.map(c => c.id);
-    for (const id of ['nedc', 'wltc3a_3', 'wltc3a_4', 'wltc3b_3', 'wltc3b_4']) {
+    for (const id of ['nedc', 'wltc3a_3', 'wltc3a_4', 'wltc3b_3', 'wltc3b_4', 'mdc']) {
         assert.ok(ids.includes(id), 'missing cycle id: ' + id);
     }
     const w4 = DriveIndex.CYCLE_REGISTRY.find(c => c.id === 'wltc3b_4');
@@ -52,16 +52,14 @@ function distKm(speed) {
     assert.strictEqual(DriveIndex.resolveCycleId('wltc3'), 'wltc3b_4');
     assert.strictEqual(DriveIndex.resolveCycleId('nedc'), 'nedc');
     assert.strictEqual(DriveIndex.resolveCycleId('wltc3b_4'), 'wltc3b_4');
-    // 'mdc'（内蔵廃止）はマップ上null＝現行IDなし。実行時解決では素通しになり、
-    // 呼び出し側のレジストリ照合で落ちる（設定マイグレーションではnullへ読み替え）
+    // 'mdc' は実データを得て内蔵へ復帰したので、読み替え対象から外れて素通しされる
     assert.strictEqual(DriveIndex.resolveCycleId('mdc'), 'mdc');
-    assert.ok(Object.prototype.hasOwnProperty.call(DriveIndex.LEGACY_CYCLE_ID, 'mdc'));
-    assert.strictEqual(DriveIndex.LEGACY_CYCLE_ID.mdc, null);
+    assert.ok(!Object.prototype.hasOwnProperty.call(DriveIndex.LEGACY_CYCLE_ID, 'mdc'));
 }
 
 // ── drive-cycles-data.js も単体でrequireできること（UMD） ──
 {
-    assert.deepStrictEqual([...DriveCycleData.keys].sort(), ['nedc', 'wltc_3a', 'wltc_3b']);
+    assert.deepStrictEqual([...DriveCycleData.keys].sort(), ['mdc', 'nedc', 'wltc_3a', 'wltc_3b']);
 }
 
 // ── getCycleTrace: 内蔵トレースの取得と 3フェーズ打ち切り ──
@@ -128,6 +126,110 @@ function distKm(speed) {
     for (const v of ned.speed) if (v > nmax) nmax = v;
     approx(nmax, 120, 1e-6);                           // NEDC 最高車速 120 km/h
     assert.ok(Math.abs(distKm(ned.speed) - 11.0) < 0.1, 'NEDC 総距離 ≈ 11km, got ' + distKm(ned.speed));
+}
+
+// ── MDC: レジストリ定義 ──
+{
+    const mdc = DriveIndex.CYCLE_REGISTRY.find(c => c.id === 'mdc');
+    assert.strictEqual(mdc.total, 1477);
+    approx(mdc.maxSpeed, 105.8, 1e-6);
+    assert.strictEqual(JSON.stringify(mdc.phases.map(p => [p.name, p.start, p.end])), JSON.stringify([
+        ['Low', 0, 451],
+        ['Medium', 451, 1101],
+        ['High', 1101, 1477],
+    ]));
+}
+
+// ── MDC: トレースと1Hzチェックサム（元資料「☆Final MDC.xlsx」記載値との照合） ──
+// 車速データが1点でも壊れれば合計値がずれるので、データ破損の回帰検出はここが最も効く。
+{
+    const t = DriveIndex.getCycleTrace('mdc');
+    assert.strictEqual(t.time.length, 1478);                 // 0..1477 s
+    assert.strictEqual(t.time[t.time.length - 1], 1477);
+
+    let max = 0;
+    for (const v of t.speed) if (v > max) max = v;
+    approx(max, 105.8, 1e-6);
+    assert.ok(Math.abs(distKm(t.speed) - 15.312) < 0.005, 'MDC 総距離 ≈ 15.312km, got ' + distKm(t.speed));
+
+    // フェーズ内の車速単純和（＝元資料の 1Hz checksums）。合計はフェーズ点数 451/650/377。
+    const sum = (from, to) => t.speed.slice(from, to).reduce((a, b) => a + b, 0);
+    approx(sum(0, 451),    8830.5,  1e-6);   // Low    (0..450)
+    approx(sum(451, 1101), 23879.1, 1e-6);   // Medium (451..1100)
+    approx(sum(1101, 1478), 22414.2, 1e-6);  // High   (1101..1477)
+    approx(sum(0, 1478),   55123.8, 1e-6);   // Total
+}
+
+// ── detectCycle: MDC と WLTC 3フェーズ版（どちらも1477秒）のタイブレーク ──
+// 総時間だけでは同点になるため、最高車速で選び分けられることを確認する。
+{
+    const time = Array.from({ length: 1478 }, (_, i) => i);
+    // 最高車速だけを立てた速度配列（判別は最高車速しか見ないので、これで十分）
+    const speedWithMax = (v) => { const s = new Array(1478).fill(0); s[700] = v; return s; };
+
+    // MDC の最高車速なら MDC に確定する（WLTC 3フェーズ版に化けない＝本改修の主目的）
+    const asMdc = DriveIndex.detectCycle(time, speedWithMax(105.8));
+    assert.strictEqual(asMdc.id, 'mdc');
+    assert.strictEqual(asMdc.ambiguous, false);
+
+    // WLTC の最高車速なら MDC は外れる。ただし 3a と 3b は最高車速が同値で区別できないため
+    // ambiguous のまま（呼び出し側が波形照合で 3a/3b を選び分ける）。暫定値はレジストリ先頭の 3b。
+    const asWltc = DriveIndex.detectCycle(time, speedWithMax(97.4));
+    assert.strictEqual(asWltc.id, 'wltc3b_3');
+    assert.strictEqual(asWltc.ambiguous, true);
+
+    // 車速を渡さない＝決め手が無いので ambiguous。同点候補は全部返る（呼び出し側が波形照合へ回す）
+    const amb = DriveIndex.detectCycle(time, null);
+    assert.strictEqual(amb.ambiguous, true);
+    for (const id of ['wltc3b_3', 'wltc3a_3', 'mdc']) {
+        assert.ok(amb.candidates.includes(id), 'candidates に ' + id + ' が無い');
+    }
+
+    // 中間の車速（どちらとも決め切れない）も ambiguous になること
+    assert.strictEqual(DriveIndex.detectCycle(time, speedWithMax(101.6)).ambiguous, true);
+
+    // 総時間が一意に決まるサイクルは同点にならず ambiguous にならない（従来動作の維持）
+    const nedcTime = Array.from({ length: 1181 }, (_, i) => i);
+    const nedcDet = DriveIndex.detectCycle(nedcTime, null);
+    assert.strictEqual(nedcDet.id, 'nedc');
+    assert.strictEqual(nedcDet.ambiguous, false);
+    assert.deepStrictEqual(nedcDet.candidates, ['nedc']);
+
+    // 既知サイクルから遠い長さは従来どおり未判別
+    const odd = DriveIndex.detectCycle([0, 500], null);
+    assert.strictEqual(odd.id, null);
+    assert.strictEqual(odd.ambiguous, false);
+    assert.strictEqual(odd.speedMismatch, false);
+}
+
+// ── detectCycle: 車速レンジが候補と食い違うときは長さ判別を信用しない（speedMismatch） ──
+// 実測ログは前後に余分データを含むことが多く、その分だけ総時間が伸びて無関係なサイクルの
+// 許容差±5%に迷い込む。前後120秒付きMDC(1717秒)が WLTC 4フェーズ版(1800秒)に一致する例。
+{
+    const mdc = DriveIndex.getCycleTrace('mdc');
+    const PAD = 120;
+    const n = mdc.speed.length + PAD * 2;
+    const time = Array.from({ length: n }, (_, i) => i);
+    const speed = Array.from({ length: n }, (_, i) => {
+        const k = i - PAD;
+        return (k >= 0 && k < mdc.speed.length) ? mdc.speed[k] : 0;
+    });
+
+    const det = DriveIndex.detectCycle(time, speed);
+    assert.strictEqual(det.total, 1717);
+    assert.strictEqual(det.id, 'wltc3b_4');        // 長さだけ見ると WLTC 4フェーズ版に化ける
+    approx(det.maxSpeed, 105.8, 1e-6);             // しかし実測の最高車速は 105.8（候補は131.3）
+    assert.strictEqual(det.speedMismatch, true);   // → 長さ判別は信用できないと伝える
+
+    // 車速がちゃんと候補と合っているケースでは立たないこと（誤検知しない）
+    const nedcTrace = DriveIndex.getCycleTrace('nedc');
+    const nedcDet = DriveIndex.detectCycle(nedcTrace.time, nedcTrace.speed);
+    assert.strictEqual(nedcDet.id, 'nedc');
+    assert.strictEqual(nedcDet.speedMismatch, false);
+
+    const mdcDet = DriveIndex.detectCycle(mdc.time, mdc.speed);
+    assert.strictEqual(mdcDet.id, 'mdc');
+    assert.strictEqual(mdcDet.speedMismatch, false);
 }
 
 // ── 指標の基本計算（共通時間軸・後方互換） ──
