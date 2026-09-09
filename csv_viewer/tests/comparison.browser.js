@@ -1,0 +1,67 @@
+/* Run with Playwright available in NODE_PATH. Uses an isolated profile and file://. */
+'use strict';
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const { chromium } = require('playwright');
+const fs = require('node:fs');
+(async () => {
+    const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
+    const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true });
+    const page = await context.newPage(); const errors = [];
+    page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('PAGE ERROR', e.stack); });
+    const root = path.resolve(__dirname, '..');
+    try {
+        await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
+        await page.waitForFunction(() => !!window.__csvViewerDebug);
+        await page.locator('#file-input').setInputFiles([path.join(root, 'NEDC_sample_A.trn'), path.join(root, 'NEDC_sample_B.trn')]);
+        await page.waitForFunction(() => Object.keys(window.__csvViewerDebug.state.files).length === 2 && window.__csvViewerDebug.state.parseJobs.size === 0, { timeout: 30000 });
+        await page.locator('#column-search').fill('Actual_Speed');
+        await page.locator('[data-channel="Actual_Speed"] .col-item-top').click();
+        await page.waitForFunction(() => window.__csvViewerDebug.state.numGrids > 0);
+        await page.locator('#column-search').fill('Engine_RPM');
+        await page.locator('[data-channel="Engine_RPM"] .col-item-top').click();
+        await page.locator('#column-search').fill('');
+        await page.locator('[data-file-label]').first().fill('変更前');
+        await page.locator('[data-file-label]').first().press('Tab');
+        await page.waitForTimeout(150);
+        await page.locator('[data-view="stack"]').click();
+        await page.waitForFunction(() => { const s = window.__csvViewerDebug.state; return s.chart.getOption().grid.length > s.chartGroups.length; });
+        await page.locator('[data-view="diff"]').click();
+        await page.waitForFunction(() => window.__csvViewerDebug.state.chart.getOption().series.some(s => s.id.startsWith('compare-diff')));
+        await page.locator('[data-view="overlay"]').click();
+        await page.locator('#compare-next').click();
+        const original = await page.evaluate(() => Object.values(window.__csvViewerDebug.state.files).find(f => f.role === 'sub').offset);
+        await page.locator('#compare-align-run').click();
+        await page.waitForFunction(() => !document.getElementById('compare-align-apply').disabled, { timeout: 30000 });
+        assert.equal(await page.evaluate(() => Object.values(window.__csvViewerDebug.state.files).find(f => f.role === 'sub').offset), original, 'preview must not mutate actual offset');
+        await page.locator('#compare-align-apply').click();
+        await page.waitForTimeout(200);
+        await page.locator('[data-pane="results"]').click();
+        await page.locator('#compare-calculate').click();
+        await page.waitForFunction(() => document.querySelectorAll('.compare-result').length > 0);
+        await page.locator('[data-tolerance]').first().fill('1'); await page.locator('[data-tolerance]').first().press('Tab');
+        await page.waitForTimeout(150);
+        await page.locator('#compare-range-start').fill('100'); await page.locator('#compare-range-end').fill('200'); await page.locator('#compare-range-go').click();
+        await page.waitForTimeout(100);
+        const range = await page.evaluate(() => window.__csvViewerDebug.getVisibleXRange()); assert.ok(Math.abs(range[0] - 100) < 0.01 && Math.abs(range[1] - 200) < 0.01);
+        await page.locator('[data-pane="notes"]').click();
+        await page.locator('#compare-note-text').fill('加速応答の比較メモ'); await page.locator('#compare-note-add').click();
+        await page.waitForFunction(() => window.__csvViewerDebug.state.comparison.notes.length === 1);
+        await page.locator('#compare-template-name').fill('加速比較'); await page.locator('#compare-template-save').click();
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem('csv-compare-templates') || '[]').length === 1);
+        const downloadEvent = page.waitForEvent('download'); await page.locator('#compare-report').click(); const download = await downloadEvent;
+        const report = fs.readFileSync(await download.path(), 'utf8'); assert.ok(report.includes('加速応答の比較メモ')); assert.ok(report.includes('保存時の解析条件'));
+        const out = process.env.COMPARE_SCREENSHOT_DIR || path.join(require('node:os').tmpdir(), 'csv-compare-qa'); fs.mkdirSync(out, { recursive: true });
+        await page.locator('[data-pane="results"]').click(); await page.locator('#compare-calculate').click(); await page.waitForTimeout(200);
+        await page.screenshot({ path: path.join(out, 'comparison-dark.png') });
+        await page.locator('#theme-toggle-btn').click(); await page.waitForTimeout(150); await page.screenshot({ path: path.join(out, 'comparison-light.png') });
+        await page.setViewportSize({ width: 1100, height: 800 }); await page.waitForTimeout(200); await page.screenshot({ path: path.join(out, 'comparison-1100.png') });
+        await page.waitForTimeout(600); await page.reload(); await page.waitForFunction(() => Object.keys(window.__csvViewerDebug.state.files).length === 2 && window.__csvViewerDebug.state.parseJobs.size === 0);
+        assert.equal(await page.evaluate(() => window.__csvViewerDebug.state.comparison.notes.length), 1);
+        assert.equal(await page.evaluate(() => Object.values(window.__csvViewerDebug.state.comparison.labels).includes('変更前')), true);
+        assert.deepEqual(errors, []);
+        console.log('Comparison browser workflow passed; screenshots:', out);
+    } catch (e) { console.error(await page.evaluate(() => ({ selected: [...window.__csvViewerDebug.state.selectedNames], grids: window.__csvViewerDebug.state.numGrids, view: window.__csvViewerDebug.state.comparison.view, text: document.getElementById('compare-panel-content').innerText }))); throw e; }
+    finally { await browser.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });

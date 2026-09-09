@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 // M9: 全体をIIFEで包み、app.js内部の関数・変数（数百個）をグローバルスコープへ
 // 漏らさない。function宣言のhoistingはIIFEスコープ内でそのまま維持される。
@@ -6,6 +6,7 @@
 // ファイル末尾の window.__csvViewerDebug で明示的に公開する。
 // （本文のインデントは差分を最小にするため意図的に変えていない）
 (function () {
+let comparisonWorkspace = null;
 
 // ─────────────────────────────────────────────────────────────
 // Error notification system
@@ -1064,6 +1065,7 @@ const SEARCH_DEBOUNCE_MS = 150;
 // ─────────────────────────────────────────────────────────────
 
 const state = {
+    comparison: CSVCompare.cleanSettings(),
     files:          {},     // fileId → FileRecord
     selectedNames:  new Set(), // set of RAM names (from main file) to display
     yRanges:        {},     // ramName → { min: string, max: string }
@@ -2456,6 +2458,10 @@ function resolveColumnForFile(fileRecord, mainName, opts = {}) {
     if (!fileRecord || !mainName) return null;
     const exact = fileRecord.columns.find(c => c.name === mainName);
     if (fileRecord.role === 'main') return exact;
+    const mapped = state.comparison.matches[fileRecord.name];
+    if (mapped && Object.prototype.hasOwnProperty.call(mapped, mainName)) {
+        return fileRecord.columns.find(c => c.name === mapped[mainName]) || null;
+    }
 
     for (const alias of getChannelAliases(mainName)) {
         const col = fileRecord.columns.find(c => c.name === alias);
@@ -2767,6 +2773,8 @@ dom.clearBtn.addEventListener('click', () => {
     state.parseJobs.clear();
     _origFileById.clear(); // キャンセルされたパースの控えFileも破棄
     state.files         = {};
+    state.comparison = CSVCompare.cleanSettings();
+    comparisonWorkspace?.clear();
     state.selectedNames = new Set();
     state.chartGroups   = [];
     state.channelAliases = {};
@@ -2830,6 +2838,7 @@ function updateUI() {
 }
 
 function renderFileList() {
+    comparisonWorkspace?.schedule();
     dom.fileList.innerHTML = '';
 
     // サブファイルの番号を計算（s1, s2, ...）Custom RAM式で使う識別子
@@ -2886,7 +2895,7 @@ function renderFileList() {
                 >${badgeText}</div>
                 <input type="color" class="file-color-picker" data-colorid="${fid}"
                     value="${fColor}" style="display:none;">
-                <span class="file-name-text" title="${esc(f.name)}">${esc(f.name)}</span>
+                <span class="file-name-text" title="${esc(f.name)}">${esc(comparisonWorkspace?.label(f) || f.name)}</span>
                 ${encodingLabel ? `<span class="encoding-badge" title="CSV文字コード">${esc(encodingLabel)}</span>` : ''}
                 <i class='bx bx-bug debug-file' data-fid="${fid}" title="Debug: パース結果を確認"></i>
                 <i class='bx bx-x remove-file' data-fid="${fid}" title="Remove"></i>
@@ -3710,6 +3719,35 @@ function pickBestCycleByAlignment(mTime, mActual, candidateIds) {
 }
 
 /**
+ * 判別したモードにトランスミッション変種（NEDCのMT版/AT版）があれば、実測車速から選び直す。
+ *
+ * MT版とAT版は波形の大部分が一致するため、総時間でも最高車速でも全体RMSEでも区別できない。
+ * 変種同士で差が出る区間だけを見る DriveIndex.pickTransmissionVariant に委ねる。
+ *
+ * @returns {string} 選び直したモードID（変種が無い・決め手が無い場合は元のIDのまま）
+ */
+function refineTransmissionVariant(modeId, mTime, mActual) {
+    const mode = driveModeById(modeId);
+    if (!mode || !mode.variantGroup || !mTime || !mActual) return modeId;
+
+    const siblings = window.DriveIndex.CYCLE_REGISTRY.filter(c => c.variantGroup === mode.variantGroup);
+    if (siblings.length < 2) return modeId;
+
+    const variants = siblings
+        .map(c => ({ id: c.id, trace: window.DriveIndex.getCycleTrace(c.id, state.customModes) }))
+        .filter(v => v.trace && v.trace.time.length > 1);
+    if (variants.length < 2) return modeId;
+
+    // 実測のどこからサイクルが始まるかを求める（前後の余分データがあってもここで吸収される）
+    const base = variants[0].trace;
+    const al = window.DriveIndex.alignActualToCycle(mTime, mActual, base.time, base.speed);
+    const picked = window.DriveIndex.pickTransmissionVariant({
+        actualTime: mTime, actualSpeed: mActual, variants, start: al.start, scale: 1,
+    });
+    return picked ? picked.id : modeId;   // 決め手が無ければ元のまま（＝レジストリ先頭＝MT版）
+}
+
+/**
  * 判別した走行モードの目標車速トレースを、各ファイルの合成チャンネル（'@MDC' 等）として同期する。
  *
  * Custom RAM と違って「式」ではなく判別結果から導かれる派生データなので、
@@ -3879,6 +3917,16 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             effectiveId = det.id; detName = det.name;
         } else {
             effectiveId = null; detName = '未判別';
+        }
+
+        // トランスミッション判定: NEDCのようにMT/AT変種があるモードは、ここまでの判別では
+        // どちらか決まらない（総時間も最高車速も同じ）。変種同士で差が出る区間だけを見て決める。
+        if (effectiveId && mainActual) {
+            const refined = refineTransmissionVariant(effectiveId, mainFile.timeData, mainActual);
+            if (refined !== effectiveId) {
+                effectiveId = refined;
+                detName = cycleNameOf(refined);
+            }
         }
     }
 
@@ -4785,7 +4833,7 @@ function renderColumnList() {
 
     const q       = dom.colSearch.value.toLowerCase();
     const matches = mainFile.columns
-        .filter(c => !q || c.name.toLowerCase().includes(q))
+        .filter(c => comparisonWorkspace ? comparisonWorkspace.filterColumn(c, q) : !q || c.name.toLowerCase().includes(q))
         .sort((a, b) => (b.isCustom ? 1 : 0) - (a.isCustom ? 1 : 0));
 
     if (!matches.length) {
@@ -4808,8 +4856,8 @@ function renderColumnList() {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'col-name';
-        nameSpan.style.color = '#f0f0f0';
-        nameSpan.title = col.name;
+        nameSpan.style.color = 'var(--text-primary)';
+        nameSpan.title = `${col.name} [${col.unit || '単位なし'}] — ${mainFile.name}`;
         nameSpan.textContent = col.name;
 
         const unitSpan = document.createElement('span');
@@ -4968,6 +5016,7 @@ function renderColumnList() {
             saveSettings();
         });
 
+        comparisonWorkspace?.decorateChannel(item, col);
         dom.colList.appendChild(item);
     }
 }
@@ -5084,6 +5133,7 @@ function interpolate(timeArr, valArr, t) {
  * ユーザーが使いたいチャンネルと探索範囲を選んでからアライメントを実行する。
  */
 async function autoAlign(subFileId) {
+    if (comparisonWorkspace) { comparisonWorkspace.openAlign(subFileId); return; }
     const mainFile = getMainFile();
     const subFile  = state.files[subFileId];
     if (!mainFile || !subFile) return;
@@ -5423,7 +5473,9 @@ function getActiveGroups() {
 
             grp.series.push({
                 id:       col.id,
-                label:    `${chName} [${mainFile.shortName}]`,
+                label:    `${chName} [${comparisonWorkspace?.label(mainFile) || mainFile.shortName}]`,
+                fileId: mainFileId,
+                isCrossFile: !!col.isCrossFile,
                 color:    mainColor,
                 dash:     false,
                 data:     mPts,
@@ -5442,11 +5494,12 @@ function getActiveGroups() {
                 const sf  = state.files[subId];
                 const sc  = resolveColumnForFile(sf, chName);
                 if (!sc) continue;
+                if (!CSVCompare.sameUnit(col.unit, sc.unit)) continue;
 
                 const std    = sf.timeData;
                 const svd    = sf.colData[sc.id];
                 if (!svd) continue;
-                const offset = sf.offset;
+                const offset = comparisonWorkspace?.effectiveOffset(sf) ?? sf.offset;
                 const sPts   = new Array(std.length);
                 for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, isNaN(svd[i]) ? null : svd[i]];
 
@@ -5457,8 +5510,9 @@ function getActiveGroups() {
                 grp.series.push({
                     id:    sc.id,
                     label: sc.name === chName
-                        ? `${chName} [${sf.shortName}]`
-                        : `${chName} ← ${sc.name} [${sf.shortName}]`,
+                        ? `${chName} [${comparisonWorkspace?.label(sf) || sf.shortName}]`
+                        : `${chName} ← ${sc.name} [${comparisonWorkspace?.label(sf) || sf.shortName}]`,
+                    fileId: subId,
                     color: subColor,
                     dash:  true,
                     data:  sPts,
@@ -5469,7 +5523,7 @@ function getActiveGroups() {
         }
     }
 
-    return { groups, order };
+    return comparisonWorkspace ? comparisonWorkspace.transformGroups({ groups, order }) : { groups, order };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -5480,7 +5534,10 @@ function getActiveGroups() {
 let _lastAutoRow = null;
 
 function renderChart() {
+    comparisonWorkspace?.schedule();
     if (!state.chart) initChart();
+    // notMerge replaces tooltip views; cancel pending tooltip positioning before rebuilding them.
+    state.chart.dispatchAction({ type: 'hideTip' });
 
     // Preserve current X-axis dataZoom state before notMerge rebuild
     // Undo/Redo復元中は履歴エントリのズーム位置を優先する
@@ -5572,7 +5629,7 @@ function renderChart() {
     const { min: globalXMin, max: globalXMax } = CSVChartOptions.computeGlobalXRange(
         Object.values(state.files)
             .filter(f => f.timeData && f.timeData.length > 0)
-            .map(f => ({ first: f.timeData[0], last: f.timeData[f.timeData.length - 1], offset: f.offset || 0 })));
+            .map(f => ({ first: f.timeData[0], last: f.timeData[f.timeData.length - 1], offset: comparisonWorkspace?.effectiveOffset(f) ?? (f.offset || 0) })));
 
     const AXIS_GAP = DL.axisGap; // フォントに連動(大きいフォントで軸同士が重ならないように)
     const groupLayouts = CSVChartOptions.computeGroupLayouts(
@@ -5629,12 +5686,12 @@ function renderChart() {
             const axisSpec = CSVChartOptions.computeAxisSpec({
                 assignedNames,
                 preferredRepresentative: axis.representative,
-                yRanges: state.yRanges,
-                bitChannels: state.bitChannels,
+                yRanges: state.comparison.view === 'diff' ? {} : state.yRanges,
+                bitChannels: state.comparison.view === 'diff' ? new Set() : state.bitChannels,
                 axisOrder,
                 axisGap: AXIS_GAP,
             });
-            const units = getAxisDisplayUnit(getChartGroupById(groupId), axis.id);
+            const units = getAxisDisplayUnit(grp, axis.id);
             const yAxisIndex = yAxes.length;
             axisIndexMap.set(axis.id, yAxisIndex);
             axisSpecs.set(axis.id, axisSpec);
@@ -5642,7 +5699,7 @@ function renderChart() {
             yAxes.push(CSVChartOptions.buildYAxisOption({
                 gridIndex: i,
                 axisSpec,
-                assignedNames,
+                assignedNames: grp.caption ? assignedNames.map(name => `${name} [${grp.caption}]`) : state.comparison.view === 'diff' ? assignedNames.map(name => `Δ ${name}`) : assignedNames,
                 units,
                 axisOrder,
                 nameGap: DL.nameGap,
@@ -5683,8 +5740,11 @@ function renderChart() {
     });
 
     // イベント検出結果の区間ハイライト（markArea）を各グリッドに重ねる
-    if (state.events.intervals.length) {
-        const areaData = state.events.intervals.map(iv => [{ xAxis: iv.t0 }, { xAxis: iv.t1 }]);
+    const selectedInterval = comparisonWorkspace?.selectionRange();
+    const highlightedIntervals = [...state.events.intervals];
+    if (selectedInterval) highlightedIntervals.push({ t0: selectedInterval[0], t1: selectedInterval[1] });
+    if (highlightedIntervals.length) {
+        const areaData = highlightedIntervals.map(iv => [{ xAxis: iv.t0 }, { xAxis: iv.t1 }]);
         order.forEach((groupId, gi) => {
             const yIdxMap = yAxisIndexByGroup.get(groupId);
             const yAxisIndex = yIdxMap && yIdxMap.size ? yIdxMap.values().next().value : 0;
@@ -5791,6 +5851,7 @@ function removeArrangeOverlay() {
 
 function updateArrangeOverlay() {
     removeArrangeOverlay();
+    if (state.comparison.view !== 'overlay') return;
     if (!state.arrangeMode || state.gridRegions.length < 2) return;
 
     const overlay = document.createElement('div');
@@ -5943,31 +6004,12 @@ function updatePerGridLabels() {
         if (!grp) return;
         const entries = [];
 
-        // グリッド内の全チャンネル（マージ相手含む）について値を取得
-        for (const chName of grp.mergedNames) {
-            const assignment = grp.channels.find(ch => ch.name === chName);
-            const yAxisIndex = state.yAxisIndexByGroup?.get(grp.id)?.get(assignment?.axisId);
+        // Use the exact full-resolution series being shown (stack/difference/raw-time included).
+        for (const line of grp.series) {
+            const yAxisIndex = state.yAxisIndexByGroup?.get(grp.id)?.get(line.axisId);
             if (yAxisIndex === undefined) continue;
-            // Main file
-            const mc = lookup.colByName.get(chName);
-            if (mc && mainFile.colData[mc.id]) {
-                const val = interpolate(mainFile.timeData, mainFile.colData[mc.id], xVal);
-                if (!isNaN(val)) {
-                    entries.push({ color: mc.color, valStr: fmtVal(val), fileName: mainFile.shortName, val, yAxisIndex });
-                }
-            }
-
-            // Sub files
-            for (const subId of lookup.subIds) {
-                const sf = state.files[subId];
-                const sc = lookup.subColByName.get(subId).get(chName);
-                if (!sc || !sf.colData[sc.id]) continue;
-                const subT = xVal - (sf.offset || 0);
-                const val = interpolate(sf.timeData, sf.colData[sc.id], subT);
-                if (!isNaN(val)) {
-                    entries.push({ color: sc.color, valStr: fmtVal(val), fileName: sf.shortName, val, yAxisIndex });
-                }
-            }
+            const val = CSVCompare.pointAt(line.data, xVal, state.bitChannels.has(line.channelName));
+            if (Number.isFinite(val)) entries.push({ color: line.color, valStr: fmtVal(val), fileName: line.label, val, yAxisIndex });
         }
 
         if (!entries.length) return;
@@ -6099,6 +6141,7 @@ function onBrushEnd(params) {
     if (!area.coordRange) return;
     const [sv, ev] = area.coordRange;
     if (ev <= sv) return;
+    if (comparisonWorkspace?.brush([sv, ev])) { exitBoxZoom(); return; }
     // dataZoomIndex:0(X軸スライダー)だけを対象にする。
     // xAxisIndex指定はdataZoomアクションのフィルタとして機能せず全dataZoomに波及し、
     // Y軸の値域が時間値と重なるグリッドでY軸ズームが壊れるバグがあった。
@@ -6242,31 +6285,15 @@ function buildMeasureTableHTML(t0, t1) {
         + `（A=${esc(t0.toFixed(3))} / B=${esc(t1.toFixed(3))}）</span></div>`;
     if (!mainFile) return html + `<div class="measure-hint">データがありません</div>`;
 
-    // 行を構築する共通処理: ファイルのtimeData/データ列から統計を取る
     const rows = [];
-    const pushRow = (label, color, timeData, data, offset) => {
-        const s = computeIntervalStats(timeData, data, t0 - offset, t1 - offset);
-        if (!s) return;
-        const vA = interpolate(timeData, data, t0 - offset);
-        const vB = interpolate(timeData, data, t1 - offset);
-        rows.push({ label, color, vA, vB, d: vB - vA, ...s });
-    };
-
     for (const gid of activeOrder) {
-        const grp = activeGroups.get(gid);
-        if (!grp) continue;
-        for (const chName of grp.mergedNames) {
-            const mc = lookup.colByName.get(chName);
-            if (mc && mainFile.colData[mc.id]) {
-                pushRow(chName, mc.color, mainFile.timeData, mainFile.colData[mc.id], 0);
-            }
-            for (const subId of lookup.subIds) {
-                const sf = state.files[subId];
-                const sc = lookup.subColByName.get(subId).get(chName);
-                if (!sc || !sf.colData[sc.id]) continue;
-                pushRow(`${chName} (${sf.shortName})`, sc.color,
-                        sf.timeData, sf.colData[sc.id], sf.offset || 0);
-            }
+        for (const line of activeGroups.get(gid)?.series || []) {
+            const stats = CSVCompare.pointStats(line.data, t0, t1);
+            if (!stats) continue;
+            const digital = state.bitChannels.has(line.channelName);
+            const vA = CSVCompare.pointAt(line.data, t0, digital);
+            const vB = CSVCompare.pointAt(line.data, t1, digital);
+            rows.push({ label: line.label, color: line.color, vA, vB, d: vB - vA, ...stats });
         }
     }
     if (!rows.length) return html + `<div class="measure-hint">区間内にデータ点がありません</div>`;
@@ -6352,29 +6379,10 @@ function collectStatsRows(t0, t1) {
     const rows = [];
     if (!mainFile) return rows;
 
-    const pushRow = (label, color, timeData, data, offset) => {
-        const s = computeIntervalStats(timeData, data, t0 - offset, t1 - offset);
-        if (!s) return;
-        // σ² = RMS² − mean²（数値誤差で負にならないようクランプ）
-        const sigma = Math.sqrt(Math.max(s.rms * s.rms - s.mean * s.mean, 0));
-        rows.push({ label, color, min: s.min, max: s.max, mean: s.mean, sigma, n: s.n });
-    };
-
     for (const gid of activeOrder) {
-        const grp = activeGroups.get(gid);
-        if (!grp) continue;
-        for (const chName of grp.mergedNames) {
-            const mc = lookup.colByName.get(chName);
-            if (mc && mainFile.colData[mc.id]) {
-                pushRow(chName, mc.color, mainFile.timeData, mainFile.colData[mc.id], 0);
-            }
-            for (const subId of lookup.subIds) {
-                const sf = state.files[subId];
-                const sc = lookup.subColByName.get(subId).get(chName);
-                if (!sc || !sf.colData[sc.id]) continue;
-                pushRow(`${chName} (${sf.shortName})`, sc.color,
-                        sf.timeData, sf.colData[sc.id], sf.offset || 0);
-            }
+        for (const line of activeGroups.get(gid)?.series || []) {
+            const stats = CSVCompare.pointStats(line.data, t0, t1);
+            if (stats) rows.push({ label: line.label, color: line.color, ...stats });
         }
     }
     return rows;
@@ -6614,9 +6622,10 @@ async function restoreHistoryEntry(entry) {
             // スナップショットに無いCustom RAMを先に削除する
             // （applyPendingSettingsは「足りないものを追加」しかしないため、
             //   これがないと「Custom RAM追加のUndo」が効かない）
-            const keep = new Set((entry.settings.customRAMs || []).map(c => c.name));
+            const keep = new Map((entry.settings.customRAMs || []).map(c => [c.name, c]));
             for (const c of [...state.customRAMs]) {
-                if (!keep.has(c.name)) removeCustomRAM(c.id);
+                const expected = keep.get(c.name);
+                if (!expected || expected.expr !== c.expr || (expected.unit || '') !== (c.unit || '')) removeCustomRAM(c.id);
             }
             // 復元中のすべての再描画が目標ズームで描かれるようrenderChartに注入する
             // （dispatchActionの後追いだと非同期の再描画に上書きされるため）
@@ -7250,6 +7259,7 @@ ${statsHtml}
 ${diHtml}
 ${ramHtml}
 ${evHtml}
+${comparisonWorkspace?.reportHTML() || ''}
 </body></html>`;
 
     const baseName = mainFile.name.replace(/\.(csv|trn)$/i, '');
@@ -7396,7 +7406,8 @@ document.addEventListener('visibilitychange', () => {
 function collectSettings() {
     const sidebar = document.querySelector('.sidebar');
     return {
-        _version: 5,
+        _version: 6,
+        comparison: state.comparison,
         // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
         fileInfos: Object.values(state.files).map(f => ({
             name: f.name,
@@ -7497,8 +7508,9 @@ function loadSettings() {
 function buildSettingsForExport() {
     const sidebar = document.querySelector('.sidebar');
     return {
+        ...collectSettings(),
         _format: 'CSV Viewer Settings',
-        _version: 3,
+        _version: 6,
         fileInfos: Object.values(state.files).map(f => ({
             name: f.name,
             role: f.role,
@@ -7525,7 +7537,8 @@ function buildSettingsForExport() {
 function buildPresetSettings() {
     return {
         _format: 'CSV Viewer Preset',
-        _version: 3,
+        _version: 6,
+        comparison: { ...state.comparison, notes: [] },
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
         chartGroups: serializeChartGroups(),
@@ -8047,6 +8060,8 @@ function applySettings(rawSettings) {
         return;
     }
     const s = result.settings;
+    state.comparison = CSVCompare.cleanSettings(s.comparison);
+    comparisonWorkspace?.changedSettings();
 
     // パース設定を復元
     if (s.nameRowIdx) dom.nameRow.value = s.nameRowIdx;
@@ -8253,6 +8268,11 @@ async function applyDeferredCrossRAMs() {
 async function applyPendingSettings() {
     const s = _pendingSettings;
     if (!s) return;
+
+    const references = (s.fileInfos || []).filter(f => f.role === 'main');
+    if (references.length === 1 && Object.values(state.files).filter(f => f.name === references[0].name).length === 1) {
+        for (const f of Object.values(state.files)) f.role = f.name === references[0].name ? 'main' : 'sub';
+    }
 
     const mainFile = getMainFile();
     if (!mainFile) return;
@@ -8479,7 +8499,77 @@ async function restoreSessionFiles() {
 // Initialise
 // ─────────────────────────────────────────────────────────────
 
+comparisonWorkspace = CSVWorkspace({
+    state, esc, main: getMainFile, mainId: getMainFileId, subIds: getSubFileIds,
+    resolve: resolveColumnForFile, load: loadColumnsForFile, ensure: ensureColumnsAndRender,
+    render: renderChart, renderColumns: renderColumnList, renderFiles: renderFileList,
+    save: saveSettings, collect: collectSettings, apply: applySettings,
+    applyComparison: async data => {
+        const migrated = CSVSettings.migrateSettings(data);
+        if (!migrated.ok) throw new Error('この設定形式は読み込めません');
+        const previousFlag = _restoringHistory;
+        _restoringHistory = true;
+        try {
+            const keep = new Map((data.customRAMs || []).map(c => [c.name, c]));
+            for (const c of [...state.customRAMs]) {
+                const expected = keep.get(c.name);
+                if (!expected || expected.expr !== c.expr || (expected.unit || '') !== (c.unit || '')) removeCustomRAM(c.id);
+            }
+            const reference = data.fileInfos?.find(f => f.role === 'main');
+            if (reference && Object.values(state.files).filter(f => f.name === reference.name).length === 1) {
+                for (const f of Object.values(state.files)) f.role = f.name === reference.name ? 'main' : 'sub';
+            }
+            clearEvents(false);
+            await applySettings(data);
+            await recomputeCustomRAMs();
+            await ensureColumnsAndRender();
+        } finally { _restoringHistory = previousFlag; }
+        saveSettings();
+    },
+    setMain: setMainFile, offsetChanged: applyOffsetChange, visibleRange: getVisibleXRange,
+    resetZoom, report: exportReportHTML, image: getChartImageDataURL, copy: copyChartToClipboard,
+    warning: showWarning, success: showExportToast, hint: text => { dom.hintEl.textContent = text; },
+    textColor: () => T.text || cssVar('--text-primary'),
+    resize: () => { if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); } },
+    modal: html => createModal(html, { modalClass: 'compare-dialog' }),
+    startBrush: enterBoxZoom,
+    exitArrange: exitArrangeMode,
+    clearMeasure: () => exitMeasureMode(),
+    stats: () => { if (!state.statsPanelVisible) toggleStatsPanel(); else updateStatsPanel(); },
+    favoriteNames: () => { const favs = loadChannelFavorites(); return Object.values(favs).flatMap(f => Array.isArray(f) ? f : f.names || []); },
+    select: async (names, replace) => {
+        if (replace) { state.selectedNames.clear(); state.chartGroups = []; }
+        for (const name of names) if (getMainColumn(name)) { state.selectedNames.add(name); addStandaloneChart(name); }
+        await ensureColumnsAndRender(); saveSettings();
+    },
+    focusChannel: name => {
+        const region = state.gridRegions.find(r => r.name === name || r.label?.includes(name));
+        if (region) dom.chartEl.parentElement.scrollTo({ top: region.top, behavior: 'smooth' });
+    },
+    dropTarget: clientY => {
+        const hit = hitTestGrid(clientY); if (!hit) return null;
+        const y = clientY - dom.chartEl.getBoundingClientRect().top, r = hit.region;
+        return { index: hit.index, groupId: r.groupId || r.id, edge: y - r.top < 22 ? 'before' : r.top + r.height - y < 22 ? 'after' : null };
+    },
+    dropChannel: async (name, hit) => {
+        if (!getMainColumn(name)) return;
+        state.selectedNames.add(name);
+        removeChannelFromChartGroups(name);
+        addStandaloneChart(name);
+        const target = hit && state.chartGroups.find(g => g.id === hit.groupId);
+        if (target && !hit.edge && !target.channels.some(c => c.name === name)) {
+            const unit = getMainColumn(name).unit;
+            const axis = target.axes.find(a => unit && CSVCompare.sameUnit(a.unit, unit));
+            addChannelToChartGroup(name, target.id, axis?.id || null);
+        } else if (hit) {
+            const from = state.chartGroups.findIndex(g => g.channels.some(c => c.name === name));
+            moveChartGroup(from, hit.index + (hit.edge === 'after' ? 1 : 0));
+        }
+        await ensureColumnsAndRender(); saveSettings();
+    },
+});
 initChart();
+comparisonWorkspace.bindChart();
 
 // 設定エクスポート/インポートボタンのイベント登録
 dom.exportSettings.addEventListener('click', exportSettings);

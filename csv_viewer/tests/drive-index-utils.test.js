@@ -31,9 +31,24 @@ function distKm(speed) {
 // ── レジストリ（4バリアント＋NEDC） ──
 {
     const ids = DriveIndex.CYCLE_REGISTRY.map(c => c.id);
-    for (const id of ['nedc', 'wltc3a_3', 'wltc3a_4', 'wltc3b_3', 'wltc3b_4', 'mdc']) {
+    for (const id of ['nedc_mt', 'nedc_at', 'wltc3a_3', 'wltc3a_4', 'wltc3b_3', 'wltc3b_4', 'mdc']) {
         assert.ok(ids.includes(id), 'missing cycle id: ' + id);
     }
+    // NEDCだけがMT/ATの変種を持つ。WLTC/MDCは目標車速が1本なので変種を持たない
+    const byId = id => DriveIndex.CYCLE_REGISTRY.find(c => c.id === id);
+    assert.strictEqual(byId('nedc_mt').transmission, 'MT');
+    assert.strictEqual(byId('nedc_at').transmission, 'AT');
+    assert.strictEqual(byId('nedc_mt').variantGroup, 'nedc');
+    assert.strictEqual(byId('nedc_at').variantGroup, 'nedc');
+    for (const id of ['wltc3b_4', 'wltc3b_3', 'wltc3a_4', 'wltc3a_3', 'mdc']) {
+        assert.strictEqual(byId(id).transmission, undefined, id + ' に transmission が付いている');
+        assert.strictEqual(byId(id).variantGroup, undefined, id + ' に variantGroup が付いている');
+    }
+    // フェーズ境界はMT/ATで共通
+    assert.deepStrictEqual(
+        byId('nedc_mt').phases.map(p => [p.name, p.start, p.end]),
+        byId('nedc_at').phases.map(p => [p.name, p.start, p.end]),
+    );
     const w4 = DriveIndex.CYCLE_REGISTRY.find(c => c.id === 'wltc3b_4');
     assert.strictEqual(w4.phases.length, 4);
     assert.strictEqual(JSON.stringify(w4.phases.map(p => [p.name, p.start, p.end])), JSON.stringify([
@@ -63,7 +78,8 @@ function distKm(speed) {
 
     const byId = id => DriveIndex.CYCLE_REGISTRY.find(c => c.id === id);
     assert.strictEqual(DriveIndex.cycleChannelName(byId('mdc')), '@MDC');
-    assert.strictEqual(DriveIndex.cycleChannelName(byId('nedc')), '@NEDC');
+    assert.strictEqual(DriveIndex.cycleChannelName(byId('nedc_mt')), '@NEDC_MT');
+    assert.strictEqual(DriveIndex.cycleChannelName(byId('nedc_at')), '@NEDC_AT');
     assert.strictEqual(DriveIndex.cycleChannelName(byId('wltc3b_3')), '@WLTC3b_3');
     assert.strictEqual(DriveIndex.cycleChannelName(byId('wltc3a_4')), '@WLTC3a_4');
 
@@ -81,8 +97,11 @@ function distKm(speed) {
 // ── 旧IDの読み替え ──
 {
     assert.strictEqual(DriveIndex.resolveCycleId('wltc3'), 'wltc3b_4');
-    assert.strictEqual(DriveIndex.resolveCycleId('nedc'), 'nedc');
     assert.strictEqual(DriveIndex.resolveCycleId('wltc3b_4'), 'wltc3b_4');
+    // MT/AT分割前の 'nedc' はMT版へ読み替える（分割前のトレースはMT版だった）
+    assert.strictEqual(DriveIndex.resolveCycleId('nedc'), 'nedc_mt');
+    assert.strictEqual(DriveIndex.resolveCycleId('nedc_mt'), 'nedc_mt');
+    assert.strictEqual(DriveIndex.resolveCycleId('nedc_at'), 'nedc_at');
     // 'mdc' は実データを得て内蔵へ復帰したので、読み替え対象から外れて素通しされる
     assert.strictEqual(DriveIndex.resolveCycleId('mdc'), 'mdc');
     assert.ok(!Object.prototype.hasOwnProperty.call(DriveIndex.LEGACY_CYCLE_ID, 'mdc'));
@@ -90,7 +109,9 @@ function distKm(speed) {
 
 // ── drive-cycles-data.js も単体でrequireできること（UMD） ──
 {
-    assert.deepStrictEqual([...DriveCycleData.keys].sort(), ['mdc', 'nedc', 'wltc_3a', 'wltc_3b']);
+    // 'nedc_at' は静的データではなく nedc から導出されるキー
+    assert.deepStrictEqual([...DriveCycleData.keys].sort(),
+        ['mdc', 'nedc', 'nedc_at', 'wltc_3a', 'wltc_3b']);
 }
 
 // ── getCycleTrace: 内蔵トレースの取得と 3フェーズ打ち切り ──
@@ -159,6 +180,94 @@ function distKm(speed) {
     assert.ok(Math.abs(distKm(ned.speed) - 11.0) < 0.1, 'NEDC 総距離 ≈ 11km, got ' + distKm(ned.speed));
 }
 
+// ── NEDC(AT): MT版からの導出（UN R83 §2.3.3） ──
+// 「変速点は適用せず、アイドリング終了点と次の定速走行開始点を結ぶ直線に沿って加速を継続する」
+{
+    const mt = DriveIndex.getCycleTrace('nedc_mt');
+    const at = DriveIndex.getCycleTrace('nedc_at');
+    assert.strictEqual(at.time.length, 1181);
+    assert.strictEqual(at.time[at.time.length - 1], 1180);
+
+    let max = 0;
+    for (const v of at.speed) if (v > max) max = v;
+    approx(max, 120, 1e-9);                                  // 最高車速はMTと同じ
+    assert.ok(Math.abs(distKm(at.speed) - 10.9217) < 0.0005,
+        'NEDC(AT) 総距離 ≈ 10.9217km, got ' + distKm(at.speed));
+
+    // 直線に置き換わった代表3区間が「厳密に等間隔」であること
+    for (const [s, e, target] of [[48, 60, 32], [116, 142, 50], [799, 840, 70]]) {
+        const step = target / (e - s);
+        for (let k = 0; k <= e - s; k++) {
+            approx(at.speed[s + k], step * k, 1e-9);
+        }
+    }
+
+    // AT版に変速区間（加速に挟まれた2秒プラトー）が残っていないこと
+    const gearHolds = (v) => {
+        const out = [];
+        for (let i = 0; i < v.length;) {
+            let j = i;
+            while (j + 1 < v.length && Math.abs(v[j + 1] - v[i]) < 1e-9) j++;
+            const len = j - i + 1;
+            if (j > i && v[i] > 0 && len <= 3
+                && i > 0 && v[i] > v[i - 1]
+                && j + 1 < v.length && v[j + 1] > v[j]) out.push(i);
+            i = j + 1;
+        }
+        return out;
+    };
+    assert.strictEqual(gearHolds(mt.speed).length, 15);      // MT版には15箇所ある
+    assert.strictEqual(gearHolds(at.speed).length, 0);       // AT版には無い
+
+    // MT版は一切変わっていないこと（既存の検証値がそのまま通る）
+    assert.ok(Math.abs(distKm(mt.speed) - 11.0132) < 0.0005);
+    approx(mt.speed[54], 15, 1e-9);                          // 変速のための保持が残っている
+    approx(mt.speed[55], 15, 1e-9);
+
+    // 差が出るのは全体の一部だけ（＝全体RMSEでは判別できない、という前提の裏取り）
+    let ndiff = 0;
+    for (let i = 0; i < mt.speed.length; i++) if (Math.abs(mt.speed[i] - at.speed[i]) > 1e-9) ndiff++;
+    assert.strictEqual(ndiff, 184);
+}
+
+// ── pickTransmissionVariant: 差分区間だけでMT/ATを選び分ける ──
+{
+    const variants = ['nedc_mt', 'nedc_at'].map(id => ({ id, trace: DriveIndex.getCycleTrace(id) }));
+    const time = variants[0].trace.time;
+    const pick = (speed, start = 0) => DriveIndex.pickTransmissionVariant({
+        actualTime: time, actualSpeed: speed, variants, start, scale: 1,
+    });
+
+    // ぴったり追従した場合
+    assert.strictEqual(pick(variants[0].trace.speed).id, 'nedc_mt');
+    assert.strictEqual(pick(variants[1].trace.speed).id, 'nedc_at');
+
+    // 追従誤差（±1km/h程度）を載せても正しく選べること。再現性のためシード付き乱数を使う
+    let seed = 20260727;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const noisy = (v) => v.map(x => x + (rnd() - 0.5) * 2);
+    assert.strictEqual(pick(noisy(variants[0].trace.speed)).id, 'nedc_mt');
+    assert.strictEqual(pick(noisy(variants[1].trace.speed)).id, 'nedc_at');
+
+    // 実測が前後にずれている場合も start を渡せば追従できる
+    const shifted = 30;
+    const shiftedTime = time.map(t => t + shifted);
+    assert.strictEqual(DriveIndex.pickTransmissionVariant({
+        actualTime: shiftedTime, actualSpeed: variants[1].trace.speed, variants,
+        start: shifted, scale: 1,
+    }).id, 'nedc_at');
+
+    // MT/ATの中間のような波形は決め手なし（null）
+    const middle = variants[0].trace.speed.map((v, i) => (v + variants[1].trace.speed[i]) / 2);
+    assert.strictEqual(pick(middle), null);
+
+    // 引数が足りない場合も例外を投げずnullを返す
+    assert.strictEqual(DriveIndex.pickTransmissionVariant(null), null);
+    assert.strictEqual(DriveIndex.pickTransmissionVariant({
+        actualTime: time, actualSpeed: variants[0].trace.speed, variants: [variants[0]],
+    }), null);
+}
+
 // ── MDC: レジストリ定義 ──
 {
     const mdc = DriveIndex.CYCLE_REGISTRY.find(c => c.id === 'mdc');
@@ -219,12 +328,13 @@ function distKm(speed) {
     // 中間の車速（どちらとも決め切れない）も ambiguous になること
     assert.strictEqual(DriveIndex.detectCycle(time, speedWithMax(101.6)).ambiguous, true);
 
-    // 総時間が一意に決まるサイクルは同点にならず ambiguous にならない（従来動作の維持）
+    // NEDCはMT版とAT版が総時間も最高車速も同じなので必ず同点になる。
+    // 暫定値はレジストリ先頭のMT版で、決着は pickTransmissionVariant が付ける。
     const nedcTime = Array.from({ length: 1181 }, (_, i) => i);
     const nedcDet = DriveIndex.detectCycle(nedcTime, null);
-    assert.strictEqual(nedcDet.id, 'nedc');
-    assert.strictEqual(nedcDet.ambiguous, false);
-    assert.deepStrictEqual(nedcDet.candidates, ['nedc']);
+    assert.strictEqual(nedcDet.id, 'nedc_mt');
+    assert.strictEqual(nedcDet.ambiguous, true);
+    assert.deepStrictEqual(nedcDet.candidates, ['nedc_mt', 'nedc_at']);
 
     // 既知サイクルから遠い長さは従来どおり未判別
     const odd = DriveIndex.detectCycle([0, 500], null);
@@ -253,9 +363,9 @@ function distKm(speed) {
     assert.strictEqual(det.speedMismatch, true);   // → 長さ判別は信用できないと伝える
 
     // 車速がちゃんと候補と合っているケースでは立たないこと（誤検知しない）
-    const nedcTrace = DriveIndex.getCycleTrace('nedc');
+    const nedcTrace = DriveIndex.getCycleTrace('nedc_mt');
     const nedcDet = DriveIndex.detectCycle(nedcTrace.time, nedcTrace.speed);
-    assert.strictEqual(nedcDet.id, 'nedc');
+    assert.strictEqual(nedcDet.id, 'nedc_mt');
     assert.strictEqual(nedcDet.speedMismatch, false);
 
     const mdcDet = DriveIndex.detectCycle(mdc.time, mdc.speed);

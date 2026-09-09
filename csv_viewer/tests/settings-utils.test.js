@@ -63,9 +63,13 @@ function testDriveIndexCycleIdMigrated() {
     const r2 = CSVSettings.migrateSettings({ _version: 3, driveIndex: { cycleId: 'mdc' } });
     assert.equal(r2.settings.driveIndex.cycleId, 'mdc');
 
+    // MT/AT分割前の 'nedc' はMT版へ読み替える（分割前のトレースはMT版だった）
+    const r3 = CSVSettings.migrateSettings({ _version: 3, driveIndex: { cycleId: 'nedc' } });
+    assert.equal(r3.settings.driveIndex.cycleId, 'nedc_mt');
+
     // 現行IDはそのまま
-    const r3 = CSVSettings.migrateSettings({ _version: CSVSettings.SETTINGS_VERSION, driveIndex: { cycleId: 'nedc' } });
-    assert.equal(r3.settings.driveIndex.cycleId, 'nedc');
+    const r4 = CSVSettings.migrateSettings({ _version: CSVSettings.SETTINGS_VERSION, driveIndex: { cycleId: 'nedc_at' } });
+    assert.equal(r4.settings.driveIndex.cycleId, 'nedc_at');
 }
 
 // 旧サイクルIDの読み替えが単一情報源(DriveIndex.LEGACY_CYCLE_ID)と一致すること。

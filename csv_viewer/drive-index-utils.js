@@ -38,6 +38,11 @@
     //   shortName: 目標車速チャンネル名に使う短縮名（'@MDC' の 'MDC' の部分）。
     //              name は「WLTC Class 3b (3フェーズ)」のように空白や括弧を含み、
     //              Custom RAM の式に書けないため別に持つ（cycleChannelName 参照）。
+    //   transmission / variantGroup:
+    //              同じサイクルにトランスミッション別の目標車速がある場合だけ持つ。
+    //              NEDC は MT版に変速のための定速保持が埋め込まれており AT版と波形が違うので
+    //              nedc_mt / nedc_at の2エントリを variantGroup:'nedc' でまとめる。
+    //              WLTC と MDC は目標車速トレースが1本で MT/AT の区別が無いため両方とも持たない。
     //
     // WLTC Class 3 は 3a/3b で同じフェーズ区切り（Low/Extra-High は共通、Medium/High の
     // 車速波形のみクラス差）。3フェーズ版（日本国内型）は Extra-High を除いた Low+Medium+High。
@@ -51,14 +56,22 @@
     const WLTC_EXHIGH = { name: 'Extra-High', start: 1477, end: 1800 };
     const wltcPhases3 = () => [{ ...WLTC_LOW }, { ...WLTC_MED }, { ...WLTC_HIGH }];
     const wltcPhases4 = () => [{ ...WLTC_LOW }, { ...WLTC_MED }, { ...WLTC_HIGH }, { ...WLTC_EXHIGH }];
+    // NEDC のフェーズ境界は MT/AT で共通（総時間も変速の有無に関わらず 1180 秒で変わらない）
+    const nedcPhases = () => [
+        { name: 'Urban (UDC)',        start: 0,   end: 780  },
+        { name: 'Extra-Urban (EUDC)', start: 780, end: 1180 },
+    ];
 
     const CYCLE_REGISTRY = [
         {
-            id: 'nedc', name: 'NEDC', shortName: 'NEDC', traceId: 'nedc', total: 1180, maxSpeed: 120,
-            phases: [
-                { name: 'Urban (UDC)',        start: 0,   end: 780  },
-                { name: 'Extra-Urban (EUDC)', start: 780, end: 1180 },
-            ],
+            id: 'nedc_mt', name: 'NEDC (MT)', shortName: 'NEDC_MT', traceId: 'nedc',
+            transmission: 'MT', variantGroup: 'nedc',
+            total: 1180, maxSpeed: 120, phases: nedcPhases(),
+        },
+        {
+            id: 'nedc_at', name: 'NEDC (AT)', shortName: 'NEDC_AT', traceId: 'nedc_at',
+            transmission: 'AT', variantGroup: 'nedc',
+            total: 1180, maxSpeed: 120, phases: nedcPhases(),
         },
         // 判別時の既定優先のため、より一般的な 3b を先に置く（同一総時間の同点は先頭を採用）。
         {
@@ -95,7 +108,8 @@
     //   'wltc3'（旧 WLTC 4-phase Class 3）→ 'wltc3b_4'。
     // 'mdc' は以前「内蔵廃止 → null（自動判別に戻す）」だったが、実データを入手して
     // 内蔵レジストリへ復帰させたため読み替え対象から外した（旧設定の 'mdc' はそのまま解決される）。
-    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4' };
+    //   'nedc'（MT/AT分割前）→ 'nedc_mt'。分割前のトレースはMT版だったのでMTへ倒す。
+    const LEGACY_CYCLE_ID = { wltc3: 'wltc3b_4', nedc: 'nedc_mt' };
 
     /**
      * 旧サイクルIDを現行IDへ読み替える（未知IDはそのまま返す）。
@@ -132,6 +146,72 @@
         const fallback = String(mode.id || '').replace(CHANNEL_NAME_PREFIX, '').replace(CHANNEL_NAME_FORBIDDEN, '');
         const body = safe || fallback;
         return body ? '@' + body : null;
+    }
+
+    // 変種同士の車速差がこれを超えるサンプルだけを判別に使う[km/h]。
+    // 実測のノイズや量子化に埋もれない程度に取る。
+    const VARIANT_DIFF_THRESHOLD = 0.5;
+    // 1位と2位のRMSE差がこれ未満なら「決め手なし」とする[km/h]。
+    const VARIANT_DECISION_MARGIN = 0.5;
+
+    /**
+     * 同じサイクルのトランスミッション変種（NEDCのMT版/AT版）を実測車速から選ぶ。
+     *
+     * 変種同士は波形の大部分が一致するため、全体RMSEでは区別できない
+     * （NEDCのMT/ATは全体RMS差1.15km/hで、実車の追従誤差と同程度）。
+     * そこで「変種同士で差が出るサンプルだけ」を取り出して比較する
+     * （同区間に限ればRMS差2.9km/hあり、ノイズに対して十分大きい）。
+     *
+     * @param {object} opts
+     *   actualTime  : 実測の時間軸[s]
+     *   actualSpeed : 実測車速[km/h]
+     *   variants    : [{ id, trace:{time,speed} }] 比較する変種（2つ以上）
+     *   start       : サイクル開始に対応する実測時刻[s]
+     *   scale       : トレース時間→実測時間の伸縮率（既定1）
+     * @returns {{ id, rmse, margin, samples }|null}
+     *   決め手が無い（差分サンプルが少なすぎる/1位と2位が僅差）場合は null。
+     */
+    function pickTransmissionVariant(opts) {
+        const { actualTime, actualSpeed, variants, start, scale } = opts || {};
+        if (!actualTime || !actualSpeed || !variants || variants.length < 2) return null;
+        const k = (scale != null && isFinite(scale) && scale > 0) ? scale : 1;
+        const t0 = (start != null && isFinite(start)) ? start : 0;
+
+        const traces = variants.map(v => v.trace).filter(Boolean);
+        if (traces.length !== variants.length) return null;
+        const len = Math.min(...traces.map(tr => tr.speed.length));
+        if (len < 2) return null;
+
+        // 変種間で車速が割れるサンプル（＝判別に効く区間）を集める
+        const idx = [];
+        for (let i = 0; i < len; i++) {
+            let lo = Infinity, hi = -Infinity;
+            for (const tr of traces) {
+                const v = tr.speed[i];
+                if (v < lo) lo = v;
+                if (v > hi) hi = v;
+            }
+            if (hi - lo > VARIANT_DIFF_THRESHOLD) idx.push(i);
+        }
+        if (idx.length < 10) return null;   // 差が小さすぎて判別できない
+
+        // 差分サンプルの時刻だけを実測の時間軸へ写像し、変種ごとにRMSEを出す
+        const scored = variants.map((v, vi) => {
+            const tr = traces[vi];
+            let sse = 0, n = 0;
+            for (const i of idx) {
+                const tMeasured = t0 + (tr.time[i] - tr.time[0]) * k;
+                const a = interp1(actualTime, actualSpeed, tMeasured);
+                const d = a - tr.speed[i];
+                if (isFinite(d)) { sse += d * d; n++; }
+            }
+            return { id: v.id, rmse: n > 0 ? Math.sqrt(sse / n) : Infinity, n };
+        }).sort((x, y) => x.rmse - y.rmse);
+
+        if (!isFinite(scored[0].rmse)) return null;
+        const margin = scored[1].rmse - scored[0].rmse;
+        if (margin < VARIANT_DECISION_MARGIN) return null;   // 僅差＝決め手なし
+        return { id: scored[0].id, rmse: scored[0].rmse, margin, samples: idx.length };
     }
 
     /**
@@ -490,6 +570,7 @@
         resampleTo1Hz,
         resolveCycleId,
         cycleChannelName,
+        pickTransmissionVariant,
         getCycleTrace,
         alignActualToCycle,
         detectCycle,
