@@ -1116,6 +1116,7 @@ const state = {
 
 // 復元待ちの設定（ファイル読込後に適用される）
 let _pendingSettings = null;
+let _sessionRestoreNames = null;
 
 // FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, previewRows, headerInfo }
 //   role: 'main' | 'sub'
@@ -1882,6 +1883,18 @@ function finishParseJob(job) {
     if (!job) return;
     state.parseJobs.delete(job.id);
     renderParseJobs();
+    // Completion removes the job just before inserting its file. Check on the next
+    // turn so a failed/cancelled restore cannot leave settings saving suspended.
+    if (_sessionRestoreNames) setTimeout(async () => {
+        if (!_sessionRestoreNames || state.parseJobs.size) return;
+        const loaded = new Set(Object.values(state.files).map(f => f.name));
+        const missing = [..._sessionRestoreNames].filter(name => !loaded.has(name));
+        if (!missing.length) return;
+        _sessionRestoreNames = null;
+        showWarning('一部のファイルを復元できませんでした', missing.join('\n'));
+        try { await applyPendingSettings(); updateUI(); }
+        catch (e) { console.warn('[CSV Viewer] Partial session restore failed:', e); }
+    }, 0);
 }
 
 function renderParseJobs() {
@@ -2788,6 +2801,7 @@ dom.clearBtn.addEventListener('click', () => {
     CSVHistory.reset(appHistory);
     updateUndoRedoButtons();
     _pendingSettings    = null; // 保留設定もクリア
+    _sessionRestoreNames = null;
     _deferredCrossRAMs  = [];   // 繰り延べ中のクロスファイルRAMも破棄
     if (state.shiftMode) exitShiftMode();
     if (state.arrangeMode) exitArrangeMode();
@@ -7472,6 +7486,8 @@ function collectSettings() {
  * ファイルデータ本体は保存しない（名前・role・offsetだけ）。
  */
 function saveSettingsNow() {
+    // Do not replace the saved complete session with a partially parsed restore.
+    if (_sessionRestoreNames) return;
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(collectSettings()));
         _storageWarnShown = false; // 保存に成功したら次回失敗時に再度通知できるようにする
@@ -8266,6 +8282,11 @@ async function applyDeferredCrossRAMs() {
 }
 
 async function applyPendingSettings() {
+    if (_sessionRestoreNames) {
+        const loaded = new Set(Object.values(state.files).map(f => f.name));
+        if ([..._sessionRestoreNames].some(name => !loaded.has(name))) return;
+        _sessionRestoreNames = null;
+    }
     const s = _pendingSettings;
     if (!s) return;
 
@@ -8484,6 +8505,7 @@ async function restoreSessionFiles() {
     records.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
     try { await sessionStoreRun('readwrite', s => s.clear()); } catch (e) {}
 
+    _sessionRestoreNames = new Set(records.filter(r => r.blob).map(r => r.name));
     for (const r of records) {
         if (!r.blob) continue;
         // Blobにはファイル名が無いことがあるためFileへ包み直す

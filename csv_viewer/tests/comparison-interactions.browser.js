@@ -28,6 +28,7 @@ const { chromium } = require('playwright');
         await page.locator('#file-input').setInputFiles([path.join(out, '基準_ﾛｸﾞ.csv'), path.join(out, '比較_ﾛｸﾞ.csv')]);
         await page.waitForFunction(() => Object.keys(window.__csvViewerDebug.state.files).length === 2 && window.__csvViewerDebug.state.parseJobs.size === 0);
         await select('Pressure'); await select('Voltage');
+        await page.waitForFunction(() => document.querySelectorAll('[data-map-index]').length === 2);
         await page.locator('[data-map-index="0"]').selectOption('Press_Actual');
         await page.locator('#compare-map-apply').click();
         await page.waitForFunction(() => window.__csvViewerDebug.state.comparison.matches['比較_ﾛｸﾞ.csv']?.Pressure === 'Press_Actual');
@@ -75,6 +76,7 @@ const { chromium } = require('playwright');
         await page.locator('#column-search').fill('圧力'); await page.waitForFunction(() => document.querySelectorAll('.col-item').length === 1);
         assert.equal(await page.locator('.col-item').getAttribute('data-channel'), 'Pressure'); await page.locator('#column-search').fill('');
         await select('State');
+        await page.waitForFunction(() => window.__csvViewerDebug.state.gridRegions.some(r => r.name === 'State'));
         // Drag a channel onto the centre of another graph, then insert independently at an edge.
         const point = await state(() => { const d = window.__csvViewerDebug, r = d.state.gridRegions.find(r => r.name === 'State'), box = document.getElementById('chart').getBoundingClientRect(); return { x: 200, y: r.top + r.height / 2, absoluteX: box.x + 200, absoluteY: box.y + r.top + r.height / 2 }; });
         await page.locator('[data-channel="Pressure"]').dragTo(page.locator('#chart'), { targetPosition: { x: point.x, y: point.y } });
