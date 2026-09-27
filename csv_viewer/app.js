@@ -1980,10 +1980,16 @@ function getRequestedEncoding() {
 // TRNはパイプラインを変換済みテキストで流れるため、セッション保存
 // （sessionSaveFile）用に元のバイト列をここで持ち回す
 const _origFileById = new Map();
+const _restoreOrderById = new Map();
+let _nextSessionOrder = 0;
 
-async function parseCSV(file) {
+async function parseCSV(file, restoreOrder = null) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     _origFileById.set(fileId, file);
+    if (Number.isInteger(restoreOrder) && restoreOrder >= 0) {
+        _restoreOrderById.set(fileId, restoreOrder);
+        _nextSessionOrder = Math.max(_nextSessionOrder, restoreOrder + 1);
+    }
     const trn = isTrnFile(file.name);
     const requestedEncoding = getRequestedEncoding();
     // ヘッダー行のヒントはパース開始時点のSettings値をファイルごとに固定する（B4対策）。
@@ -2213,6 +2219,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
 
                     state.files[fileId] = {
                         name: fileName, shortName, columns, timeData,
+                        sessionOrder: _restoreOrderById.get(fileId) ?? _nextSessionOrder++,
                         colData: {},  // empty — columns loaded on demand
                         role, offset: 0,
                         file,         // File reference for lazy column loading
@@ -2225,6 +2232,11 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                             delimiter, encoding, encodingMode,
                         },
                     };
+                    _restoreOrderById.delete(fileId);
+                    // s1/s2 はこの列挙順を参照する。復元中はパース完了順ではなく
+                    // 保存時の順序を維持し、サイズの異なるファイルでも式の参照先を変えない。
+                    state.files = Object.fromEntries(Object.entries(state.files)
+                        .sort((a, b) => a[1].sessionOrder - b[1].sessionOrder));
                     autoNormalizeTimeScales();
                     updateParsePreview(state.files[fileId]);
 
@@ -2714,7 +2726,52 @@ function updateParsePreview(fileRecord) {
 
 async function setMainFile(newMainId) {
     const oldMainId = getMainFileId();
-    if (oldMainId === newMainId) return;
+    const oldMain = state.files[oldMainId], newMain = state.files[newMainId];
+    if (oldMainId === newMainId || !newMain) return;
+
+    // Resolve while the old roles/mappings still apply. The new reference may use
+    // a different physical column name for the same signal (Pressure -> Press_A).
+    const equivalent = new Map();
+    for (const col of oldMain?.columns || []) {
+        const next = resolveColumnForFile(newMain, col.name);
+        if (!next) continue;
+        if (!equivalent.has(next.name)) equivalent.set(next.name, []);
+        equivalent.get(next.name).push(col.name);
+    }
+    const renamed = new Map([...equivalent].flatMap(([next, names]) => names.map(name => [name, next])));
+    const ambiguous = new Set();
+    const matches = { ...state.comparison.matches };
+    delete matches[newMain.name];
+    for (const file of Object.values(state.files)) {
+        if (file === newMain) continue;
+        matches[file.name] = Object.fromEntries([...equivalent].map(([next, names]) => {
+            const targets = new Set(names.map(name => resolveColumnForFile(file, name)?.name || ''));
+            if (targets.size > 1) ambiguous.add(next);
+            // Never silently pick one of several former channels that collapse
+            // onto a single new channel. Leave that comparison explicitly unset.
+            return [next, targets.size === 1 ? [...targets][0] : ''];
+        }));
+    }
+    const remapValues = values => Object.fromEntries([...equivalent].flatMap(([next, names]) => {
+        const present = names.filter(name => Object.prototype.hasOwnProperty.call(values, name));
+        if (!present.length) return [];
+        const distinct = new Set(present.map(name => JSON.stringify(values[name])));
+        if (distinct.size > 1) { ambiguous.add(next); return []; }
+        return [[next, values[present[0]]]];
+    }));
+    state.selectedNames = new Set([...state.selectedNames].map(name => renamed.get(name)).filter(Boolean));
+    state.yRanges = remapValues(state.yRanges);
+    state.channelLineWidths = remapValues(state.channelLineWidths);
+    state.comparison.searchAliases = remapValues(state.comparison.searchAliases);
+    state.comparison.tolerances = remapValues(state.comparison.tolerances);
+    // Detection is cached for physical columns in every loaded file; retain old
+    // names too so Undo can restore a former reference without loading it again.
+    [...state.bitChannels].forEach(name => { const next = renamed.get(name); if (next) state.bitChannels.add(next); });
+    const manualOff = [..._bitManualOff].map(name => renamed.get(name)).filter(Boolean);
+    manualOff.forEach(name => { _bitManualOff.add(name); state.bitChannels.delete(name); });
+    state.channelAliases = Object.fromEntries([...equivalent].filter(([, names]) => names.length === 1).map(([next, names]) =>
+        [next, [...new Set(names.flatMap(name => [name, ...getChannelAliases(name)]))].filter(name => name !== next)]));
+    state.comparison.matches = matches;
 
     // メイン/サブを入れ替えても、ファイル間の時間アライメント（オフセット）を保つ。
     // メインは常に基準=offset 0。新メインのオフセット分を全ファイルから引いて
@@ -2732,22 +2789,34 @@ async function setMainFile(newMainId) {
     if (oldMainId) state.files[oldMainId].role = 'sub';
     state.files[newMainId].role = 'main';
 
-    // 新しいMainファイルに存在するチャンネルだけ選択を維持する
-    const newMain = state.files[newMainId];
-    const newColNames = new Set(newMain.columns.map(c => c.name));
-    state.selectedNames = new Set(
-        [...state.selectedNames].filter(name => newColNames.has(name))
-    );
+    // Keep layout/axes when the matched physical names change. A many-to-one
+    // match produces a single displayed channel, with ambiguous Sub matches unset.
+    const placed = new Set();
     state.chartGroups.forEach(group => {
-        group.channels = group.channels.filter(ch => newColNames.has(ch.name));
+        group.channels = group.channels.flatMap(ch => {
+            const name = renamed.get(ch.name);
+            if (!name || placed.has(name)) return [];
+            placed.add(name); return [{ ...ch, name }];
+        });
+        group.axes.forEach(axis => {
+            axis.representative = renamed.get(axis.representative) || '';
+            axis.unit = getMainColumn(axis.representative)?.unit || '';
+        });
         cleanupChartGroup(group);
     });
     state.chartGroups = state.chartGroups.filter(group => group.channels.length);
-    pruneChannelAliasesForMain(newMain);
+    state.comparison.align = Object.fromEntries(Object.values(state.files).flatMap(file => {
+        const previous = state.comparison.align[file.name];
+        const channel = renamed.get(previous?.channel);
+        return file !== newMain && channel ? [[file.name, { ...previous, channel, offset: file.offset }]] : [];
+    }));
+    if (state.shiftFileId === newMainId) state.shiftFileId = getSubFileIds()[0] || null;
     autoNormalizeTimeScales();
     await recomputeCustomRAMs();
     clearEvents(false); // イベント区間は旧メインの時間軸基準なので破棄
     updateUI();
+    if (ambiguous.size) showWarning('チャンネル対応を確認してください',
+        `${[...ambiguous].join(', ')} に複数の旧チャンネルが対応しています。曖昧な比較・個別設定を解除しました。「比較の準備」で対応を選び直してください。`);
 }
 
 function removeFile(fileId) {
@@ -8462,6 +8531,7 @@ async function sessionStoreRun(mode, fn) {
 async function sessionSaveFile(fileId, file, name) {
     if (!(file instanceof Blob)) return;
     const fileName = name || file.name || 'restored.csv';
+    const order = state.files[fileId]?.sessionOrder;
     try {
         const existing = await sessionStoreRun('readonly', s => s.getAll()) || [];
         const total = existing.filter(r => r.id !== fileId)
@@ -8473,7 +8543,7 @@ async function sessionSaveFile(fileId, file, name) {
             return;
         }
         await sessionStoreRun('readwrite', s => s.put({
-            id: fileId, name: fileName, size: file.size, addedAt: Date.now(), blob: file,
+            id: fileId, name: fileName, size: file.size, order, addedAt: Date.now(), blob: file,
         }));
     } catch (e) {
         console.warn('[CSV Viewer] セッション保存に失敗:', e);
@@ -8502,16 +8572,25 @@ async function restoreSessionFiles() {
     if (!records || !records.length) return;
     if (Object.keys(state.files).length > 0) return; // 既にファイルがあるなら何もしない
 
-    records.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    // 古いセッションは明示的な順番号を持たないため、保存済み設定の
+    // fileInfos 順で移行する。同名ファイルは名前だけでは識別しない。
+    const savedNames = (_pendingSettings?.fileInfos || []).map(f => f.name);
+    const legacyOrder = name => savedNames.filter(n => n === name).length === 1
+        && records.filter(r => r.name === name).length === 1 ? savedNames.indexOf(name) : -1;
+    const recordOrder = r => Number.isInteger(r.order) && r.order >= 0 ? r.order : legacyOrder(r.name);
+    records.sort((a, b) => {
+        const aOrder = recordOrder(a), bOrder = recordOrder(b);
+        return aOrder >= 0 && bOrder >= 0 ? aOrder - bOrder : (a.addedAt || 0) - (b.addedAt || 0);
+    });
     try { await sessionStoreRun('readwrite', s => s.clear()); } catch (e) {}
 
     _sessionRestoreNames = new Set(records.filter(r => r.blob).map(r => r.name));
-    for (const r of records) {
+    for (const [order, r] of records.entries()) {
         if (!r.blob) continue;
         // Blobにはファイル名が無いことがあるためFileへ包み直す
         const f = (typeof File !== 'undefined' && r.blob instanceof File)
             ? r.blob : new File([r.blob], r.name || 'restored.csv');
-        parseCSV(f);
+        parseCSV(f, order);
     }
     showToast('success', '前回のセッションを復元しました',
         `${records.length} ファイルを再読み込みしています…`);
