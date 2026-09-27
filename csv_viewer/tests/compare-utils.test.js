@@ -8,6 +8,12 @@ assert.equal(C.valueAt(a.t, a.v, -1), NaN);
 assert.equal(C.valueAt(a.t, a.v, 0.5), 1);
 assert.equal(C.valueAt(a.t, a.v, 0.5, true), 0);
 assert.equal(C.valueAt([0, 1, 2], [1, NaN, 3], 0.5), NaN);
+// Decimal shifts must not turn a valid sample next to a blank into a missing value.
+assert.equal(C.valueAt([0, .01, .02], [NaN, 7, 8], (7.01 - 7)), 7);
+assert.equal(C.valueAt([0, .01, .02], [1, NaN, 8], (7.01 - 7)), NaN);
+assert.equal(C.valueAt([0, .01, .02], [0, 1, 1], (7.01 - 7), true), 1);
+assert.equal(C.valueAt([0, .01, .02], [0, 1, 1], .009, true), 0);
+assert.equal(C.valueAt([0, 1e-16, 2e-16], [0, 1, 2], 0.5e-16), .5);
 assert.equal(C.pointAt([[0, 1], [1, 3]], .5), 2);
 assert.equal(C.pointAt([[0, 1], [1, 3]], .5, true), 1);
 assert.equal(C.pointAt([[0, 1], [1, null]], .5), NaN);

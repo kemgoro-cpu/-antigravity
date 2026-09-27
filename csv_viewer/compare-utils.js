@@ -46,9 +46,21 @@
     }
     // No extrapolation, no interpolation through missing values; digital signals use zero-order hold.
     function valueAt(t, v, x, digital = false) {
-        if (!t?.length || !v || x < t[0] || x > t[t.length - 1]) return NaN;
+        if (!t?.length || !v || !finite(x)) return NaN;
         const i = lowerBound(t, x);
         if (t[i] === x) return finite(v[i]) ? v[i] : NaN;
+        // Shifting decimal timestamps can move an exact sample a few ULPs.
+        // Snap only within floating-point precision (and at most 1/4 of the
+        // neighbouring sample interval), before checking gaps or boundaries.
+        const epsilon = Number.EPSILON * 8 * Math.max(1, Math.abs(x), Math.abs(t[0]), Math.abs(t[t.length - 1]));
+        for (const j of [i, i - 1]) {
+            if (j < 0 || j >= t.length) continue;
+            const before = j > 0 ? t[j] - t[j - 1] : Infinity;
+            const after = j + 1 < t.length ? t[j + 1] - t[j] : Infinity;
+            const tolerance = Math.min(epsilon, Math.min(before > 0 ? before : Infinity, after > 0 ? after : Infinity) / 4);
+            if (Math.abs(t[j] - x) <= tolerance) return finite(v[j]) ? v[j] : NaN;
+        }
+        if (x < t[0] || x > t[t.length - 1]) return NaN;
         if (!i || i >= t.length || !finite(v[i - 1]) || !finite(v[i])) return NaN;
         if (digital) return v[i - 1];
         return v[i - 1] + (v[i] - v[i - 1]) * (x - t[i - 1]) / (t[i] - t[i - 1]);
