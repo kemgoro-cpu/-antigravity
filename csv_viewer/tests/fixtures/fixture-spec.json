@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "description": "Deterministic synthetic logs for Main/Sub switching and multi-file comparison; no measured or personal data.",
+  "columns": ["Time", "Pressure", "Temperature", "State"],
+  "units": ["s", "kPa", "degC", ""],
+  "timeShifts": [0, 2, -3, 5, -7, 11, -13, 17, -19, 23],
+  "pressureBiasPerIndex": 10,
+  "temperatureBiasPerIndex": 2,
+  "pressureFormula": "100 + 12*sin(t*0.37) + 5*cos(t*0.11) + 0.03*t + 10*index",
+  "temperatureFormula": "25 + 0.05*t + 2*index",
+  "stateTransitions": [{"time": 20, "value": 1}, {"time": 60, "value": 0}, {"time": 80, "value": 1}],
+  "stateInitialValue": 0,
+  "scenarios": [
+    {"name": "regular", "fileCount": 10, "points": 10001, "samplePeriod": 0.01},
+    {"name": "large", "fileCount": 5, "points": 100001, "samplePeriod": 0.01},
+    {"name": "edge", "fileCount": 5, "duration": 100, "samplePeriod": 0.01, "pressureFormula": "100 + 0.25*t + 10*index"}
+  ],
+  "correctOffset": "timeShifts[mainIndex] - timeShifts[fileIndex]",
+  "expectedMainMinusSub": {"Pressure": "10*(mainIndex-subIndex)", "Temperature": "2*(mainIndex-subIndex)", "State": 0}
+}
