@@ -50,13 +50,14 @@ const { chromium } = require('playwright');
         // Pick corresponding points using the preview canvas itself.
         await page.locator('.compare-manual > summary').click(); await page.locator('#compare-align-pick').click();
         await page.waitForFunction(() => document.getElementById('compare-align-info').textContent.includes('実線'));
-        const anchor = await state(() => { const el = document.getElementById('compare-align-preview'), chart = echarts.getInstanceByDom(el), rect = el.getBoundingClientRect(); return { x: rect.left + chart.convertToPixel({ xAxisIndex: 0 }, 4), y: rect.top + 100 }; });
+        // ECharts pixels are relative to its canvas, excluding the preview container's border.
+        const anchor = await state(() => { const el = document.getElementById('compare-align-preview'), chart = echarts.getInstanceByDom(el), rect = el.querySelector('canvas').getBoundingClientRect(); return { x: rect.left + chart.convertToPixel({ xAxisIndex: 0 }, 4), y: rect.top + 100 }; });
         await page.mouse.click(anchor.x, anchor.y);
         await page.waitForFunction(() => document.getElementById('compare-align-info').textContent.includes('灰色'));
         await page.mouse.click(anchor.x, anchor.y);
         await page.waitForFunction(() => !document.getElementById('compare-align-apply').disabled);
         const pickedMain = Number(await page.locator('#compare-anchor-main').inputValue()), pickedSub = Number(await page.locator('#compare-anchor-sub').inputValue());
-        assert.ok(Math.abs(pickedMain - 4) < .1 && Math.abs(pickedSub - pickedMain - 2) < .001);
+        assert.ok(Math.abs(pickedMain - 4) < .1 && Math.abs(pickedSub - pickedMain - 2) < .001, `picked reference=${pickedMain}, target=${pickedSub}, offset=${await offset()}`);
         await page.locator('#compare-align-cancel').click();
         await page.locator('#compare-raw').check();
         assert.ok(Math.abs(await offset() + 2) < .01);
@@ -109,7 +110,10 @@ const { chromium } = require('playwright');
         await page.waitForFunction(old => Object.values(window.__csvViewerDebug.state.files).find(f => f.role === 'main').name !== old, formerMain);
         await page.locator('[data-pane="notes"]').click(); await page.locator('[data-note-jump]').click();
         await page.waitForFunction(old => Object.values(window.__csvViewerDebug.state.files).find(f => f.role === 'main').name === old, formerMain);
-        await page.setViewportSize({ width: 900, height: 700 }); await page.locator('#compare-panel-toggle').click(); assert.equal(await page.locator('#compare-panel').isVisible(), false);
+        await page.setViewportSize({ width: 900, height: 700 });
+        await page.waitForFunction(() => document.getElementById('compare-panel-toggle').getAttribute('aria-expanded') === 'false');
+        if (await page.locator('#compare-panel-toggle').getAttribute('aria-expanded') === 'true') await page.locator('#compare-panel-toggle').click();
+        assert.equal(await page.locator('#compare-panel').isVisible(), false);
         assert.equal(await state(() => document.documentElement.scrollWidth <= window.innerWidth), true);
         assert.deepEqual(errors, []);
         console.log('Comparison interactions passed:', out);

@@ -1,0 +1,134 @@
+{
+  "generatedAt": "2026-09-28T22:35:50.511Z",
+  "viewport": {
+    "width": 1400,
+    "height": 1000
+  },
+  "theme": "light",
+  "source": "Real application screenshots through Playwright, isolated Edge context and file://. No screenshot content was edited.",
+  "sourceHashes": {
+    "index.html": "08d8a25de75276a01896c80f693478a299d49b80445f0e8d7d58b14792a8f8ff",
+    "app.js": "c49780faad2fef3a7421aff22f11a0e3c56cc83e3d32e361e420f9133090e433",
+    "styles.css": "832785153b18a109cd8569e39f218493fda5444d5aa75b2ac3e21ecbc605d927",
+    "compare-workspace.js": "6168eb612f8455c52d9ff7051de17496b3601f8685f7bbcc1ebc25c939c72bce",
+    "compare-workspace.css": "f9b7167d3f848e47cacc9968ab084f4ed5da41c619acfc39d6163b330f25e242",
+    "workspace-ui.js": "7c10b3162e61d28af14454dff71a724595ff914439d66367b7cde26ffd12aefe",
+    "workspace-ui.css": "45307c2a77c51b754c786b06cf5255e38588bea4642bf21e2857a87f0d929557"
+  },
+  "facts": {
+    "sampleCount": 121,
+    "samplePeriodSeconds": 0.5,
+    "comparisonTimeDelaySeconds": 2,
+    "comparisonPressureIncreaseKPa": 5,
+    "previewText": "比較側を -2 sへ移動\n\n平均二乗誤差の平方根（RMSE）\n7.03866 → 0 km/h\n\n0–60 s · 有効な重なり 100%\n周期的な波形では別周期に合う場合があります。特徴点も確認してください。",
+    "appliedOffsetSeconds": -2,
+    "selectedRangeLabel": "対象区間 10 – 30 s",
+    "pressureResults": "Pressure\n↗ 比較_ﾛｸﾞ.csv\n最大絶対差\n5 kPa\nその時刻\n10 s\n平均差 / RMS差\n-5 / 5\n有効 / 欠損・範囲外\n41 / 0\n許容差 [kPa]\n\n許容差の 1.66667 倍 / 41 点超過",
+    "note": {
+      "t0": 10,
+      "t1": 30,
+      "channels": [
+        "Pressure",
+        "Speed"
+      ],
+      "results": [
+        {
+          "name": "Pressure",
+          "n": 41,
+          "mean": -5,
+          "rms": 5,
+          "max": 5,
+          "exceeded": 41
+        },
+        {
+          "name": "Speed",
+          "n": 41,
+          "mean": 0,
+          "rms": 0,
+          "max": 0,
+          "exceeded": 0
+        }
+      ]
+    }
+  },
+  "shots": [
+    {
+      "file": "start.png",
+      "description": "初期画面。ファイルを選ぶ前のライトテーマ。",
+      "crop": null,
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      }
+    },
+    {
+      "file": "overview.png",
+      "description": "PressureとSpeedを表示。時間合わせ前の重ね合わせ。",
+      "crop": null,
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      }
+    },
+    {
+      "file": "align.png",
+      "description": "Speedで探索幅±5秒のプレビュー。候補は-2秒、適用前の実シフトは0秒。",
+      "crop": "align-panel.png",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      }
+    },
+    {
+      "file": "selection.png",
+      "description": "約10～30秒をドラッグで選択。上の操作バーから区間比較やメモを実行。",
+      "crop": null,
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      }
+    },
+    {
+      "file": "results.png",
+      "description": "差分表示と比較結果。Pressureの平均差-5kPa、RMS差5、許容差3kPa。",
+      "crop": "results-panel.png",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      }
+    },
+    {
+      "file": "notes.png",
+      "description": "区間と条件を伴うメモを保存。下部で比較テンプレートも保存。",
+      "crop": "notes-panel.png",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      }
+    },
+    {
+      "file": "export.png",
+      "description": "保存・出力メニュー。PNG、CSV、HTMLレポート、設定JSONの入口。",
+      "crop": "export-panel.png",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      }
+    },
+    {
+      "file": "xy.png",
+      "description": "XYプロット。X=Speed、Y=Pressureで2本の関係を確認。",
+      "crop": "xy-panel.png",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      }
+    }
+  ],
+  "additionalImages": [
+    "align-controls.png",
+    "sidebar.png",
+    "selection-strip.png"
+  ],
+  "errors": []
+}
