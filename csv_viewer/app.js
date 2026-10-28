@@ -111,7 +111,7 @@ window.addEventListener('unhandledrejection', e => {
  * @param {HTMLElement} overlay  body直下に appendChild した overlay 要素
  * @param {HTMLElement} modalEl  overlay 内のモーダル本体（中央の枠）
  */
-function setupModalA11y(overlay, modalEl) {
+function setupModalA11y(overlay, modalEl, opts = {}) {
     const prevFocus = document.activeElement;
     modalEl.setAttribute('role', 'dialog');
     modalEl.setAttribute('aria-modal', 'true');
@@ -119,10 +119,10 @@ function setupModalA11y(overlay, modalEl) {
 
     // Esc で閉じる（capture で他のkeydownより先に拾う）
     const escHandler = (e) => {
-        if (e.key === 'Escape') {
+        if (e.key === 'Escape' && !e.isComposing) {
             e.stopPropagation();
             e.preventDefault();
-            overlay.remove();
+            if (opts.close) opts.close(); else overlay.remove();
         }
     };
     document.addEventListener('keydown', escHandler, true);
@@ -174,6 +174,7 @@ function setupModalA11y(overlay, modalEl) {
             observer.disconnect();
             document.removeEventListener('keydown', escHandler, true);
             document.removeEventListener('keydown', trapHandler);
+            opts.onRemoved?.();
             if (prevFocus && typeof prevFocus.focus === 'function') {
                 // 元の要素がまだ DOM にあれば戻す
                 if (document.body.contains(prevFocus)) prevFocus.focus();
@@ -184,7 +185,10 @@ function setupModalA11y(overlay, modalEl) {
 
     // 初期フォーカスをモーダル内の最初のフォーカス可能要素に
     setTimeout(() => {
-        const focusable = modalEl.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (!overlay.isConnected) return;
+        const preferred = opts.initialFocus && modalEl.querySelector(opts.initialFocus);
+        const focusable = preferred || [...modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+            .find(el => !el.disabled && el.getClientRects().length);
         (focusable || modalEl).focus();
     }, 0);
 }
@@ -216,18 +220,44 @@ function createModal(contentHtml, opts = {}) {
 
     const modal = document.createElement('div');
     modal.className = 'app-modal' + (opts.modalClass ? ' ' + opts.modalClass : '');
-    if (opts.labelledBy) modal.setAttribute('aria-labelledby', opts.labelledBy);
     modal.innerHTML = contentHtml;
+    const title = modal.querySelector('h1, h2, h3');
+    if (title && !title.id) title.id = 'app-modal-title';
+    if (opts.labelledBy || title?.id) modal.setAttribute('aria-labelledby', opts.labelledBy || title.id);
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
-    setupModalA11y(overlay, modal);
+    let closed = false;
+    const finishClose = () => {
+        if (closed) return;
+        closed = true;
+        opts.onClose?.();
+    };
+    const close = () => { overlay.remove(); finishClose(); };
+    setupModalA11y(overlay, modal, { close, onRemoved: finishClose, initialFocus: opts.initialFocus });
 
-    const close = () => overlay.remove();
     if (opts.closeOnOverlayClick !== false) {
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     }
     return { overlay, modal, close };
+}
+
+/** A deliberate confirmation for operations that also erase their Undo history. */
+function confirmDestructiveAction(title, detail, actionLabel) {
+    return new Promise(resolve => {
+        let accepted = false;
+        const { modal, close } = createModal(`
+            <h3>${esc(title)}</h3><p class="destructive-detail">${esc(detail)}</p>
+            <div class="modal-actions">
+                <button class="btn-secondary destructive-cancel">キャンセル</button>
+                <button class="btn-primary destructive-confirm">${esc(actionLabel)}</button>
+            </div>`, {
+            modalClass: 'destructive-modal', initialFocus: '.destructive-cancel',
+            onClose: () => resolve(accepted),
+        });
+        modal.querySelector('.destructive-cancel').onclick = close;
+        modal.querySelector('.destructive-confirm').onclick = () => { accepted = true; close(); };
+    });
 }
 
 // Debug / Custom RAMヘルプ / ショートカットの3モーダル共通の「閉じる」フッター。
@@ -263,6 +293,7 @@ function setupToolbarDropdown(trigger, panel) {
     let outsideClickHandler = null;
     let keyHandler = null;
     let resizeHandler = null;
+    let focusHandler = null;
 
     function getFocusableItems() {
         return Array.from(panel.querySelectorAll('button, select, input'))
@@ -282,6 +313,7 @@ function setupToolbarDropdown(trigger, panel) {
         if (outsideClickHandler) { document.removeEventListener('mousedown', outsideClickHandler); outsideClickHandler = null; }
         if (keyHandler) { document.removeEventListener('keydown', keyHandler, true); keyHandler = null; }
         if (resizeHandler) { window.removeEventListener('resize', resizeHandler); resizeHandler = null; }
+        if (focusHandler) { document.removeEventListener('focusin', focusHandler); focusHandler = null; }
         if (_openToolbarMenuClose === close) _openToolbarMenuClose = null;
     }
 
@@ -298,15 +330,25 @@ function setupToolbarDropdown(trigger, panel) {
             if (!panel.contains(e.target) && !trigger.contains(e.target)) close();
         };
         document.addEventListener('mousedown', outsideClickHandler);
+        focusHandler = e => { if (!panel.contains(e.target) && !trigger.contains(e.target)) close(); };
+        document.addEventListener('focusin', focusHandler);
 
         keyHandler = (e) => {
+            if (e.isComposing) return;
             if (e.key === 'Escape') {
                 e.stopPropagation();
+                e.preventDefault();
                 close();
                 trigger.focus();
                 return;
             }
-            if (e.key === 'Tab') { close(); return; }
+            if (e.key === 'Tab') {
+                if (isMenu) { trigger.focus(); close(); }
+                return;
+            }
+            // Display settings contain native form controls; their arrow/Home/End
+            // keys must change their values rather than move to another control.
+            if (!isMenu && !trigger.contains(e.target)) return;
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
                 const items = getFocusableItems();
                 if (items.length === 0) return;
@@ -1037,7 +1079,7 @@ const L = {
     gridLeft:   70,
     gridRight:  38,
     topPx:      8,    // no ECharts legend → minimal top padding
-    bottomPx:   68,
+    bottomPx:   36,   // X-axis labels only; the overview navigator is outside the chart
     gapPx:      6,
     yZoomW:     16,
     yZoomRight: 6,
@@ -1553,9 +1595,10 @@ function showOverlayAxisModal(targetGroup, sourceName) {
             labelledBy: 'axis-choice-title',
             // overlayクリックは閉じるだけでなく resolve(null) も必要なので自前で登録する
             closeOnOverlayClick: false,
+            onClose: () => resolve(null),
         });
 
-        const finish = value => { close(); resolve(value); };
+        const finish = value => { resolve(value); close(); };
         modal.querySelectorAll('[data-axis-id]').forEach(btn => {
             btn.addEventListener('click', () => finish(btn.dataset.axisId));
         });
@@ -2819,7 +2862,14 @@ async function setMainFile(newMainId) {
         `${[...ambiguous].join(', ')} に複数の旧チャンネルが対応しています。曖昧な比較・個別設定を解除しました。「比較の準備」で対応を選び直してください。`);
 }
 
-function removeFile(fileId) {
+async function removeFile(fileId) {
+    const file = state.files[fileId];
+    if (!file) return;
+    const detail = file.role === 'main'
+        ? '基準ファイルを外すと、表示チャンネル・軸配置・イベントと操作履歴がリセットされます。元のファイルは削除されません。'
+        : 'このファイルを比較と自動復元から外します。操作履歴もリセットされます。元のファイルは削除されません。';
+    if (!await confirmDestructiveAction(`「${file.name}」を外しますか？`, detail, 'ファイルを外す')) return;
+    if (state.files[fileId] !== file) return;
     const wasMain = state.files[fileId]?.role === 'main';
     delete state.files[fileId];
     delete state.fileColors[fileId];
@@ -2848,9 +2898,14 @@ function removeFile(fileId) {
     // ファイル構成が変わった（削除されたファイルのデータは戻せない）ので、
     // Undo履歴をクリアして現在状態を新しい起点にする
     resetHistoryBaseline();
+    (dom.fileList.querySelector('.remove-file') || $('browse-files-btn'))?.focus();
 }
 
-dom.clearBtn.addEventListener('click', () => {
+dom.clearBtn.addEventListener('click', async () => {
+    const count = Object.keys(state.files).length;
+    const noteCount = state.comparison.notes.length;
+    if (!await confirmDestructiveAction('作業をすべてクリアしますか？',
+        `${count}件のファイル、${state.selectedNames.size}件の表示チャンネル${noteCount ? `、${noteCount}件の比較メモ` : ''}と操作履歴・自動復元データをクリアします。この操作は元に戻せません。元のCSV / TRNファイルは削除されません。`, 'すべてクリア')) return;
     for (const job of state.parseJobs.values()) job.cancelled = true;
     state.parseJobs.clear();
     _origFileById.clear(); // キャンセルされたパースの控えFileも破棄
@@ -2886,6 +2941,7 @@ dom.clearBtn.addEventListener('click', () => {
     // キャンセルしないと500ms後に空設定が書き戻されてしまう
     clearTimeout(_saveSettingsTimer);
     _saveSettingsTimer = null;
+    $('browse-files-btn')?.focus();
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -2940,7 +2996,7 @@ function renderFileList() {
             <div class="file-time-unit-row">
                 <span class="time-unit-label">時間</span>
                 <select class="time-unit-select" data-time-unit-id="${fid}"
-                    title="このファイルのTime列の元単位を指定">
+                    aria-label="${esc(f.name)}の時間単位" title="このファイルのTime列の元単位を指定">
                     <option value="s"${effectiveTimeUnit === 's' ? ' selected' : ''}>s</option>
                     <option value="ms"${effectiveTimeUnit === 'ms' ? ' selected' : ''}>ms</option>
                 </select>
@@ -2953,6 +3009,7 @@ function renderFileList() {
                 <input type="number" class="offset-input" step="0.001"
                     value="${f.offset.toFixed(3)}"
                     data-offset-id="${fid}"
+                    aria-label="${esc(f.name)}の時間オフセット（秒）"
                     title="このSubファイルに適用する時間オフセット（秒）">
                 <button class="btn-auto" data-auto-id="${fid}" title="Mainに自動整合">自動</button>
             </div>`;
@@ -2971,17 +3028,19 @@ function renderFileList() {
 
         li.innerHTML = `
             <div class="file-item-top">
-                <div class="role-badge ${isMain ? 'role-main' : 'role-sub'}"
+                <button type="button" class="role-badge ${isMain ? 'role-main' : 'role-sub'}"
                     data-roleid="${fid}"
+                    aria-label="${esc(f.name)}${isMain ? '：基準ファイル' : 'を基準ファイルにする'}" aria-pressed="${isMain}"
                     title="${badgeTitle}"
                     style="background:${fColor};color:#fff;border-color:${fColor};"
-                >${badgeText}</div>
+                >${badgeText}</button>
                 <input type="color" class="file-color-picker" data-colorid="${fid}"
-                    value="${fColor}" style="display:none;">
+                    value="${fColor}" aria-label="${esc(f.name)}の表示色" style="display:none;">
                 <span class="file-name-text" title="${esc(f.name)}">${esc(comparisonWorkspace?.label(f) || f.name)}</span>
                 ${encodingLabel ? `<span class="encoding-badge" title="CSV文字コード">${esc(encodingLabel)}</span>` : ''}
-                <i class='bx bx-bug debug-file' data-fid="${fid}" title="Debug: パース結果を確認"></i>
-                <i class='bx bx-x remove-file' data-fid="${fid}" title="Remove"></i>
+                <button type="button" class="file-action-btn file-color-btn" data-color-button="${fid}" aria-label="${esc(f.name)}の表示色を変更" title="表示色を変更"><i class="bx bx-palette" aria-hidden="true"></i></button>
+                <button type="button" class="file-action-btn debug-file" data-fid="${fid}" aria-label="${esc(f.name)}の読み込み情報" title="読み込み情報"><i class="bx bx-bug" aria-hidden="true"></i></button>
+                <button type="button" class="file-action-btn remove-file" data-fid="${fid}" aria-label="${esc(f.name)}を外す" title="ファイルを外す"><i class="bx bx-x" aria-hidden="true"></i></button>
             </div>
             ${timeUnitRow}
             ${offsetRow}
@@ -2991,7 +3050,7 @@ function renderFileList() {
         if (state.shiftMode && !isMain) {
             li.querySelector('.file-item-top').style.cursor = 'pointer';
             li.querySelector('.file-item-top').addEventListener('click', e => {
-                if (e.target.closest('.remove-file') || e.target.closest('.role-badge')) return;
+                if (e.target.closest('button, input')) return;
                 state.shiftFileId = fid;
                 dom.hintEl.textContent = `チャートを左右にドラッグして時間シフト: ${f.shortName}`;
                 renderFileList();
@@ -3010,6 +3069,10 @@ function renderFileList() {
             const picker = el.parentElement.querySelector('.file-color-picker');
             if (picker) picker.click();
         });
+    });
+
+    dom.fileList.querySelectorAll('[data-color-button]').forEach(btn => {
+        btn.addEventListener('click', () => btn.parentElement.querySelector('.file-color-picker')?.click());
     });
 
     // ファイル色変更（カラーピッカー）
@@ -4903,6 +4966,11 @@ dom.colSearch.addEventListener('input', () => {
 });
 
 function renderColumnList() {
+    const focused = document.activeElement;
+    const focusedRow = dom.colList.contains(focused) ? focused.closest('.col-item') : null;
+    const focusedName = focusedRow?.dataset.channel;
+    const focusedIndex = focusedRow ? [...dom.colList.children].indexOf(focusedRow) : -1;
+    const focusedControl = ['col-map-btn', 'col-insert-btn', 'bit-badge'].find(cls => focused?.classList.contains(cls));
     dom.colList.innerHTML = '';
     const mainFile = getMainFile();
 
@@ -4911,6 +4979,7 @@ function renderColumnList() {
 
     if (!mainFile) {
         dom.colList.innerHTML = '<div class="placeholder-text">CSVを読み込むとチャンネルが表示されます</div>';
+        if (focusedRow) dom.colSearch.focus();
         return;
     }
 
@@ -4921,6 +4990,7 @@ function renderColumnList() {
 
     if (!matches.length) {
         dom.colList.innerHTML = '<div class="placeholder-text">No channels match search</div>';
+        if (focusedRow) dom.colSearch.focus();
         return;
     }
 
@@ -4952,11 +5022,13 @@ function renderColumnList() {
         topRow.appendChild(unitSpan);
 
         const aliasCount = getChannelAliases(col.name).length;
-        const mapBtn = document.createElement('i');
+        const mapBtn = document.createElement('button');
+        mapBtn.type = 'button';
         mapBtn.className = 'bx bx-link-alt col-map-btn' + (aliasCount ? ' active' : '');
         mapBtn.title = aliasCount
             ? `別名対応: ${aliasCount}件`
             : 'Subファイル側の別名チャンネルを対応付け';
+        mapBtn.setAttribute('aria-label', `${col.name}の別名チャンネル対応を編集`);
         mapBtn.addEventListener('click', e => {
             e.stopPropagation();
             showChannelMapModal(col.name);
@@ -4966,10 +5038,13 @@ function renderColumnList() {
         // Bitバッジ: Bitチャンネルなら表示、クリックでON/OFF切り替え
         const isBit = state.bitChannels.has(col.name);
         if (isBit || _bitManualOff.has(col.name)) {
-            const bitBadge = document.createElement('span');
+            const bitBadge = document.createElement('button');
+            bitBadge.type = 'button';
             bitBadge.className = 'bit-badge' + (isBit ? ' active' : '');
             bitBadge.textContent = 'Bit';
             bitBadge.title = isBit ? 'Bitモード ON — クリックで解除' : 'Bitモード OFF — クリックで有効化';
+            bitBadge.setAttribute('aria-label', `${col.name}のBitモード`);
+            bitBadge.setAttribute('aria-pressed', String(isBit));
             bitBadge.addEventListener('click', e => {
                 e.stopPropagation();
                 if (isBit) {
@@ -4988,9 +5063,11 @@ function renderColumnList() {
         }
 
         // 「式に挿入」ボタン: クリックでCustom RAM式入力欄にチャンネル名を挿入
-        const insertBtn = document.createElement('i');
+        const insertBtn = document.createElement('button');
+        insertBtn.type = 'button';
         insertBtn.className = 'bx bx-plus-circle col-insert-btn';
         insertBtn.title = '式に挿入';
+        insertBtn.setAttribute('aria-label', `${col.name}を計算式に挿入`);
         insertBtn.addEventListener('click', e => {
             e.stopPropagation();
             const expr = dom.customExpr;
@@ -5000,6 +5077,10 @@ function renderColumnList() {
             expr.value = before + col.name + after;
             const newPos = pos + col.name.length;
             expr.setSelectionRange(newPos, newPos);
+            const advanced = expr.closest('details');
+            if (advanced) advanced.open = true;
+            const section = expr.closest('[data-section="customRam"]');
+            if (section?.classList.contains('collapsed')) section.querySelector('h3')?.click();
             expr.focus();
             validateCustomExpr();
         });
@@ -5023,12 +5104,12 @@ function renderColumnList() {
                 <input type="number" class="yrange-input" placeholder="min"
                     value="${esc(representativeRange.min)}"
                     data-range-name="${esc(col.name)}" data-range-type="min"
-                    title="Y-axis minimum">
+                    aria-label="${esc(col.name)}のY軸下限" title="Y-axis minimum">
                 <span class="yrange-sep">~</span>
                 <input type="number" class="yrange-input" placeholder="max"
                     value="${esc(representativeRange.max)}"
                     data-range-name="${esc(col.name)}" data-range-type="max"
-                    title="Y-axis maximum">
+                    aria-label="${esc(col.name)}のY軸上限" title="Y-axis maximum">
             `;
             item.appendChild(yr);
 
@@ -5052,6 +5133,7 @@ function renderColumnList() {
             lwRow.innerHTML = `
                 <span class="col-linewidth-label">太さ</span>
                 <input type="range" class="col-linewidth-range" min="0.5" max="5" step="0.5"
+                    aria-label="${esc(col.name)}の線の太さ"
                     value="${hasOwnWidth ? state.channelLineWidths[col.name] : state.lineWidth}">
                 <span class="col-linewidth-value">${Number(hasOwnWidth ? state.channelLineWidths[col.name] : state.lineWidth).toFixed(1)}</span>
                 <button type="button" class="col-linewidth-reset${hasOwnWidth ? ' active' : ''}"
@@ -5101,6 +5183,11 @@ function renderColumnList() {
 
         comparisonWorkspace?.decorateChannel(item, col);
         dom.colList.appendChild(item);
+    }
+    if (focusedRow) {
+        const items = [...dom.colList.querySelectorAll('.col-item')];
+        const row = items.find(item => item.dataset.channel === focusedName) || items[Math.min(focusedIndex, items.length - 1)];
+        (row?.querySelector(focusedControl ? `.${focusedControl}` : '.col-item-top') || row?.querySelector('.col-item-top') || dom.colSearch).focus({ preventScroll: true });
     }
 }
 
@@ -5306,10 +5393,6 @@ async function autoAlign(subFileId) {
  */
 function showAlignChannelModal(commonNames, subFileId, corrMap = new Map()) {
     return new Promise(resolve => {
-        // 既存モーダルがあれば削除
-        const old = document.getElementById('align-channel-modal');
-        if (old) old.remove();
-
         const subFile = state.files[subFileId];
         const mainFile = getMainFile();
         // デフォルト探索範囲: 短い方のファイル時間長の25%（繰り返しパターン対策）
@@ -5317,7 +5400,7 @@ function showAlignChannelModal(commonNames, subFileId, corrMap = new Map()) {
         const sTd = subFile.timeData;
         const mainDur = mTd[mTd.length - 1] - mTd[0];
         const subDur  = sTd[sTd.length - 1] - sTd[0];
-        const defaultRange = Math.round(Math.min(mainDur, subDur) * 0.25);
+        const defaultRange = Math.max(1, Math.round(Math.min(mainDur, subDur) * 0.25));
 
         // 初期チェックの基準: 相関 |r| >= 0.7（統計の慣用で「強い相関」）。
         // ただし最上位（commonNamesは相関降順）は必ずONにして、最低1つは選ばれるようにする。
@@ -5325,11 +5408,6 @@ function showAlignChannelModal(commonNames, subFileId, corrMap = new Map()) {
         const topName = commonNames[0];
         const isRecommended = (name) =>
             name === topName || (corrMap.get(name) ?? 0) >= CORR_STRONG;
-
-        const modal = document.createElement('div');
-        modal.id = 'align-channel-modal';
-        // デバッグモーダルと同じインラインスタイルで統一
-        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
 
         // チャンネルリストを生成（相関の大きい順。強相関だけ初期チェック）
         const channelItems = commonNames.map(name => {
@@ -5343,16 +5421,14 @@ function showAlignChannelModal(commonNames, subFileId, corrMap = new Map()) {
             const corrColor = corr == null ? '#9ca3af' : corr >= 0.7 ? '#86efac' : corr >= 0.4 ? '#fcd34d' : '#9ca3af';
             const corrBadge = `<span style="margin-left:auto;font-size:11px;font-variant-numeric:tabular-nums;color:${corrColor};" title="メイン↔サブの相関（絶対値、1に近いほど波形が似ている）">r=${corr != null ? corr.toFixed(2) : '—'}</span>`;
             // チェックボックス＋チャンネル名のラベル
-            return `<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:13px;transition:background 0.15s;"
-                onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+            return `<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:13px;">
                 <input type="checkbox" value="${esc(name)}" ${checked} style="accent-color:#6366f1;"> ${esc(name)} ${aliasText} ${corrBadge}
             </label>`;
         }).join('');
 
-        modal.innerHTML = `
-            <div style="background:#1a1d24;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:24px 28px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);color:#f0f0f0;font-family:Inter,sans-serif;">
-                <h3 style="margin:0 0 8px;font-size:16px;"><i class='bx bx-target-lock'></i> Auto-Align 設定</h3>
-                <p style="color:#a0a5b1;font-size:12px;margin-bottom:16px;line-height:1.5;">
+        const { modal, close } = createModal(`
+                <h3 id="align-modal-title"><i class='bx bx-target-lock' aria-hidden="true"></i> 時間の自動合わせ</h3>
+                <p style="color:var(--text-secondary);font-size:12px;margin-bottom:16px;line-height:1.5;">
                     位置合わせに使うチャンネルと探索範囲を指定してください。<br>
                     相関（r）の高い順に並べ、おすすめ（r≧0.7）を初期選択しています。
                     波形がよく似たチャンネルほど位置合わせの精度が上がります（例: 目標車速）。
@@ -5361,27 +5437,23 @@ function showAlignChannelModal(commonNames, subFileId, corrMap = new Map()) {
                 <div style="margin-bottom:14px;">
                     <h4 style="font-size:13px;margin-bottom:6px;">チャンネル選択</h4>
                     <div style="display:flex;gap:6px;margin-bottom:6px;">
-                        <button id="align-select-all" style="background:#22262f;color:#a0a5b1;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;">全選択</button>
-                        <button id="align-select-none" style="background:#22262f;color:#a0a5b1;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;">全解除</button>
+                        <button id="align-select-all" class="btn-secondary">全選択</button>
+                        <button id="align-select-none" class="btn-secondary">全解除</button>
                     </div>
                     <div class="align-ch-list" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:4px;">${channelItems}</div>
                 </div>
 
                 <div style="margin-bottom:18px;">
-                    <h4 style="font-size:13px;margin-bottom:6px;">探索範囲 (±秒)</h4>
-                    <input type="number" id="align-range-input" value="${defaultRange}" min="1" step="1"
-                        style="width:120px;background:#22262f;color:#f0f0f0;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:6px 10px;font-size:13px;">
-                    <p style="color:#a0a5b1;font-size:11px;margin-top:4px;">ヒント: NEDCのUrban1サイクル≒195秒。範囲を狭めるとサイクル飛びを防げます。</p>
+                    <label for="align-range-input">探索範囲 (±秒)</label>
+                    <input type="number" id="align-range-input" value="${defaultRange}" min="0.001" step="any" aria-describedby="align-validation" style="width:120px;">
+                    <p style="color:var(--text-secondary);font-size:11px;margin-top:4px;">ヒント: NEDCのUrban1サイクル≒195秒。範囲を狭めるとサイクル飛びを防げます。</p>
                 </div>
-
-                <div style="display:flex;gap:8px;justify-content:flex-end;">
-                    <button id="align-run-btn" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:13px;font-weight:500;display:flex;align-items:center;gap:4px;"><i class='bx bx-play'></i> 実行</button>
-                    <button id="align-cancel-btn" style="background:#22262f;color:#a0a5b1;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">キャンセル</button>
+                <p id="align-validation" role="alert" style="color:var(--danger);"></p>
+                <div class="modal-actions">
+                    <button id="align-cancel-btn" class="btn-secondary">キャンセル</button>
+                    <button id="align-run-btn" class="btn-primary"><i class='bx bx-play' aria-hidden="true"></i> 実行</button>
                 </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
+        `, { modalClass: 'align-channel-modal', labelledBy: 'align-modal-title', onClose: () => resolve(null) });
 
         // 全選択 / 全解除ボタン
         modal.querySelector('#align-select-all').addEventListener('click', () => {
@@ -5395,19 +5467,24 @@ function showAlignChannelModal(commonNames, subFileId, corrMap = new Map()) {
         modal.querySelector('#align-run-btn').addEventListener('click', () => {
             const checked = [...modal.querySelectorAll('.align-ch-list input:checked')].map(cb => cb.value);
             const range   = parseFloat(modal.querySelector('#align-range-input').value);
-            modal.remove();
             if (!checked.length) {
-                alert('1つ以上のチャンネルを選択してください。');
-                resolve(null);
+                modal.querySelector('#align-validation').textContent = '1つ以上のチャンネルを選択してください。';
+                modal.querySelector('.align-ch-list input')?.focus();
                 return;
             }
-            resolve({ names: checked, range: isNaN(range) || range <= 0 ? defaultRange : range });
+            if (!Number.isFinite(range) || range <= 0) {
+                modal.querySelector('#align-validation').textContent = '探索範囲に0より大きい秒数を入力してください。';
+                modal.querySelector('#align-range-input').setAttribute('aria-invalid', 'true');
+                modal.querySelector('#align-range-input').focus();
+                return;
+            }
+            resolve({ names: checked, range });
+            close();
         });
 
         // キャンセルボタン & オーバーレイクリック
-        const cancel = () => { modal.remove(); resolve(null); };
-        modal.querySelector('#align-cancel-btn').addEventListener('click', cancel);
-        modal.addEventListener('click', e => { if (e.target === modal) cancel(); });
+        modal.querySelector('#align-cancel-btn').addEventListener('click', close);
+        modal.querySelector('#align-range-input').addEventListener('input', e => e.target.removeAttribute('aria-invalid'));
     });
 }
 
@@ -5720,7 +5797,10 @@ function renderChart() {
         { gridLeft: DL.gridLeft, gridRight: L.gridRight, axisGap: AXIS_GAP });
     const { left: xSliderLeft, right: xSliderRight } = CSVChartOptions.computeSliderBounds(groupLayouts);
     const narrowPlotWidth = state.chart.getWidth() - xSliderLeft - xSliderRight;
-    const warningKey = CSVChartOptions.deriveNarrowWarningKey(narrowPlotWidth, groupLayouts.map(l => l.axisCount));
+    // A small window alone is not an axis configuration problem. Only suggest
+    // sharing axes when a plot actually contains more than one Y axis.
+    const warningKey = groupLayouts.some(l => l.axisCount > 1)
+        ? CSVChartOptions.deriveNarrowWarningKey(narrowPlotWidth, groupLayouts.map(l => l.axisCount)) : '';
     if (warningKey && state.axisLayoutWarningKey !== warningKey) {
         state.axisLayoutWarningKey = warningKey;
         showWarning('Y軸が多いため描画領域が狭くなっています', '重ね合わせ設定で軸を共有すると表示幅を広げられます。');
@@ -5728,7 +5808,7 @@ function renderChart() {
         state.axisLayoutWarningKey = '';
     }
 
-    // X-axis slider (bottom, all grids linked) + inside zoom (scroll + pan)
+    // Hidden X-axis controller (all grids linked) + inside zoom (scroll + pan)
     const xStart = savedXZoom ? savedXZoom.start : 0;
     const xEnd   = savedXZoom ? savedXZoom.end   : 100;
     dataZooms.push(...CSVChartOptions.buildXDataZooms({
@@ -5820,6 +5900,24 @@ function renderChart() {
                 labelFontSize: F.label,
             }));
         });
+        const exceededRows = comparisonWorkspace?.exceedanceHighlights(grp) || [];
+        if (exceededRows.length && axisIndexMap.size) {
+            const areas = [], points = [];
+            for (const row of exceededRows) for (const interval of row.exceedanceIntervals) {
+                const name = `許容差超過: ${row.name} [${row.fileLabel}]`;
+                if (interval.t0 === interval.t1) points.push({ name, xAxis: interval.t0 });
+                else areas.push([{ name, xAxis: interval.t0 }, { xAxis: interval.t1 }]);
+            }
+            series.push({
+                id: `tolerance-highlight-${i}`, type: 'line', data: [],
+                xAxisIndex: i, yAxisIndex: axisIndexMap.values().next().value,
+                silent: true, animation: false, z: 1,
+                markArea: { silent: true, animation: false, label: { show: false },
+                    itemStyle: { color: 'rgba(249,115,22,0.18)', borderColor: 'rgba(249,115,22,0.6)', borderWidth: 1 }, data: areas },
+                markLine: { silent: true, animation: false, symbol: 'none', label: { show: false },
+                    lineStyle: { color: '#f97316', width: 2, type: 'solid' }, data: points },
+            });
+        }
     });
 
     // イベント検出結果の区間ハイライト（markArea）を各グリッドに重ねる
@@ -6209,6 +6307,7 @@ function enterBoxZoom() {
 }
 
 function exitBoxZoom() {
+    comparisonWorkspace?.cancelRangeMode();
     if (!state.chart) return;
     state.brushMode = false;
     dom.zoomBtn.classList.remove('btn-active');
@@ -6758,13 +6857,14 @@ function updateUndoRedoButtons() {
 //   （メニュー内の select 操作や矢印キー巡回中に B/T/R/M がチャートモードを切り替えないように）
 // - Ctrl+S / Ctrl+Shift+C も入力欄・モーダル中では無効（ブラウザ既定に任せる）
 document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || e.isComposing || e.target.isContentEditable) return;
     const tag = e.target.tagName;
     const inInput = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT');
     const modalOpen = !!document.getElementById('app-modal-overlay');
 
     // 入力欄・モーダル中・ドロップダウン展開中はここより下のショートカット全部無効
     // （Custom RAM 式を編集中に Ctrl+S で誤保存、モーダル中に誤操作するのを防ぐ）
-    if (inInput || modalOpen || isToolbarMenuOpen()) return;
+    if (inInput || modalOpen || isToolbarMenuOpen() || document.querySelector('.compare-tools[open]')) return;
 
     // Ctrl+S: PNG保存（チャートが保存可能なときだけブラウザの「ページ保存」を上書き）
     if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
@@ -6845,6 +6945,7 @@ document.addEventListener('keydown', e => {
 function showShortcutsModal() {
     const rows = [
         ['?',              'このショートカット一覧を表示'],
+        ['/ / Ctrl + K',   'チャンネル検索に移動'],
         ['Esc',            'ボックスズーム / 時間シフト / 並べ替え / 計測 モードを抜ける'],
         ['B',              'ボックスズーム モードを切り替え'],
         ['T',              '時間シフト モードを切り替え（Sub ファイルが必要）'],
@@ -6858,12 +6959,12 @@ function showShortcutsModal() {
     ];
 
     let html = `<h3 id="shortcuts-modal-title" style="margin:0 0 12px;color:var(--accent-soft);">キーボードショートカット</h3>`;
-    html += `<p style="color:#a0a5b1;font-size:11px;margin:0 0 10px;">入力欄にフォーカスがあるときは単打キー (B / T / R / ?) は無効になります。</p>`;
+    html += `<p style="color:var(--text-secondary);font-size:11px;margin:0 0 10px;">入力欄にフォーカスがあるときは単打キー (B / T / R / M / ? / /) は無効になります。</p>`;
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;">`;
     for (const [key, desc] of rows) {
         html += `<tr>`
-            + `<td style="padding:5px 8px;color:#6ee7b7;font-family:monospace;white-space:nowrap;vertical-align:top;">${esc(key)}</td>`
-            + `<td style="padding:5px 8px;color:#f0f0f0;">${esc(desc)}</td>`
+            + `<td style="padding:5px 8px;color:var(--accent-soft);font-family:monospace;white-space:nowrap;vertical-align:top;">${esc(key)}</td>`
+            + `<td style="padding:5px 8px;color:var(--text-primary);">${esc(desc)}</td>`
             + `</tr>`;
     }
     html += `</table>`;
@@ -6997,6 +7098,29 @@ function exitArrangeMode() {
     let startX   = 0;
     let startW   = 0;
 
+    handle.tabIndex = 0;
+    handle.setAttribute('role', 'separator');
+    handle.setAttribute('aria-orientation', 'vertical');
+    handle.setAttribute('aria-label', 'ファイルとチャンネルの幅');
+    handle.setAttribute('aria-controls', 'workspace-sidebar');
+    const syncWidth = () => {
+        handle.setAttribute('aria-valuemin', '200');
+        handle.setAttribute('aria-valuemax', String(Math.max(200, Math.floor(window.innerWidth * 0.6))));
+        handle.setAttribute('aria-valuenow', String(Math.round(sidebar.offsetWidth)));
+    };
+    const resizeSidebar = width => {
+        sidebar.style.width = Math.max(200, Math.min(window.innerWidth * 0.6, width)) + 'px';
+        syncWidth();
+        if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); }
+    };
+    handle.addEventListener('keydown', e => {
+        if (e.isComposing || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        resizeSidebar(e.key === 'Home' ? 200 : e.key === 'End' ? window.innerWidth * 0.6 : sidebar.offsetWidth + (e.key === 'ArrowRight' ? 16 : -16));
+        saveSettings();
+    });
+    new ResizeObserver(syncWidth).observe(sidebar);
+
     handle.addEventListener('mousedown', e => {
         e.preventDefault();
         dragging = true;
@@ -7011,10 +7135,7 @@ function exitArrangeMode() {
     document.addEventListener('mousemove', e => {
         if (!dragging) return;
         // マウス移動量からサイドバー幅を計算
-        const newW = Math.max(200, Math.min(window.innerWidth * 0.6, startW + (e.clientX - startX)));
-        sidebar.style.width = newW + 'px';
-        // チャートがあればリサイズイベントを発火（グラフの再描画）
-        if (state.chart) state.chart.resize();
+        resizeSidebar(startW + (e.clientX - startX));
     });
 
     document.addEventListener('mouseup', () => {
@@ -7075,6 +7196,7 @@ setupToolbarDropdown($('export-menu-btn'), $('export-menu-panel'));
         });
         // キーボード操作（Enter/Space）にも対応
         heading.addEventListener('keydown', e => {
+            if (e.target !== heading || e.isComposing) return;
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 toggle();
@@ -8634,6 +8756,7 @@ comparisonWorkspace = CSVWorkspace({
     resize: () => { if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); } },
     modal: html => createModal(html, { modalClass: 'compare-dialog' }),
     startBrush: enterBoxZoom,
+    exitBrush: exitBoxZoom,
     exitArrange: exitArrangeMode,
     clearMeasure: () => exitMeasureMode(),
     stats: () => { if (!state.statsPanelVisible) toggleStatsPanel(); else updateStatsPanel(); },
@@ -8643,8 +8766,11 @@ comparisonWorkspace = CSVWorkspace({
         for (const name of names) if (getMainColumn(name)) { state.selectedNames.add(name); addStandaloneChart(name); }
         await ensureColumnsAndRender(); saveSettings();
     },
-    focusChannel: name => {
-        const region = state.gridRegions.find(r => r.name === name || r.label?.includes(name));
+    focusChannel: (name, fileId) => {
+        const region = state.gridRegions.find(r => {
+            const group = _lastRenderedGroups?.groups.get(r.groupId);
+            return group?.mergedNames.includes(name) && (!fileId || group.series.some(line => line.fileId === fileId && line.channelName === name));
+        });
         if (region) dom.chartEl.parentElement.scrollTo({ top: region.top, behavior: 'smooth' });
     },
     dropTarget: clientY => {
@@ -8671,6 +8797,10 @@ comparisonWorkspace = CSVWorkspace({
 });
 initChart();
 comparisonWorkspace.bindChart();
+CSVWorkspaceUI({
+    state, main: getMainFile, loadFiles: handleFiles,
+    resize: () => { if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); } },
+});
 
 // 設定エクスポート/インポートボタンのイベント登録
 dom.exportSettings.addEventListener('click', exportSettings);
