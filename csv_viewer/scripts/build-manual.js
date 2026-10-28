@@ -25,7 +25,7 @@ const previewDir = path.join(root, 'tests/fixtures/generated/manual-preview');
     assert.ok(images >= 8, 'The guide must contain real screenshots');
     fs.writeFileSync(htmlPath, html, 'utf8');
     fs.mkdirSync(previewDir, { recursive: true });
-    const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
+    const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge', ignoreDefaultArgs: ['--hide-scrollbars'] });
     try {
         const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
         const errors = [], remoteRequests = [];
@@ -35,11 +35,13 @@ const previewDir = path.join(root, 'tests/fixtures/generated/manual-preview');
         await page.evaluate(() => document.fonts.ready);
         const content = await page.evaluate(() => ({
             chapters: document.querySelectorAll('section.page').length,
+            revision: document.querySelector('meta[name="manual-revision"]')?.content,
             images: [...document.images].every(img => img.complete && img.naturalWidth > 0 && img.alt),
             anchors: [...document.querySelectorAll('a[href^="#"]')].every(a => document.getElementById(a.hash.slice(1))),
             links: [...document.querySelectorAll('a[href]:not([href^="#"])')].map(a => a.getAttribute('href'))
         }));
-        assert.equal(content.chapters, 14);
+        assert.equal(content.chapters, 17, '14 chapters, with continuation pages for chapters 05, 08, and 12');
+        assert.match(content.revision, /^\d{4}-\d{2}-\d{2}$/);
         assert.ok(content.images, 'All images must load and have alt text');
         assert.ok(content.anchors, 'All table-of-contents targets must exist');
         for (const link of content.links) {
@@ -65,11 +67,12 @@ const previewDir = path.join(root, 'tests/fixtures/generated/manual-preview');
             document.querySelectorAll('a[href]:not([href^="#"])').forEach(a => a.removeAttribute('href'));
             return [...document.querySelectorAll('section.page')].map(s => ({ id: s.id, height: Math.round(s.getBoundingClientRect().height) }));
         });
+        console.log(JSON.stringify({ sectionHeights }, null, 2));
         for (const section of sectionHeights) assert.ok(section.height <= 1005, `${section.id}: chapter exceeds one printable A4 page`);
         await page.pdf({ path: pdfPath, format: 'A4', preferCSSPageSize: true, printBackground: true,
             tagged: true, outline: true,
             displayHeaderFooter: true, headerTemplate: '<span></span>',
-            footerTemplate: '<div style="font-family:Arial,sans-serif;font-size:8px;color:#536875;width:100%;margin:0 14mm;display:flex;justify-content:space-between"><span>CSV Chart Viewer | 2026-09-29</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>'
+            footerTemplate: `<div style="font-family:Arial,sans-serif;font-size:8px;color:#536875;width:100%;margin:0 14mm;display:flex;justify-content:space-between"><span>CSV Chart Viewer | ${content.revision}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`
         });
         assert.equal(remoteRequests.length, 0, 'The manual must work offline');
         assert.deepEqual(errors, []);

@@ -37,11 +37,15 @@ function writeSamples() {
 
 (async () => {
     writeSamples();
-    const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
+    const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge', ignoreDefaultArgs: ['--hide-scrollbars'] });
     const context = await browser.newContext({ viewport: { width: 1400, height: 1000 }, deviceScaleFactor: 1, acceptDownloads: true });
+    await context.addInitScript(() => {
+        window.__manualBrowserErrors = [];
+        window.addEventListener('error', event => window.__manualBrowserErrors.push(event.message));
+    });
     const page = await context.newPage();
     const errors = [], shots = [], facts = { sampleCount: 121, samplePeriodSeconds: 0.5, comparisonTimeDelaySeconds: 2, comparisonPressureIncreaseKPa: 5 };
-    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'styles.css', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
+    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'styles.css', 'parser-utils.js', 'compare-utils.js', 'chart-options-utils.js', 'layout-utils.js', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
     page.on('pageerror', error => errors.push(error.stack || error.message));
     async function settle() {
         await page.mouse.move(750, 25);
@@ -73,6 +77,8 @@ function writeSamples() {
         await page.waitForFunction(() => window.__csvViewerDebug.state.numGrids === 2);
         await capture('overview', 'PressureとSpeedを表示。時間合わせ前の重ね合わせ。');
         await page.locator('.sidebar').screenshot({ path: path.join(images, 'sidebar.png') });
+        await page.locator('.compare-overview').screenshot({ path: path.join(images, 'navigator-panel.png') });
+        assert.equal(await page.evaluate(() => window.__csvViewerDebug.state.chart.getOption().dataZoom[0].show), false, 'the separate overview is the only visible time navigator');
 
         await page.locator('[data-pane="align"]').click();
         await page.locator('#compare-align-channel').selectOption('Speed');
@@ -112,13 +118,23 @@ function writeSamples() {
         await page.waitForFunction(() => document.querySelectorAll('.compare-result').length === 2);
         const pressure = page.locator('.compare-result').filter({ has: page.locator('.compare-result-title', { hasText: 'Pressure' }) });
         await pressure.locator('[data-tolerance]').fill('3');
-        await pressure.locator('[data-tolerance]').press('Tab');
+        await pressure.locator('[data-tolerance]').press('Enter');
         await page.waitForFunction(() => document.getElementById('compare-results-list').textContent.includes('1.66667'));
         await page.locator('[data-view="diff"]').click();
         facts.pressureResults = await pressure.innerText();
         assert.match(facts.pressureResults, /-5\s*\/\s*5/, 'aligned Pressure mean difference is -5 and RMS difference is 5');
+        assert.equal(await pressure.getAttribute('data-result-status'), 'exceeded');
+        assert.match(facts.pressureResults, /41 点超過/);
         await pressure.scrollIntoViewIfNeeded();
-        await capture('results', '差分表示と比較結果。Pressureの平均差-5kPa、RMS差5、許容差3kPa。', '#compare-panel');
+        await capture('results', '差分表示と超過判定。Pressureの平均差-5kPa、RMS差5、許容差3kPa、41点超過。', '.compare-result[data-result-status="exceeded"]');
+        await page.locator('#compare-panel-content').evaluate(element => { element.scrollTop = 0; });
+        await capture('tolerance', '選択区間10〜30秒のPressureが許容差3kPaを超え、オレンジの帯と超過1件の案内が表示される。');
+        await pressure.locator('[data-exceedance-step="1"]').click();
+        await settle();
+        facts.exceedanceNavigation = await pressure.locator('.compare-exceedance-position').innerText();
+        assert.match(facts.exceedanceNavigation, /1 \/ 1/);
+        await pressure.locator('.compare-exceedance-nav').screenshot({ path: path.join(images, 'tolerance-nav.png') });
+        await page.locator('#compare-range-all').click();
 
         await page.locator('[data-range-action="note"]').click();
         await page.locator('#compare-note-text').fill('Speedで時間合わせ（比較側 -2秒）。選択区間のPressureは基準−比較=-5 kPa。比較側が一貫して5 kPa高い。許容差3 kPaを超過。');
@@ -144,7 +160,9 @@ function writeSamples() {
         await page.waitForFunction(() => !!document.querySelector('#xy-chart canvas'));
         await capture('xy', 'XYプロット。X=Speed、Y=Pressureで2本の関係を確認。', '.xy-modal');
         assert.deepEqual(errors, []);
-        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file://. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png'], errors }, null, 2) + '\n');
+        const browserErrors = await page.evaluate(() => window.__manualBrowserErrors);
+        assert.deepEqual(browserErrors, []);
+        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ revision: '2026-10-29', generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png', 'navigator-panel.png', 'tolerance-nav.png'], errors, browserErrors }, null, 2) + '\n');
         console.log(JSON.stringify({ images, facts, screenshots: shots.length }, null, 2));
     } catch (error) {
         const out = path.join(root, 'tests/fixtures/generated/manual-capture');
