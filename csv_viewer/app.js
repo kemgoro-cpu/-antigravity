@@ -1079,7 +1079,7 @@ const L = {
     gridLeft:   70,
     gridRight:  38,
     topPx:      8,    // no ECharts legend → minimal top padding
-    bottomPx:   68,
+    bottomPx:   36,   // X-axis labels only; the overview navigator is outside the chart
     gapPx:      6,
     yZoomW:     16,
     yZoomRight: 6,
@@ -5808,7 +5808,7 @@ function renderChart() {
         state.axisLayoutWarningKey = '';
     }
 
-    // X-axis slider (bottom, all grids linked) + inside zoom (scroll + pan)
+    // Hidden X-axis controller (all grids linked) + inside zoom (scroll + pan)
     const xStart = savedXZoom ? savedXZoom.start : 0;
     const xEnd   = savedXZoom ? savedXZoom.end   : 100;
     dataZooms.push(...CSVChartOptions.buildXDataZooms({
@@ -5900,6 +5900,24 @@ function renderChart() {
                 labelFontSize: F.label,
             }));
         });
+        const exceededRows = comparisonWorkspace?.exceedanceHighlights(grp) || [];
+        if (exceededRows.length && axisIndexMap.size) {
+            const areas = [], points = [];
+            for (const row of exceededRows) for (const interval of row.exceedanceIntervals) {
+                const name = `許容差超過: ${row.name} [${row.fileLabel}]`;
+                if (interval.t0 === interval.t1) points.push({ name, xAxis: interval.t0 });
+                else areas.push([{ name, xAxis: interval.t0 }, { xAxis: interval.t1 }]);
+            }
+            series.push({
+                id: `tolerance-highlight-${i}`, type: 'line', data: [],
+                xAxisIndex: i, yAxisIndex: axisIndexMap.values().next().value,
+                silent: true, animation: false, z: 1,
+                markArea: { silent: true, animation: false, label: { show: false },
+                    itemStyle: { color: 'rgba(249,115,22,0.18)', borderColor: 'rgba(249,115,22,0.6)', borderWidth: 1 }, data: areas },
+                markLine: { silent: true, animation: false, symbol: 'none', label: { show: false },
+                    lineStyle: { color: '#f97316', width: 2, type: 'solid' }, data: points },
+            });
+        }
     });
 
     // イベント検出結果の区間ハイライト（markArea）を各グリッドに重ねる
@@ -8748,8 +8766,11 @@ comparisonWorkspace = CSVWorkspace({
         for (const name of names) if (getMainColumn(name)) { state.selectedNames.add(name); addStandaloneChart(name); }
         await ensureColumnsAndRender(); saveSettings();
     },
-    focusChannel: name => {
-        const region = state.gridRegions.find(r => r.name === name || r.label?.includes(name));
+    focusChannel: (name, fileId) => {
+        const region = state.gridRegions.find(r => {
+            const group = _lastRenderedGroups?.groups.get(r.groupId);
+            return group?.mergedNames.includes(name) && (!fileId || group.series.some(line => line.fileId === fileId && line.channelName === name));
+        });
         if (region) dom.chartEl.parentElement.scrollTo({ top: region.top, behavior: 'smooth' });
     },
     dropTarget: clientY => {

@@ -139,6 +139,8 @@ const { chromium } = require('playwright');
 
         stage = 'keyboard sidebar resizing';
         await page.setViewportSize({ width: 1600, height: 1000 });
+        // Viewport changes return before the responsive sidebar's media-query handler.
+        await page.waitForFunction(() => !document.querySelector('.sidebar').inert && document.querySelector('.sidebar').offsetWidth > 0);
         const handle = page.locator('#sidebar-resize-handle');
         const originalWidth = await page.locator('.sidebar').evaluate(el => el.offsetWidth);
         await handle.focus();

@@ -74,15 +74,28 @@
     }
     function compare(a, b, offset, range, digital = false, tolerance = null, withPoints = false) {
         let n = 0, missing = 0, sum = 0, sq = 0, max = -1, time = null, mismatchDuration = 0, totalDuration = 0, exceeded = 0;
-        const points = [];
+        const points = [], exceedanceIntervals = [];
+        const positiveTolerance = finite(tolerance) && tolerance > 0;
+        let exceedanceInterval = null;
         const start = range?.[0] ?? -Infinity, end = range?.[1] ?? Infinity;
         for (let i = lowerBound(a.t, start); i < a.t.length && a.t[i] <= end; i++) {
             const t = a.t[i], x = a.v[i], y = valueAt(b.t, b.v, t - offset, digital);
-            if (!finite(x) || !finite(y)) { missing++; if (withPoints) points.push([t, null]); continue; }
+            if (!finite(x) || !finite(y)) { missing++; exceedanceInterval = null; if (withPoints) points.push([t, null]); continue; }
             const d = x - y, abs = Math.abs(d);
             n++; sum += d; sq += d * d;
             if (abs > max) { max = abs; time = t; }
             if (finite(tolerance) && abs > tolerance) exceeded++;
+            // Boundaries are observed baseline samples, not inferred crossing times or durations.
+            if (positiveTolerance && abs > tolerance) {
+                if (!exceedanceInterval) {
+                    exceedanceInterval = { t0: t, t1: t, count: 1, max: abs, time: t };
+                    exceedanceIntervals.push(exceedanceInterval);
+                } else {
+                    exceedanceInterval.t1 = t;
+                    exceedanceInterval.count++;
+                    if (abs > exceedanceInterval.max) { exceedanceInterval.max = abs; exceedanceInterval.time = t; }
+                }
+            } else exceedanceInterval = null;
             if (withPoints) points.push([t, d]);
         }
         // Integrate digital disagreement on the union of transition times (unequal sample rates).
@@ -101,7 +114,7 @@
         const subTransition = digital ? firstTransition(b, offset, start, end) : null;
         const transitionDelta = mainTransition && subTransition && mainTransition.from === subTransition.from && mainTransition.to === subTransition.to ? subTransition.time - mainTransition.time : null;
         return { n, missing, max: n ? max : null, time, mean: n ? sum / n : null, rms: n ? Math.sqrt(sq / n) : null, mainTransition, subTransition, transitionDelta,
-            mismatchDuration: digital ? mismatchDuration : null, totalDuration, exceeded, ratio: n && finite(tolerance) && tolerance > 0 ? max / tolerance : null, points };
+            mismatchDuration: digital ? mismatchDuration : null, totalDuration, exceeded, ratio: n && finite(tolerance) && tolerance > 0 ? max / tolerance : null, points, exceedanceIntervals };
     }
     function alignmentScore(a, b, offset, range) {
         const begin = lowerBound(a.t, range[0]), end = lowerBound(a.t, range[1]);

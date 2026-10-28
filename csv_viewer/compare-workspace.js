@@ -11,7 +11,10 @@
         let rawTime = false, preview = null, generation = 0, busy = false, pick = null, latestCursor = null;
         let selectionMain = null;
         let previewChart = null, pendingMap = null, intervalMode = false, overviewKey = '';
-        let resultGeneration = 0, resultBusy = false, resultStatus = '', resultSort = 'name', noteBusy = false;
+        let resultGeneration = 0, resultBusy = false, resultStatus = '', resultSort = 'tolerance', noteBusy = false;
+        let resultSignature = '', highlightFrame = null, resultNavigation = false;
+        let lastVisibleRange = null;
+        const exceedancePositions = new Map();
         let noteDraft = '', templateNameDraft = '';
         const mapDrafts = new Map(), alignDrafts = new Map();
         function draftFor(store, id = currentSub()) {
@@ -58,7 +61,17 @@
         document.querySelector('.sidebar-upper').appendChild(advanced);
         for (const name of ['parse', 'customRam', 'events']) advanced.appendChild(document.querySelector(`[data-section="${name}"]`));
         document.querySelector('.sidebar-header h2').textContent = 'ファイルとチャンネル';
-        const resize = new ResizeObserver(() => { api.resize(); drawOverview(true); if (previewChart) { previewChart.dispatchAction({ type: 'hideTip' }); previewChart.resize(); } });
+        let resizeFrame = null;
+        const resize = new ResizeObserver(() => {
+            // 通知中の描画でスクロールバーが消えると、監視中の幅が再び変わる。
+            // 実際のリサイズは次フレームへまとめ、通知の配信中にはレイアウトを変更しない。
+            if (resizeFrame !== null) return;
+            resizeFrame = requestAnimationFrame(() => {
+                resizeFrame = null;
+                api.resize(); drawOverview(true);
+                if (previewChart) { previewChart.dispatchAction({ type: 'hideTip' }); previewChart.resize(); }
+            });
+        });
         resize.observe(chartContainer);
         function run(fn) { Promise.resolve().then(fn).catch(e => api.warning('比較操作を完了できませんでした', e.message)); }
         function change() { api.save(); schedule(); }
@@ -72,8 +85,15 @@
         function rememberAlignInput(input) {
             if (['compare-align-channel', 'compare-align-span', 'compare-align-scope', 'compare-anchor-main', 'compare-anchor-sub'].includes(input.id)) draftFor(alignDrafts)[input.id] = input.value;
         }
+        function setResultRows(next, signature = '') {
+            const redraw = rows.some(r => r.exceedanceIntervals?.length) || next.some(r => r.exceedanceIntervals?.length);
+            rows = next; resultSignature = signature; exceedancePositions.clear();
+            if (redraw && highlightFrame === null) highlightFrame = requestAnimationFrame(() => {
+                highlightFrame = null; api.render();
+            });
+        }
         function invalidateResults(message = '比較条件が変わりました。「比較を更新」で再計算できます。') {
-            resultGeneration++; resultBusy = false; rows = []; resultStatus = message; showRows(); syncResultStatus();
+            resultGeneration++; resultBusy = false; setResultRows([]); resultStatus = message; showRows(); syncResultStatus();
         }
         function syncResultStatus() {
             const status = $('compare-results-status'), button = $('compare-calculate');
@@ -131,11 +151,14 @@
             if (!files.length) return null;
             return [Math.min(...files.map(f => f.timeData[0] + effectiveOffset(f))), Math.max(...files.map(f => f.timeData[f.timeData.length - 1] + effectiveOffset(f)))];
         }
-        function zoom(r) {
+        function zoom(r, preserveResults = false) {
             if (!r || !r.every(Number.isFinite) || r[1] <= r[0] || !s.numGrids) return api.warning('開始より後の終了時刻を指定してください');
             const full = fullRange(); const lo = Math.max(full[0], r[0]), hi = Math.min(full[1], r[1]);
             if (hi <= lo) return api.warning('データがある範囲を指定してください');
-            s.chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, startValue: lo, endValue: hi }); api.save(); schedule();
+            resultNavigation = preserveResults;
+            try { s.chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, startValue: lo, endValue: hi }); }
+            finally { resultNavigation = false; }
+            api.save(); schedule();
         }
         function activeRange() { return selection || api.visibleRange() || fullRange(); }
         function selectRange(r) { selection = [...r]; selectionMain = api.main(); intervalChanged(); $('compare-selection').classList.remove('hidden'); $('compare-selection-label').textContent = `対象区間 ${fmt(r[0])} – ${fmt(r[1])} s`; requestAnimationFrame(() => api.render()); schedule(); }
@@ -168,7 +191,7 @@
             const files = Object.entries(s.files), mf = api.main(), sf = s.files[currentSub()];
             $('compare-panel-content').innerHTML = `<div class="compare-step"><span>01</span><h2>基準と比較ファイル</h2></div><p class="compare-muted">ファイル名は保持したまま、作業用の名前を付けられます。</p><div class="compare-file-cards">${files.map(([id, f]) => `<label class="compare-file-card"><span>${f.role === 'main' ? '基準' : '比較'} · <small title="${esc(f.name)}">${esc(f.name)}</small></span><input data-file-label="${esc(id)}" value="${esc(label(f))}" aria-label="${esc(f.name)}の表示名" maxlength="120"></label>`).join('') || '<p class="compare-empty">左へCSV / TRNをドロップして開始します。</p>'}</div>${mf ? `<label class="compare-field">基準ファイル<select id="compare-main">${files.map(([id, f]) => `<option value="${esc(id)}"${f.role === 'main' ? ' selected' : ''}>${esc(label(f))}</option>`).join('')}</select></label>` : ''}<div class="compare-step"><span>02</span><h2>チャンネル対応</h2></div>${sf ? `${subSelector()}<p class="compare-muted">表示中のチャンネルをまとめて対応付け。候補は適用するまで波形に反映しません。</p><div class="compare-map-actions"><button id="compare-map-suggest" class="btn-secondary">名前が一致する候補を選ぶ</button><button id="compare-map-apply" class="btn-primary">対応を適用</button></div><div id="compare-map-list"></div><button id="compare-next" class="btn-primary compare-wide">次へ：時間を合わせる →</button>` : '<p class="compare-empty">比較用のファイルをもう1つ追加してください。</p>'}`;
             panel.querySelectorAll('[data-file-label]').forEach(inp => inp.onchange = () => { const f = s.files[inp.dataset.fileLabel]; setting().labels = { ...setting().labels, [f.name]: inp.value.trim() || f.name }; api.renderFiles(); api.render(); change(); });
-            if ($('compare-main')) $('compare-main').onchange = e => run(async () => { generation++; preview = null; selection = null; rows = []; await api.setMain(e.target.value); change(); renderPanel(); });
+            if ($('compare-main')) $('compare-main').onchange = e => run(async () => { generation++; preview = null; selection = null; setResultRows([]); await api.setMain(e.target.value); change(); renderPanel(); });
             if (!sf) return;
             const cols = mf.columns.filter(c => s.selectedNames.has(c.name));
             const draft = draftFor(mapDrafts);
@@ -295,16 +318,18 @@
         }
         function effectiveOffset(f) { return rawTime ? 0 : f.offset || 0; }
         function renderResults() {
-            $('compare-panel-content').innerHTML = `<div class="compare-step"><span>04</span><h2>違いを見つける</h2></div><p class="compare-muted">選択区間、なければ表示区間を元データで比較します。アナログ値は基準時刻に線形補間。状態信号は直前値を保持します。</p><div class="compare-two"><button id="compare-calculate" class="btn-primary">比較を更新</button><select id="compare-sort" aria-label="比較結果の並べ替え"><option value="name">チャンネル順</option><option value="tolerance">許容差の超過度順</option></select></div><p id="compare-results-status" role="status"></p><div id="compare-results-list"></div><details open><summary>カーソル位置の値</summary><p class="compare-muted">波形上のカーソルに追従します。</p><div id="compare-cursor-table"></div></details>`;
+            $('compare-panel-content').innerHTML = `<div class="compare-step"><span>04</span><h2>違いを見つける</h2></div><p class="compare-muted">選択区間、なければ表示区間を元データで比較します。アナログ値は基準時刻に線形補間。状態信号は直前値を保持します。</p><div class="compare-two"><button id="compare-calculate" class="btn-primary">比較を更新</button><select id="compare-sort" aria-label="比較結果の並べ替え"><option value="name">チャンネル順</option><option value="tolerance">許容差の超過度順</option></select></div><p id="compare-results-status" role="status"></p><div id="compare-result-summary" role="status" aria-live="polite" hidden></div><div id="compare-results-list"></div><details open><summary>カーソル位置の値</summary><p class="compare-muted">波形上のカーソルに追従します。</p><div id="compare-cursor-table"></div></details>`;
             $('compare-calculate').onclick = () => run(computeResults);
             $('compare-sort').value = resultSort;
             $('compare-sort').onchange = e => { resultSort = e.target.value; showRows(); };
             showRows(); syncResultStatus(); if (latestCursor !== null) cursor(latestCursor);
         }
-        async function computeResults() {
-            const mf = api.main(), names = [...s.selectedNames], range = activeRange(), ids = api.subIds();
+        async function computeResults(requestedRange = null) {
+            const mf = api.main(), names = [...s.selectedNames], range = requestedRange || activeRange(), ids = api.subIds();
             if (!mf || !ids.length || !names.length || !range) { api.warning('基準・比較ファイルと表示チャンネルを選んでください'); return null; }
-            const token = ++resultGeneration; rows = []; resultBusy = true; resultStatus = '元データを比較しています…'; showRows(); syncResultStatus();
+            lastVisibleRange = api.visibleRange();
+            const token = ++resultGeneration, signature = comparisonSignature();
+            setResultRows([]); resultBusy = true; resultStatus = '元データを比較しています…'; showRows(); syncResultStatus();
             const result = [];
             try {
             for (const id of ids) {
@@ -314,12 +339,12 @@
                     const unit = a?.col.unit || mf.columns.find(c => c.name === name)?.unit || '';
                     const reason = !a || !b ? '未対応・データなし' : !C.sameUnit(unit, b.col.unit) ? '単位不一致' : a.col.isCrossFile ? '基準に固定された計算チャンネル' : '';
                     const stats = reason ? {} : C.compare(a, b, effectiveOffset(sf), range, s.bitChannels.has(name), setting().tolerances[name]);
-                    result.push({ name, file: sf.name, fileId: id, fileLabel: label(sf), unit, reason, range: [...range], offset: effectiveOffset(sf), ...stats });
+                    result.push({ name, file: sf.name, fileId: id, fileLabel: label(sf), unit, reason, range: [...range], offset: effectiveOffset(sf), tolerance: setting().tolerances[name] ?? null, ...stats });
                 }
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
-            if (token !== resultGeneration) return null;
-            rows = result; showRows();
+            if (token !== resultGeneration || signature !== comparisonSignature()) return null;
+            setResultRows(result, signature); showRows();
             resultStatus = `${fmt(range[0])}–${fmt(range[1])} s · 基準 − 比較 · ${rawTime ? '元の時刻' : '時間合わせ適用'} · ${rows.length}項目`;
             return result;
             } catch (error) {
@@ -332,17 +357,65 @@
         function showRows() {
             if (!$('compare-results-list')) return;
             const sorted = rows.map((r, index) => ({ ...r, index })).sort((a, b) => resultSort === 'tolerance' ? (b.ratio ?? -Infinity) - (a.ratio ?? -Infinity) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
-            $('compare-results-list').innerHTML = sorted.map(r => `<article class="compare-result"><button data-result="${r.index}" class="compare-result-title"${!Number.isFinite(r.time) ? ' disabled' : ''}>${esc(r.name)} <small>↗ ${esc(r.fileLabel)}</small></button>${r.reason ? `<p class="compare-warning">${esc(r.reason)}</p>` : `<dl><div><dt>最大絶対差</dt><dd>${fmt(r.max)} ${esc(r.unit)}</dd></div><div><dt>その時刻</dt><dd>${fmt(r.time)} s</dd></div><div><dt>平均差 / RMS差</dt><dd>${fmt(r.mean)} / ${fmt(r.rms)}</dd></div>${r.mismatchDuration != null ? `<div><dt>状態不一致</dt><dd>${fmt(r.mismatchDuration)} s</dd></div><div><dt>最初の切替 基準 / 比較</dt><dd>${fmt(r.mainTransition?.time)} / ${fmt(r.subTransition?.time)} s</dd></div><div><dt>同じ遷移の時刻差</dt><dd>${fmt(r.transitionDelta)} s</dd></div>` : ''}<div><dt>有効 / 欠損・範囲外</dt><dd>${r.n || 0} / ${r.missing || 0}</dd></div></dl><label class="compare-tolerance">許容差 [${esc(r.unit || '単位なし')}]<input type="number" min="0" step="any" data-tolerance="${r.index}" value="${setting().tolerances[r.name] || ''}" placeholder="未設定"></label>${r.ratio != null ? `<p class="${r.ratio > 1 ? 'compare-warning' : 'compare-muted'}">許容差の ${fmt(r.ratio)} 倍 / ${r.exceeded} 点超過</p>` : ''}`}</article>`).join('') || '<p class="compare-empty">「比較を更新」で差の一覧を作成します。</p>';
+            const exceeded = rows.filter(r => toleranceState(r).kind === 'exceeded').length;
+            const judged = rows.filter(r => ['exceeded', 'within', 'partial'].includes(toleranceState(r).kind)).length;
+            const summary = $('compare-result-summary');
+            summary.hidden = !rows.length; summary.className = exceeded ? 'compare-result-summary has-exceedance' : 'compare-result-summary';
+            summary.innerHTML = `<strong>${exceeded ? `許容差超過 ${exceeded}件` : judged ? '判定した有効点は許容差内' : '許容差の判定対象なし'}</strong><span>判定 ${judged} / ${rows.length}件${judged < rows.length ? '（未設定・比較不可を除く）' : ''}</span><small>オレンジの帯は連続する超過点、縦線は単発の超過点です。上下比較では比較側の段に表示します。</small>`;
+            $('compare-results-list').innerHTML = sorted.map(r => {
+                const status = toleranceState(r), intervals = r.exceedanceIntervals || [];
+                return `<article class="compare-result" data-result-status="${status.kind}"><span class="compare-result-badge">${status.label}</span><button data-result="${r.index}" class="compare-result-title"${!Number.isFinite(r.time) ? ' disabled' : ''}>${esc(r.name)} <small>↗ ${esc(r.fileLabel)}</small></button>${r.reason ? `<p class="compare-warning">${esc(r.reason)}</p>` : `<dl><div><dt>最大絶対差</dt><dd>${fmt(r.max)} ${esc(r.unit)}</dd></div><div><dt>その時刻</dt><dd>${fmt(r.time)} s</dd></div><div><dt>平均差 / RMS差</dt><dd>${fmt(r.mean)} / ${fmt(r.rms)}</dd></div>${r.mismatchDuration != null ? `<div><dt>状態不一致</dt><dd>${fmt(r.mismatchDuration)} s</dd></div><div><dt>最初の切替 基準 / 比較</dt><dd>${fmt(r.mainTransition?.time)} / ${fmt(r.subTransition?.time)} s</dd></div><div><dt>同じ遷移の時刻差</dt><dd>${fmt(r.transitionDelta)} s</dd></div>` : ''}<div><dt>有効 / 欠損・範囲外</dt><dd>${r.n || 0} / ${r.missing || 0}</dd></div></dl><label class="compare-tolerance">許容差 [${esc(r.unit || '単位なし')}]<input type="number" min="0" step="any" data-tolerance="${r.index}" value="${setting().tolerances[r.name] || ''}" placeholder="未設定" title="入力後、Enterまたは別の場所をクリックして確定"></label>${r.ratio != null ? `<p class="${r.exceeded > 0 ? 'compare-warning' : 'compare-muted'}">許容差の ${fmt(r.ratio)} 倍 / ${r.exceeded} 点超過${intervals.length ? ` / ${intervals.length}区間` : ''}</p>` : ''}${intervals.length ? `<div class="compare-exceedance-nav" data-exceedance-row="${r.index}"><span class="compare-exceedance-position" aria-live="polite"></span><div><button type="button" class="btn-secondary" data-exceedance-step="-1">前へ</button><button type="button" class="btn-secondary" data-exceedance-step="1">最初の超過へ</button></div></div>` : ''}`}</article>`;
+            }).join('') || '<p class="compare-empty">「比較を更新」で差の一覧を作成します。</p>';
             panel.querySelectorAll('[data-result]').forEach(btn => btn.onclick = () => run(async () => {
                 const r = rows[Number(btn.dataset.result)]; await api.select([r.name], false);
-                const width = Math.max((r.range[1] - r.range[0]) * 0.04, 0.1); zoom([r.time - width, r.time + width]); api.focusChannel(r.name);
+                const position = r.exceedanceIntervals?.findIndex(iv => iv.t0 <= r.time && r.time <= iv.t1) ?? -1;
+                if (position >= 0) jumpToExceedance(r, Number(btn.dataset.result), position);
+                else { const width = Math.max((r.range[1] - r.range[0]) * 0.04, 0.1); zoom([r.time - width, r.time + width], true); api.focusChannel(r.name, r.fileId); }
             }));
-            panel.querySelectorAll('[data-tolerance]').forEach(inp => inp.onchange = () => run(async () => {
+            panel.querySelectorAll('[data-exceedance-row]').forEach(nav => {
+                const index = Number(nav.dataset.exceedanceRow), r = rows[index];
+                syncExceedanceNavigation(index);
+                nav.querySelectorAll('[data-exceedance-step]').forEach(button => button.onclick = () => {
+                    const position = (exceedancePositions.get(index) ?? -1) + Number(button.dataset.exceedanceStep);
+                    jumpToExceedance(r, index, position);
+                });
+            });
+            panel.querySelectorAll('[data-tolerance]').forEach(inp => {
+                inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); inp.blur(); } });
+                inp.onchange = () => run(async () => {
                 const r = rows[Number(inp.dataset.tolerance)], n = Number(inp.value);
-                if (inp.value && (!Number.isFinite(n) || n <= 0)) return api.warning('許容差は正の値を指定してください');
+                if (!r) return;
+                if (inp.validity.badInput || (inp.value && (!Number.isFinite(n) || n <= 0))) { inp.value = setting().tolerances[r.name] || ''; return api.warning('許容差は正の値を指定してください'); }
                 setting().tolerances = { ...setting().tolerances }; delete setting().tolerances[r.name];
-                if (inp.value) setting().tolerances[r.name] = n; change(); await computeResults();
-            }));
+                if (inp.value) setting().tolerances[r.name] = n; change(); await computeResults(r.range);
+                });
+            });
+        }
+        function toleranceState(r) {
+            if (r.reason || !r.n) return { kind: 'unavailable', label: r.reason ? '比較不可' : '判定不可・有効点なし' };
+            if (!(r.tolerance > 0)) return { kind: 'unset', label: '許容差未設定' };
+            if (r.exceeded > 0) return { kind: 'exceeded', label: '許容差超過' };
+            return r.missing ? { kind: 'partial', label: '有効点は許容差内・欠損あり' } : { kind: 'within', label: '許容差内' };
+        }
+        function syncExceedanceNavigation(index) {
+            const nav = panel.querySelector(`[data-exceedance-row="${index}"]`), r = rows[index];
+            if (!nav || !r) return;
+            const position = exceedancePositions.get(index) ?? -1, intervals = r.exceedanceIntervals;
+            const iv = intervals[position];
+            nav.querySelector('.compare-exceedance-position').textContent = iv ? `${position + 1} / ${intervals.length} · ${fmt(iv.t0)}${iv.t0 === iv.t1 ? '' : `–${fmt(iv.t1)}`} s` : `${intervals.length}区間の超過があります`;
+            nav.querySelector('[data-exceedance-step="-1"]').disabled = position <= 0;
+            const next = nav.querySelector('[data-exceedance-step="1"]');
+            next.disabled = position >= intervals.length - 1; next.textContent = position < 0 ? '最初の超過へ' : '次へ';
+        }
+        function jumpToExceedance(r, index, position) {
+            const iv = r.exceedanceIntervals?.[position]; if (!iv) return;
+            exceedancePositions.set(index, position);
+            const margin = Math.max((r.range[1] - r.range[0]) * 0.02, (iv.t1 - iv.t0) * 0.25, 0.1);
+            zoom([iv.t0 - margin, iv.t1 + margin], true); api.focusChannel(r.name, r.fileId); syncExceedanceNavigation(index);
+        }
+        function exceedanceHighlights(group) {
+            if (!resultSignature || resultSignature !== comparisonSignature()) return [];
+            return rows.filter(r => r.exceedanceIntervals?.length && group.series.some(line => line.fileId === r.fileId && line.channelName === r.name));
         }
         function cursor(t) {
             latestCursor = t;
@@ -400,16 +473,17 @@
                 if (selection) { zoom(selection); await new Promise(requestAnimationFrame); }
                 const signature = comparisonSignature(), noteRange = [...range], noteChannels = [...s.selectedNames];
                 const context = JSON.parse(JSON.stringify(api.collect())); delete context.comparison;
-                const noteContext = JSON.parse(JSON.stringify({ settings: context, matches: setting().matches, rawTime, align: setting().align }));
+                const noteContext = JSON.parse(JSON.stringify({ settings: context, matches: setting().matches, rawTime, align: setting().align, tolerances: setting().tolerances }));
                 const noteFiles = Object.values(s.files).map(f => ({ name: f.name, label: label(f), role: f.role, offset: effectiveOffset(f) }));
                 const result = api.subIds().length ? await computeResults() : [];
                 const unchanged = () => noteMain === api.main() && signature === comparisonSignature() && JSON.stringify(activeRange()) === JSON.stringify(noteRange);
                 if (!result || !unchanged()) throw new Error('保存中に区間または比較条件が変わりました。入力したメモは残っています。条件を確認して保存し直してください。');
+                await new Promise(requestAnimationFrame); // Include newly computed exceedance highlights in the image.
                 const canvas = document.createElement('canvas'), img = new Image();
                 const url = api.image(); let image = '';
                 if (url) { img.src = url; await img.decode(); canvas.width = Math.min(img.width, 1000); canvas.height = Math.round(img.height * canvas.width / img.width); canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height); image = canvas.toDataURL('image/png'); if (image.length >= 400000) image = ''; }
                 if (!unchanged()) throw new Error('保存中に区間または比較条件が変わりました。入力したメモは残っています。条件を確認して保存し直してください。');
-                const note = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, text, t0: noteRange[0], t1: noteRange[1], created: new Date().toISOString(), channels: noteChannels, files: noteFiles, image, context: noteContext, results: result };
+                const note = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, text, t0: noteRange[0], t1: noteRange[1], created: new Date().toISOString(), channels: noteChannels, files: noteFiles, image, context: noteContext, results: result.map(({ exceedanceIntervals, ...summary }) => summary) };
                 const updated = [...setting().notes, note];
                 try { localStorage.setItem('csv-compare-storage-probe', JSON.stringify({ ...api.collect(), comparison: { ...setting(), notes: updated } })); localStorage.removeItem('csv-compare-storage-probe'); } catch { localStorage.removeItem('csv-compare-storage-probe'); throw new Error('メモの保存容量が不足しています。レポートへ保存してから古いメモを削除してください。'); }
                 setting().notes = updated;
@@ -424,7 +498,7 @@
             panel.querySelectorAll('[data-note-jump]').forEach(b => b.onclick = () => run(async () => {
                 const n = setting().notes[Number(b.dataset.noteJump)];
                 if (n.files.length !== Object.keys(s.files).length || n.files.some(f => !Object.values(s.files).some(x => x.name === f.name))) return api.warning('メモ時点のファイルを読み込んでください', n.files.map(f => f.name).join('、'));
-                const settings = { ...n.context.settings, fileInfos: n.files, comparison: { ...setting(), matches: n.context.matches || {}, align: n.context.align || {} } };
+                const settings = { ...n.context.settings, fileInfos: n.files, comparison: { ...setting(), matches: n.context.matches || {}, align: n.context.align || {}, tolerances: n.context.tolerances || setting().tolerances } };
                 await api.applyComparison(settings); rawTime = !!n.context.rawTime; $('compare-raw').checked = rawTime; await api.ensure(); selectRange([n.t0, n.t1]); zoom([n.t0, n.t1]); change();
             }));
             panel.querySelectorAll('[data-note-remove]').forEach(b => b.onclick = () => { setting().notes = setting().notes.filter((_, i) => i !== Number(b.dataset.noteRemove)); change(); renderNotes(); });
@@ -515,7 +589,12 @@
         $('compare-overview-plot').onpointercancel = () => { navStart = null; };
         let structure = '';
         function comparisonSignature(includeTolerances = true) {
-            return JSON.stringify([Object.entries(s.files).map(([id, f]) => [id, f.role, f.offset, f.timeData?.length, f.columns.map(c => [c.name, c.unit])]), [...s.selectedNames], [...s.bitChannels], s.channelAliases, setting().matches, setting().labels, includeTolerances ? setting().tolerances : null, rawTime]);
+            const files = Object.entries(s.files).map(([id, f]) => [id, f.role, f.offset, f.timeData?.length,
+                f.timeData?.[0], f.timeData?.[f.timeData.length - 1], f.headerInfo?.timeScale,
+                f.columns.map(c => [c.name, c.unit, !!c.isCrossFile])]);
+            const calculations = s.customRAMs.map(c => [c.name, c.unit, c.expr]);
+            const cycles = (s.driveIndex?.results || []).map(r => [r.fileId, r.effectiveId, r.align?.start, r.align?.end]);
+            return JSON.stringify([files, calculations, cycles, [...s.selectedNames], [...s.bitChannels], s.channelAliases, setting().matches, setting().labels, includeTolerances ? setting().tolerances : null, rawTime]);
         }
         function schedule() {
             if (raf !== null) return;
@@ -535,11 +614,17 @@
             });
         }
         function bindChart() {
-            s.chart.on('datazoom', () => { if (!selection) intervalChanged(); schedule(); });
+            s.chart.on('datazoom', () => {
+                const visible = api.visibleRange();
+                const changed = !lastVisibleRange || !visible || visible.some((value, i) => value !== lastVisibleRange[i]);
+                lastVisibleRange = visible;
+                if (changed && !selection && !resultNavigation) intervalChanged();
+                schedule();
+            });
             s.chart.on('updateAxisPointer', e => { const x = e.axesInfo?.find(a => a.axisDim === 'x'); if (x) cursor(Number(x.value)); });
         }
         renderPanel(); applyLayout();
-        return { schedule, bindChart, label, effectiveOffset, transformGroups, filterColumn, decorateChannel, reportHTML,
+        return { schedule, bindChart, label, effectiveOffset, transformGroups, filterColumn, decorateChannel, reportHTML, exceedanceHighlights,
             selectionRange: () => selection,
             selectRange, cancelRangeMode, openAlign: id => { selectedSub = id; setPane('align'); },
             brush: r => { if (!intervalMode) return false; cancelRangeMode(); selectRange(r); return true; },

@@ -28,6 +28,45 @@ r = C.compare(a, b, 100, [0, 3]); assert.equal(r.max, null); assert.equal(r.n, 0
 r = C.compare({ t: [0, 2, 4], v: [0, 1, 1] }, { t: [0, 1, 3, 4], v: [0, 1, 1, 1] }, 0, [0, 4], true);
 assert.equal(r.mismatchDuration, 1); assert.equal(r.totalDuration, 4);
 assert.equal(r.mainTransition.time, 2); assert.equal(r.subTransition.time, 1); assert.equal(r.transitionDelta, -1);
+
+// Runs follow actual baseline samples: equality, either missing signal, and ordinary
+// nonexceedances separate them. A tied absolute maximum keeps its first timestamp.
+const runTimes = [-1, 0, .25, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const runMain = { t: runTimes, v: [8, 2, -4, 4, 1, 3, NaN, 5, 6, 0, 2, 7] };
+const runSub = { t: runTimes, v: [0, 0, 0, 0, 0, 0, 0, 0, NaN, 0, 0, 0] };
+const runResult = C.compare(runMain, runSub, 0, [0, 8.5], false, 1, true);
+assert.deepEqual(runResult.exceedanceIntervals, [
+    { t0: 0, t1: 1, count: 3, max: 4, time: .25 },
+    { t0: 3, t1: 3, count: 1, max: 3, time: 3 },
+    { t0: 5, t1: 5, count: 1, max: 5, time: 5 },
+    { t0: 8, t1: 8, count: 1, max: 2, time: 8 },
+]);
+const { exceedanceIntervals, ...unchangedMetrics } = runResult;
+assert.deepEqual(unchangedMetrics, {
+    n: 8, missing: 2, max: 5, time: 5, mean: 13 / 8, rms: Math.sqrt(75 / 8),
+    mainTransition: null, subTransition: null, transitionDelta: null,
+    mismatchDuration: null, totalDuration: 0, exceeded: 6, ratio: 5,
+    points: [[0, 2], [.25, -4], [1, 4], [2, 1], [3, 3], [4, null], [5, 5], [6, null], [7, 0], [8, 2]],
+});
+assert.equal(exceedanceIntervals.reduce((sum, interval) => sum + interval.count, 0), runResult.exceeded);
+assert.deepEqual(C.compare(runMain, runSub, 0, [.1, 1], false, 1).exceedanceIntervals,
+    [{ t0: .25, t1: 1, count: 2, max: 4, time: .25 }]);
+assert.deepEqual(C.compare(runMain, runSub, 0, [.1, .9], false, 1).exceedanceIntervals,
+    [{ t0: .25, t1: .25, count: 1, max: 4, time: .25 }]);
+for (const tolerance of [undefined, null, 0, -1, NaN, Infinity]) {
+    assert.deepEqual(C.compare(runMain, runSub, 0, [0, 9], false, tolerance).exceedanceIntervals, []);
+}
+
+// Shifted comparison uses linear interpolation for analog signals and preceding
+// values for Bit signals, while interval timestamps remain in the baseline clock.
+const shiftedMain = { t: [10, 11, 12, 13, 14], v: [0, 0, 0, 0, 0] };
+const shiftedSub = { t: [0, 2, 4], v: [0, 4, 0] };
+assert.deepEqual(C.compare(shiftedMain, shiftedSub, 10, [10, 14], false, 1).exceedanceIntervals,
+    [{ t0: 11, t1: 13, count: 3, max: 4, time: 12 }]);
+const bitRun = C.compare(shiftedMain, shiftedSub, 10, [10, 14], true, 1);
+assert.deepEqual(bitRun.exceedanceIntervals, [{ t0: 12, t1: 13, count: 2, max: 4, time: 12 }]);
+assert.equal(bitRun.mismatchDuration, 2); assert.equal(bitRun.totalDuration, 4);
+
 assert.equal(C.alignmentScore(a, b, 2, [0, 3]).rms, 0);
 assert.equal(C.alignmentScore(a, b, 100, [0, 3]).rms, Infinity);
 assert.equal(C.sameUnit(' km/h ', 'km/h'), true); assert.equal(C.sameUnit('m/s', 'km/h'), false);

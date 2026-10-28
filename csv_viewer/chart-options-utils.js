@@ -113,7 +113,7 @@
     }
 
     /**
-     * X軸dataZoomペア（下部スライダー + inside ホイールズーム）を構築する。
+     * X軸dataZoomペア（全体ナビゲーター用の非表示スライダー + inside ホイールズーム）を構築する。
      * @param {object} p
      * @param {number} p.gridCount グリッド数（全グリッドをリンクする）
      * @param {number} p.start ズーム開始(%) / @param {number} p.end ズーム終了(%)
@@ -129,6 +129,9 @@
         return [
             {
                 type: 'slider',
+                // 全体図は比較ワークスペースのナビゲーターに統一する。
+                // 範囲指定・Undo等の操作対象(dataZoomIndex:0)は維持する。
+                show: false,
                 xAxisIndex,
                 start: p.start, end: p.end,
                 bottom: 8, height: 28,
