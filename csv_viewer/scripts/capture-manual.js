@@ -45,7 +45,7 @@ function writeSamples() {
     });
     const page = await context.newPage();
     const errors = [], shots = [], facts = { sampleCount: 121, samplePeriodSeconds: 0.5, comparisonTimeDelaySeconds: 2, comparisonPressureIncreaseKPa: 5 };
-    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'styles.css', 'parser-utils.js', 'compare-utils.js', 'chart-options-utils.js', 'layout-utils.js', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
+    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'styles.css', 'parser-utils.js', 'compare-utils.js', 'chart-options-utils.js', 'layout-utils.js', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css', 'save-workspace.js', 'save-workspace.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
     page.on('pageerror', error => errors.push(error.stack || error.message));
     async function settle() {
         await page.mouse.move(750, 25);
@@ -144,13 +144,16 @@ function writeSamples() {
             const note = window.__csvViewerDebug.state.comparison.notes[0];
             return { t0: note.t0, t1: note.t1, channels: note.channels, results: note.results.map(({ name, n, mean, rms, max, exceeded }) => ({ name, n, mean, rms, max, exceeded })) };
         });
-        await page.locator('#compare-template-name').fill('圧力と速度の比較');
-        await page.locator('#compare-template-save').click();
         await page.locator('#compare-note-text').scrollIntoViewIfNeeded();
-        await capture('notes', '区間と条件を伴うメモを保存。下部で比較テンプレートも保存。', '#compare-panel');
+        await capture('notes', '区間と条件を伴うメモを保存。再利用条件は共通の保存・再利用画面で管理。', '#compare-panel');
 
         await page.locator('#export-menu-btn').click();
-        await capture('export', '保存・出力メニュー。PNG、CSV、HTMLレポート、設定JSONの入口。', '#export-menu-panel');
+        await page.locator('#save-purpose').selectOption('template');
+        await page.locator('#compare-template-name').fill('圧力と速度の比較');
+        await page.locator('#compare-template-save').click();
+        await capture('save-template', '保存・再利用の次の試験へ比較条件。名前付きテンプレートを保存。', '.save-workspace-modal');
+        await page.locator('#save-purpose').selectOption('output');
+        await capture('export', '保存・再利用。目的を選び、PNG・CSV・HTML等を出力。', '.save-workspace-modal');
         await page.keyboard.press('Escape');
 
         await page.locator('.compare-tools > summary').click();

@@ -15,7 +15,7 @@
         let resultSignature = '', highlightFrame = null, resultNavigation = false;
         let lastVisibleRange = null;
         const exceedancePositions = new Map();
-        let noteDraft = '', templateNameDraft = '';
+        let noteDraft = '';
         const mapDrafts = new Map(), alignDrafts = new Map();
         function draftFor(store, id = currentSub()) {
             const main = api.main(), sub = s.files[id];
@@ -48,7 +48,7 @@
         const body = document.createElement('div'); body.className = 'compare-body';
         chartContainer.before(body); body.appendChild(chartContainer);
         const panel = document.createElement('aside'); panel.className = 'compare-panel'; panel.id = 'compare-panel'; panel.setAttribute('aria-label', '比較の準備と結果');
-        panel.innerHTML = `<nav class="compare-tabs" aria-label="比較パネル"><button data-pane="prepare">準備</button><button data-pane="align">時間合わせ</button><button data-pane="results">比較結果</button><button data-pane="notes">メモ・保存</button></nav><div id="compare-panel-content"></div>`;
+        panel.innerHTML = `<nav class="compare-tabs" aria-label="比較パネル"><button data-pane="prepare">準備</button><button data-pane="align">時間合わせ</button><button data-pane="results">比較結果</button><button data-pane="notes">メモ</button></nav><div id="compare-panel-content"></div>`;
         body.appendChild(panel);
         const bottom = document.createElement('div'); bottom.className = 'compare-overview';
         bottom.innerHTML = `<div class="compare-overview-heading"><span>全体ナビゲーター <small id="compare-overview-label"></small></span><span id="compare-range-label"></span></div><div id="compare-overview-plot"><canvas id="compare-overview-canvas" height="42"></canvas><div id="compare-overview-window"></div></div><div class="compare-range-inputs"><label>開始 <input id="compare-range-start" type="number" step="any" aria-label="表示区間の開始秒"> s</label><label>終了 <input id="compare-range-end" type="number" step="any" aria-label="表示区間の終了秒"> s</label><button id="compare-range-go" class="btn-secondary">表示</button><button id="compare-range-all" class="btn-secondary">全体</button></div>`;
@@ -81,7 +81,6 @@
         // Drafts belong to the workspace, not to replaceable panel DOM nodes.
         panel.addEventListener('input', e => {
             if (e.target.id === 'compare-note-text') noteDraft = e.target.value;
-            if (e.target.id === 'compare-template-name') templateNameDraft = e.target.value;
             rememberAlignInput(e.target);
         });
         panel.addEventListener('change', e => rememberAlignInput(e.target));
@@ -493,10 +492,9 @@
         }
         function download(name, text, type = 'application/json') { const url = URL.createObjectURL(new Blob([text], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
         function renderNotes() {
-            const notes = setting().notes, templates = loadTemplates();
-            $('compare-panel-content').innerHTML = `<h2>発見を残す</h2><p class="compare-muted">上部の解析対象、比較条件、数値と画像を一緒に保存します。</p><textarea id="compare-note-text" rows="3" maxlength="2000" placeholder="例：加速開始から応答が遅れる" aria-label="比較メモ"></textarea><button id="compare-note-add" class="btn-primary compare-wide">この区間をメモに保存</button><div id="compare-notes-list">${notes.map((n, i) => `<article class="compare-note"><button data-note-jump="${i}" class="compare-result-title">${fmt(n.t0)}–${fmt(n.t1)} s ↗</button><p>${esc(n.text)}</p><small>${esc(n.channels.join(' / '))}</small><button data-note-remove="${i}" class="btn-secondary">削除</button></article>`).join('')}</div><button id="compare-report" class="btn-secondary compare-wide">メモ付きHTMLレポート</button><hr><h2>次の試験に再利用</h2><label class="compare-field">テンプレート名<input id="compare-template-name" maxlength="100" placeholder="例：加速応答の比較"></label><div class="compare-two"><button id="compare-template-save" class="btn-primary">保存</button><button id="compare-template-export" class="btn-secondary">JSON書き出し</button></div><label class="compare-field">保存済みテンプレート<select id="compare-template-select"><option value="">選択してください</option>${templates.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('')}</select></label><div class="compare-two"><button id="compare-template-apply" class="btn-secondary">新しいログに適用</button><button id="compare-template-delete" class="btn-secondary">削除</button></div><label class="compare-template-import">JSONを読み込む<input id="compare-template-import" type="file" accept=".json"></label><p class="compare-muted">配置・式・対応・許容差・時間合わせの条件を再利用。前回の時間差は適用しません。</p>`;
+            const notes = setting().notes;
+            $('compare-panel-content').innerHTML = `<h2>発見を残す</h2><p class="compare-muted">上部の解析対象、比較条件、数値と画像を一緒に保存します。</p><textarea id="compare-note-text" rows="3" maxlength="2000" placeholder="例：加速開始から応答が遅れる" aria-label="比較メモ"></textarea><button id="compare-note-add" class="btn-primary compare-wide">この区間をメモに保存</button><div id="compare-notes-list">${notes.map((n, i) => `<article class="compare-note"><button data-note-jump="${i}" class="compare-result-title">${fmt(n.t0)}–${fmt(n.t1)} s ↗</button><p>${esc(n.text)}</p><small>${esc(n.channels.join(' / '))}</small><button data-note-remove="${i}" class="btn-secondary">削除</button></article>`).join('')}</div>`;
             $('compare-note-text').value = noteDraft;
-            $('compare-template-name').value = templateNameDraft;
             $('compare-note-add').disabled = noteBusy;
             $('compare-note-add').textContent = noteBusy ? 'メモを保存中…' : 'この区間をメモに保存';
             $('compare-note-add').onclick = () => run(async () => {
@@ -539,13 +537,7 @@
                 await api.applyComparison(settings); rawTime = !!n.context.rawTime; $('compare-raw').checked = rawTime; await api.ensure(); selectRange([n.t0, n.t1]); zoom([n.t0, n.t1]); change();
             }));
             panel.querySelectorAll('[data-note-remove]').forEach(b => b.onclick = () => { setting().notes = setting().notes.filter((_, i) => i !== Number(b.dataset.noteRemove)); change(); renderNotes(); });
-            $('compare-report').onclick = api.report;
-            const getName = () => $('compare-template-name').value.trim() || '比較テンプレート';
-            $('compare-template-save').onclick = () => run(() => { const t = template(getName()); storeTemplates([...templates.filter(x => x.name !== t.name), t]); change(); renderNotes(); api.success('テンプレートを保存しました'); });
-            $('compare-template-export').onclick = () => download('comparison-template.json', JSON.stringify(template(getName()), null, 2));
-            $('compare-template-apply').onclick = () => run(async () => { if ($('compare-template-select').value === '') return; await applyTemplate(templates[Number($('compare-template-select').value)]); });
-            $('compare-template-delete').onclick = () => run(() => { if ($('compare-template-select').value === '') return; storeTemplates(templates.filter((_, i) => i !== Number($('compare-template-select').value))); change(); renderNotes(); });
-            $('compare-template-import').onchange = e => run(async () => { const file = e.target.files[0]; if (!file) return; if (file.size > 2000000) throw new Error('テンプレートは2MB以下のJSONを指定してください'); await applyTemplate(JSON.parse(await file.text())); });
+
         }
         function reportHTML() {
             return `<h2>比較ワークスペース</h2><p>表示：${esc(setting().view)} / ${rawTime ? '元の時刻' : '時間合わせ適用'}。差分は基準 − 比較。</p><h3>チャンネル対応・時間合わせ条件</h3><pre>${esc(JSON.stringify({ matches: setting().matches, align: setting().align, tolerances: setting().tolerances }, null, 2))}</pre>` + setting().notes.map(n => `<section><h2>${esc(n.text)}</h2><p>${fmt(n.t0)}–${fmt(n.t1)} s / ${esc(n.created)}</p><p>${esc(n.channels.join(' / '))}</p>${n.image ? `<img class="chart" src="${n.image}" alt="メモ保存時の波形">` : '<p>保存時の波形画像なし</p>'}<table><tr><th>ファイル</th><th>役割</th><th>シフト s</th></tr>${n.files.map(f => `<tr><td>${esc(f.label)} (${esc(f.name)})</td><td>${esc(f.role)}</td><td>${fmt(f.offset)}</td></tr>`).join('')}</table><table><tr><th>チャンネル / 比較</th><th>最大絶対差</th><th>時刻 s</th><th>平均差</th><th>RMS差</th></tr>${n.results.map(r => `<tr><td>${esc(r.name)} / ${esc(r.fileLabel)}</td><td>${esc(r.reason || fmt(r.max))} ${esc(r.unit)}</td><td>${fmt(r.time)}</td><td>${fmt(r.mean)}</td><td>${fmt(r.rms)}</td></tr>`).join('')}</table><details><summary>保存時の解析条件</summary><pre>${esc(JSON.stringify(n.context, null, 2))}</pre></details></section>`).join('');
@@ -665,6 +657,25 @@
         renderPanel(); applyLayout();
         return { schedule, bindChart, label, effectiveOffset, transformGroups, filterColumn, decorateChannel, reportHTML, exceedanceHighlights, analysisContext, syncAnalysisContext,
             showAnalysisRange,
+            templates: {
+                list: loadTemplates,
+                save: name => { const saved = template(name), list = [...loadTemplates().filter(t => t.name !== name), saved]; storeTemplates(list); change(); api.success('テンプレートを保存しました'); return list.length - 1; },
+                export: name => download('comparison-template.json', JSON.stringify(template(name), null, 2)),
+                apply: index => applyTemplate(loadTemplates()[index]),
+                remove: index => { storeTemplates(loadTemplates().filter((_, i) => i !== index)); change(); },
+                import: async file => {
+                    if (file.size > 2000000) throw new Error('テンプレートは2MB以下のJSONを指定してください');
+                    const files = Object.entries(s.files).map(([id, value]) => ({ id, file: value, role: value.role }));
+                    const mainId = api.mainId(), subIds = api.subIds();
+                    const data = JSON.parse(await file.text());
+                    const current = Object.entries(s.files);
+                    if (api.mainId() !== mainId || JSON.stringify(api.subIds()) !== JSON.stringify(subIds)
+                        || current.length !== files.length || files.some((entry, index) => current[index][0] !== entry.id || current[index][1] !== entry.file || current[index][1].role !== entry.role)) {
+                        throw new Error('読み込み中に対象ログ・基準・比較順が変わりました。現在のログを確認し、テンプレートJSONを選び直してください。');
+                    }
+                    await applyTemplate(data);
+                }
+            },
             focusTime: t => {
                 const visible = api.visibleRange(), full = fullRange();
                 if (!Number.isFinite(t) || !full || (visible && t >= visible[0] && t <= visible[1])) return;

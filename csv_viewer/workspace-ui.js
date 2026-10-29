@@ -88,8 +88,7 @@
         $('file-list').after(clearRow);
         $('clear-all-btn').querySelector('.btn-label').textContent = '作業をすべてクリア';
         document.querySelectorAll('.toolbar-sep').forEach(el => el.remove());
-        for (const id of ['view-menu-btn', 'export-menu-btn']) $(id).setAttribute('aria-label', id === 'view-menu-btn' ? '表示設定' : '保存・出力');
-        $('export-menu-btn').querySelector('.btn-label').textContent = '保存・出力';
+        $('view-menu-btn').setAttribute('aria-label', '表示設定');
         $('toolbar-hint').setAttribute('role', 'status');
         document.querySelector('.chart-container').appendChild($('toolbar-hint'));
 

@@ -114,6 +114,7 @@ window.addEventListener('unhandledrejection', e => {
  */
 function setupModalA11y(overlay, modalEl, opts = {}) {
     const prevFocus = document.activeElement;
+    const canFocus = element => element && !element.disabled && !element.closest('[inert]') && element.getClientRects().length > 0;
     modalEl.setAttribute('role', 'dialog');
     modalEl.setAttribute('aria-modal', 'true');
     modalEl.setAttribute('tabindex', '-1');
@@ -137,10 +138,8 @@ function setupModalA11y(overlay, modalEl, opts = {}) {
 
         // Tab が押されるたびにリストを再取得（モーダル内容が動的に変わる場合に対応）
         const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-        const candidates = Array.from(modalEl.querySelectorAll(focusableSelector)).filter(el =>
-            // disabled な要素と、非表示（offsetParent===null）な要素は除外
-            !el.disabled && el.offsetParent !== null
-        );
+        // Busy sections may be inert while still visible. They are not Tab stops.
+        const candidates = Array.from(modalEl.querySelectorAll(focusableSelector)).filter(canFocus);
 
         if (candidates.length === 0) {
             // フォーカス可能な要素が無いときはブラウザのデフォルト動作だけ止める
@@ -188,8 +187,8 @@ function setupModalA11y(overlay, modalEl, opts = {}) {
     setTimeout(() => {
         if (!overlay.isConnected) return;
         const preferred = opts.initialFocus && modalEl.querySelector(opts.initialFocus);
-        const focusable = preferred || [...modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-            .find(el => !el.disabled && el.getClientRects().length);
+        const focusable = canFocus(preferred) ? preferred : [...modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+            .find(canFocus);
         (focusable || modalEl).focus();
     }, 0);
 }
@@ -7413,7 +7412,7 @@ function exitArrangeMode() {
 
 // ツールバーのドロップダウンメニューを有効化
 setupToolbarDropdown($('view-menu-btn'), $('view-menu-panel'));
-setupToolbarDropdown($('export-menu-btn'), $('export-menu-panel'));
+// Saving and reuse share CSVSaveWorkspace; this trigger is no longer a dropdown.
 
 // ─────────────────────────────────────────────────────────────
 // セクション折りたたみ（Files, Settings, Custom RAM, Events, Channels）
@@ -9175,6 +9174,12 @@ dom.presetLoad?.addEventListener('click', loadSelectedPreset);
 dom.presetDelete?.addEventListener('click', deleteSelectedPreset);
 renderPresetSelect();
 renderChannelFavSelect();
+CSVSaveWorkspace({
+    state, main: getMainFile, templates: comparisonWorkspace.templates,
+    refreshLibraries: () => { renderPresetSelect(); renderChannelFavSelect(); },
+    modal: (html, opts) => createModal(html, { ...opts, modalClass: 'save-workspace-modal' }),
+    warning: showWarning,
+});
 
 // 起動時にlocalStorageから設定を復元
 const _savedSettings = loadSettings();

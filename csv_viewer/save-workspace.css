@@ -1,0 +1,21 @@
+.save-workspace-modal { width:min(620px,calc(100vw - 24px)); max-width:620px; max-height:calc(100dvh - 32px); overflow:auto; padding:22px; box-sizing:border-box; }
+.save-workspace-heading { display:flex; align-items:center; gap:15px; margin-bottom:20px; }
+.save-workspace-heading h2 { flex:1; margin:0; font-size:18px; }
+.save-workspace-heading button { flex-shrink:0; }
+.save-workspace-content { min-width:0; color:var(--text-primary); }
+.save-workspace-content [hidden] { display:none!important; }
+.save-purpose-label,.save-library-label { display:block; font-size:12px; margin:14px 0 7px; font-weight:600; color:var(--text-primary); }
+.save-purpose-label { margin-top:0; }
+.save-workspace-content select,.save-workspace-content input { width:100%; box-sizing:border-box; min-width:0; color:var(--text-primary); background:var(--bg-main); border:1px solid var(--border-strong); border-radius:5px; padding:9px 10px; font:inherit; font-size:13px; }
+.save-workspace-content input[type=file] { padding:8px; font-size:12px; }
+.save-description { margin:12px 0 18px; font-size:12px; line-height:1.7; color:var(--text-secondary); overflow-wrap:anywhere; }
+.save-unavailable { font-size:12px; line-height:1.6; padding:10px 12px; margin:12px 0; border-left:3px solid var(--accent-soft); background:var(--bg-hover); }
+.save-actions { display:grid; gap:6px; }
+.save-actions .toolbar-menu-item { width:100%; white-space:normal; line-height:1.5; padding:11px 12px; border:1px solid var(--border); border-radius:5px; }
+.save-actions .menu-key { margin-left:auto; white-space:nowrap; }
+.save-library-controls { display:flex; flex-wrap:wrap; gap:8px; }
+.save-library-controls select { flex:1 0 100%; }
+.save-library-controls button,.save-button-row button { flex:1 1 auto; justify-content:center; min-height:34px; white-space:normal; }
+.save-button-row { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 18px; }
+.save-workspace-content button:disabled { opacity:.5; cursor:default; }
+@media(max-width:480px) { .save-workspace-modal { padding:16px; }.save-workspace-heading { gap:8px; margin-bottom:16px; }.save-workspace-heading h2 { font-size:17px; }.save-workspace-content select { font-size:12px; }.save-actions .toolbar-menu-item { font-size:12px; }.save-actions .menu-key { font-size:10px; } }
