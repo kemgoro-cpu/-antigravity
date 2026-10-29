@@ -1,6 +1,13 @@
 {
   "products": 37,
   "proposals": 55,
+  "implementationStatus": {
+    "complete": 4,
+    "partial": 2,
+    "pending": 49,
+    "remaining": 51
+  },
+  "defaultView": "remaining",
   "filters": "passed",
   "images": "loaded",
   "internalLinks": "valid",

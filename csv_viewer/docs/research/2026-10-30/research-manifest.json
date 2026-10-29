@@ -1,5 +1,13 @@
 {
   "date": "2026-10-30",
+  "progressUpdated": "2026-10-30",
+  "implementationCommit": "3f01bbb9386f1cc9551f1bbafff281bab0c3fc95",
+  "statusCounts": {
+    "complete": 4,
+    "partial": 2,
+    "pending": 49
+  },
+  "remainingCount": 51,
   "productCount": 37,
   "proposalCount": 55,
   "rawCandidateCount": 92,

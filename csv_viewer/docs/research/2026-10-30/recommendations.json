@@ -13,7 +13,18 @@
       "LabPlot",
       "Origin"
     ],
-    "originalRank": 1
+    "originalRank": 1,
+    "implementation": {
+      "originalRank": 1,
+      "status": "complete",
+      "done": [
+        "読み込み前に名前行・単位行・時間列・区切り・文字コードを確認、ファイルごとに訂正",
+        "単位行なしCSVの先頭サンプルを保持",
+        "装置名を付けた既存プリセットで読み込み設定を保存・再利用"
+      ],
+      "remaining": [],
+      "note": "複数ファイル、TRN、Shift_JIS、半角カナのパスを検証済み。"
+    }
   },
   {
     "rank": 2,
@@ -28,7 +39,17 @@
       "Grafana",
       "ParaView"
     ],
-    "originalRank": 2
+    "originalRank": 2,
+    "implementation": {
+      "originalRank": 2,
+      "status": "complete",
+      "done": [
+        "表示範囲／選択区間／全体を共通の解析対象として指定",
+        "比較・統計・XY・CSV・メモ・HTMLの区間と元時刻／時間合わせ後の基準を統一"
+      ],
+      "remaining": [],
+      "note": "Drive Indexは独立した試験条件で評価。HTML画像は解析対象へ移動して取得し、単一点だけ前後を含む。"
+    }
   },
   {
     "rank": 3,
@@ -45,7 +66,20 @@
       "Kibana",
       "ParaView"
     ],
-    "originalRank": 3
+    "originalRank": 3,
+    "implementation": {
+      "originalRank": 3,
+      "status": "partial",
+      "done": [
+        "原サンプルのレコード番号・元時刻・表示時刻・値・欠損を100行単位で表示",
+        "波形クリックで最寄りの行とページを選択し、行クリックで波形に目印を表示",
+        "同名ファイルも保存IDで選択対象を復元"
+      ],
+      "remaining": [
+        "波形から選んだ行を、表の見える位置まで自動スクロールする"
+      ],
+      "note": "330点ログの250番目を選ぶと3ページ目へ移るが、対象行がパネルの画面外に残ることを再確認。大量行は100行ページングで対応。"
+    }
   },
   {
     "rank": 4,
@@ -61,7 +95,18 @@
       "DewesoftX",
       "LabPlot"
     ],
-    "originalRank": 4
+    "originalRank": 4,
+    "implementation": {
+      "originalRank": 4,
+      "status": "complete",
+      "done": [
+        "時刻の重複・逆転・大きな間隔・除外時刻を診断",
+        "対象区間の欠損率・一定値、変換不能セルを表示",
+        "問題箇所から元データ・波形へ移動"
+      ],
+      "remaining": [],
+      "note": "大きな間隔・一定値は確認候補として表示。変換不能の明細は先頭1,000件、原文80文字まで。元値を補修・並べ替えしない。"
+    }
   },
   {
     "rank": 5,
@@ -74,7 +119,18 @@
     "benefit": "翌日開けると思ったログが残っていない事態を減らす。",
     "sources": [],
     "basis": "現状の監査からの独自提案",
-    "originalRank": 5
+    "originalRank": 5,
+    "implementation": {
+      "originalRank": 5,
+      "status": "complete",
+      "done": [
+        "保存中／次回復元可能／今回のみ／保存失敗／非対応をファイルごとに表示",
+        "最終成功時刻と失敗理由を表示し、保存・削除を再試行",
+        "200 MiB上限、復元順序、同名ファイルの選択復元を検証"
+      ],
+      "remaining": [],
+      "note": "元のCSV / TRNとファイル別の読み込み設定をブラウザ内に保存。"
+    }
   },
   {
     "rank": 6,
@@ -89,7 +145,20 @@
       "imc FAMOS",
       "Origin"
     ],
-    "originalRank": 6
+    "originalRank": 6,
+    "implementation": {
+      "originalRank": 6,
+      "status": "partial",
+      "done": [
+        "Drive Indexに必要な速度・燃料・時間の単位を検証",
+        "単位不明・不一致を未評価とし、条件変更後の旧結果を未更新と表示"
+      ],
+      "remaining": [
+        "m/s→km/h、Pa→kPaなどの換算候補を提示し、確認して適用する専用UI",
+        "換算前の値を保持したまま、換算後の値・単位を比較に使う操作"
+      ],
+      "note": "依頼された基本部分は完了。既存の時間s/ms指定やCustom RAMでの換算とは別に、元の提案の単位換算機能が残る。"
+    }
   },
   {
     "rank": 7,
@@ -104,7 +173,12 @@
       "Grafana",
       "Foxglove"
     ],
-    "originalRank": 7
+    "originalRank": 7,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 8,
@@ -120,7 +194,12 @@
       "NI DIAdem",
       "imc FAMOS"
     ],
-    "originalRank": 8
+    "originalRank": 8,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 9,
@@ -136,7 +215,12 @@
       "Kibana",
       "Perspective"
     ],
-    "originalRank": 9
+    "originalRank": 9,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 10,
@@ -150,7 +234,12 @@
     "sources": [
       "DewesoftX"
     ],
-    "originalRank": 10
+    "originalRank": 10,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 11,
@@ -166,7 +255,12 @@
       "Foxglove",
       "Perfetto"
     ],
-    "originalRank": 11
+    "originalRank": 11,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 12,
@@ -182,7 +276,12 @@
       "LabPlot",
       "Vector CANape"
     ],
-    "originalRank": 12
+    "originalRank": 12,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 13,
@@ -198,7 +297,12 @@
       "Orange",
       "ParaView"
     ],
-    "originalRank": 13
+    "originalRank": 13,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 14,
@@ -214,7 +318,12 @@
       "Metabase",
       "DataGraph"
     ],
-    "originalRank": 44
+    "originalRank": 44,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 15,
@@ -230,7 +339,12 @@
       "LabPlot",
       "Rerun"
     ],
-    "originalRank": 14
+    "originalRank": 14,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 16,
@@ -245,7 +359,12 @@
       "PicoScope",
       "DewesoftX"
     ],
-    "originalRank": 15
+    "originalRank": 15,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 17,
@@ -260,7 +379,12 @@
       "imc FAMOS",
       "NI DIAdem"
     ],
-    "originalRank": 16
+    "originalRank": 16,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 18,
@@ -273,7 +397,12 @@
     "benefit": "誤った自動合わせに気付きやすくなる。",
     "sources": [],
     "basis": "現状の監査からの独自提案",
-    "originalRank": 17
+    "originalRank": 17,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 19,
@@ -289,7 +418,12 @@
       "Tableau",
       "Grafana"
     ],
-    "originalRank": 18
+    "originalRank": 18,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 20,
@@ -302,7 +436,12 @@
     "benefit": "後日同じ結果を再現し、条件の違いを説明しやすい。",
     "sources": [],
     "basis": "現状の監査からの独自提案",
-    "originalRank": 19
+    "originalRank": 19,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 21,
@@ -315,7 +454,12 @@
     "benefit": "不等間隔データでも長く滞在した状態の影響を評価できる。",
     "sources": [],
     "basis": "現状の監査からの独自提案",
-    "originalRank": 20
+    "originalRank": 20,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 22,
@@ -330,7 +474,12 @@
       "Grafana",
       "asammdf"
     ],
-    "originalRank": 21
+    "originalRank": 21,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 23,
@@ -346,7 +495,12 @@
       "Origin",
       "Metabase"
     ],
-    "originalRank": 22
+    "originalRank": 22,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 24,
@@ -361,7 +515,12 @@
       "Orange",
       "Veusz"
     ],
-    "originalRank": 23
+    "originalRank": 23,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 25,
@@ -376,7 +535,12 @@
       "Perfetto",
       "Saleae Logic"
     ],
-    "originalRank": 24
+    "originalRank": 24,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 26,
@@ -391,7 +555,12 @@
       "asammdf",
       "Saleae Logic"
     ],
-    "originalRank": 41
+    "originalRank": 41,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 27,
@@ -407,7 +576,12 @@
       "Veusz",
       "Grafana"
     ],
-    "originalRank": 25
+    "originalRank": 25,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 28,
@@ -422,7 +596,12 @@
       "MATLAB Signal Analyzer",
       "NI DIAdem"
     ],
-    "originalRank": 26
+    "originalRank": 26,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 29,
@@ -437,7 +616,12 @@
       "Perfetto",
       "Rerun"
     ],
-    "originalRank": 27
+    "originalRank": 27,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 30,
@@ -452,7 +636,12 @@
       "Power BI",
       "Origin"
     ],
-    "originalRank": 28
+    "originalRank": 28,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 31,
@@ -467,7 +656,12 @@
       "NI DIAdem",
       "Datasette"
     ],
-    "originalRank": 29
+    "originalRank": 29,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 32,
@@ -483,7 +677,12 @@
       "Veusz",
       "imc FAMOS"
     ],
-    "originalRank": 30
+    "originalRank": 30,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 33,
@@ -499,7 +698,12 @@
       "LabPlot",
       "Orange"
     ],
-    "originalRank": 31
+    "originalRank": 31,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 34,
@@ -514,7 +718,12 @@
       "Perspective",
       "Papa Parse"
     ],
-    "originalRank": 32
+    "originalRank": 32,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 35,
@@ -529,7 +738,12 @@
       "Apache ECharts",
       "Foxglove"
     ],
-    "originalRank": 33
+    "originalRank": 33,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 36,
@@ -545,7 +759,12 @@
       "Datawrapper",
       "RAWGraphs"
     ],
-    "originalRank": 34
+    "originalRank": 34,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 37,
@@ -561,7 +780,12 @@
       "Origin",
       "Tableau"
     ],
-    "originalRank": 35
+    "originalRank": 35,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 38,
@@ -575,7 +799,12 @@
     "sources": [
       "Foxglove"
     ],
-    "originalRank": 36
+    "originalRank": 36,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 39,
@@ -591,7 +820,12 @@
       "LabPlot",
       "DataGraph"
     ],
-    "originalRank": 37
+    "originalRank": 37,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 40,
@@ -606,7 +840,12 @@
       "Veusz",
       "LabPlot"
     ],
-    "originalRank": 38
+    "originalRank": 38,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 41,
@@ -621,7 +860,12 @@
       "Origin",
       "PicoScope"
     ],
-    "originalRank": 39
+    "originalRank": 39,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 42,
@@ -636,7 +880,12 @@
       "RAWGraphs",
       "Datawrapper"
     ],
-    "originalRank": 40
+    "originalRank": 40,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 43,
@@ -650,7 +899,12 @@
     "sources": [
       "asammdf"
     ],
-    "originalRank": 42
+    "originalRank": 42,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 44,
@@ -665,7 +919,12 @@
       "Veusz",
       "imc FAMOS"
     ],
-    "originalRank": 43
+    "originalRank": 43,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 45,
@@ -681,7 +940,12 @@
       "Foxglove",
       "KNIME"
     ],
-    "originalRank": 45
+    "originalRank": 45,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 46,
@@ -696,7 +960,12 @@
       "Rerun",
       "Foxglove"
     ],
-    "originalRank": 46
+    "originalRank": 46,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 47,
@@ -711,7 +980,12 @@
       "KNIME",
       "Grafana"
     ],
-    "originalRank": 47
+    "originalRank": 47,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 48,
@@ -727,7 +1001,12 @@
       "LabPlot",
       "Vector vSignalyzer"
     ],
-    "originalRank": 48
+    "originalRank": 48,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 49,
@@ -743,7 +1022,12 @@
       "PicoScope",
       "PlotJuggler"
     ],
-    "originalRank": 49
+    "originalRank": 49,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 50,
@@ -759,7 +1043,12 @@
       "Rerun",
       "DewesoftX"
     ],
-    "originalRank": 50
+    "originalRank": 50,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 51,
@@ -775,7 +1064,12 @@
       "Perspective",
       "Datasette"
     ],
-    "originalRank": 51
+    "originalRank": 51,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 52,
@@ -791,7 +1085,12 @@
       "DewesoftX",
       "LabPlot"
     ],
-    "originalRank": 52
+    "originalRank": 52,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 53,
@@ -806,7 +1105,12 @@
       "Orange",
       "Origin"
     ],
-    "originalRank": 53
+    "originalRank": 53,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 54,
@@ -821,7 +1125,12 @@
       "PlotJuggler",
       "Foxglove"
     ],
-    "originalRank": 54
+    "originalRank": 54,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   },
   {
     "rank": 55,
@@ -837,6 +1146,11 @@
       "Metabase",
       "Power BI"
     ],
-    "originalRank": 55
+    "originalRank": 55,
+    "implementation": {
+      "status": "pending",
+      "done": [],
+      "remaining": []
+    }
   }
 ]
