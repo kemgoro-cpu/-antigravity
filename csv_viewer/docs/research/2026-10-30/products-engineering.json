@@ -1,0 +1,98 @@
+[
+  {
+    "name": "PlotJuggler",
+    "category": "計測・波形",
+    "url": "https://github.com/PlotJuggler/PlotJuggler",
+    "feature": "複数記録の比較、信号変換、タブとドッキング配置の保存に対応。",
+    "transfer": "同じログを共有する用途別の解析ページと計算レシピを保存する。",
+    "caveat": "現行公式リポジトリは4系。旧系統の機能・キー操作との同一性は断定しない。"
+  },
+  {
+    "name": "Vector CANape",
+    "category": "計測・波形",
+    "url": "https://www.vector.com/en/product/canape/",
+    "feature": "ECU計測・適合に加え、データ解析とレポート生成の自動化を提供。",
+    "transfer": "読み込みから評価・報告までの処理手順を保存し、次の試験で再実行する。",
+    "caveat": "ECU書込みや計測接続は本ビューアの主用途外。解析の操作原理を参考にする。"
+  },
+  {
+    "name": "Vector vSignalyzer",
+    "category": "計測・波形",
+    "url": "https://www.vector.com/en/product/vsignalyzer/",
+    "feature": "条件によるデータマイニング、評価と帳票の自動化、異名信号のThesaurusを提供。",
+    "transfer": "複数試験の評価一覧と、単位・意味を含む信号対応辞書を追加する。",
+    "caveat": "現状にも名前対応とテンプレートはある。一括評価と辞書の情報拡張が差分。"
+  },
+  {
+    "name": "ETAS MDA",
+    "category": "計測・波形",
+    "url": "https://www.etas.com/ww/en/products-services/data-acquisition-processing-tools/software-products/measure-data-analyzer-mda/",
+    "feature": "波形・表・イベント・統計などの時刻同期と、レイヤーによる画面整理に対応。",
+    "transfer": "波形と同期する生データ表、状態変化一覧、複数解析ページを追加する。",
+    "caveat": "表では観測値と補間値を区別する。現状の読み込みプレビューとは役割が異なる。"
+  },
+  {
+    "name": "NI DIAdem",
+    "category": "計測・波形",
+    "url": "https://www.ni.com/en/shop/data-acquisition-and-control/application-software-for-data-acquisition-and-control-category/what-is-diadem.html",
+    "feature": "メタデータ検索、混在データ同期、標準化した解析と帳票の自動化に対応。",
+    "transfer": "試験属性でログを探し、共通の評価条件と報告構成を再利用する。",
+    "caveat": "ローカルの台帳から始める。大規模なサーバー構成の採用を前提としない。"
+  },
+  {
+    "name": "imc FAMOS",
+    "category": "計測・波形",
+    "url": "https://www.imc-tm.com/products/measurement-software/imc-famos",
+    "feature": "単位・サンプリング変換、周期イベントの処理、マクロによる解析に対応。",
+    "transfer": "確認付き単位換算、繰り返し動作の整列比較、計算レシピを追加する。",
+    "caveat": "元データは保持し、単位文字列が似ているだけの信号を同じ物理量と決めない。"
+  },
+  {
+    "name": "DewesoftX",
+    "category": "計測・波形",
+    "url": "https://dewesoft.com/academy/online/connect/dewesoftx-post-processing",
+    "feature": "記録データの再生、オフライン再計算、イベント、動画の同期表示を提供。",
+    "transfer": "イベント前後の区間再生と、対象を明示した解析再実行に応用する。",
+    "caveat": "動画同期は対応データがある場合に限り有用。ブラウザのみの実装可否は別途検証する。"
+  },
+  {
+    "name": "asammdf",
+    "category": "計測・波形",
+    "url": "https://asammdf.readthedocs.io/en/latest/gui.html",
+    "feature": "波形・数値・表、元値と換算値、補間方式、複数ファイル処理を提供。",
+    "transfer": "生データ表、サンプル単位移動、信号型と補間規則の明示に応用する。",
+    "caveat": "MDF対応には変換器等の追加が必要になり得る。ブラウザ単体で使える機能とは区別する。"
+  },
+  {
+    "name": "MATLAB Signal Analyzer",
+    "category": "計測・波形",
+    "url": "https://www.mathworks.com/help/signal/ref/signalanalyzer-app.html",
+    "feature": "時間・周波数・時間周波数の表示と、信号前処理・欠損処理に対応。",
+    "transfer": "原波形と処理後の比較プレビュー、選択区間のFFTとスペクトログラムを追加する。",
+    "caveat": "不等間隔・欠損・窓関数・単位を明示する。欠損の自動補完は既定にしない。"
+  },
+  {
+    "name": "Saleae Logic",
+    "category": "計測・波形",
+    "url": "https://new.saleae.com/support/logic-software/viewing-and-analyzing-data/measurements-timing-markers",
+    "feature": "区間測定、単独と対のマーカー、名前・色・ノートの編集を提供。",
+    "transfer": "複数のマーカーと測定区間を同時に保持し、一覧から波形へ復帰できるようにする。",
+    "caveat": "現状にも2点計測とメモはある。複数組の同時保持・比較を追加価値とする。"
+  },
+  {
+    "name": "PulseView",
+    "category": "計測・波形",
+    "url": "https://sigrok.org/wiki/Pulseview",
+    "feature": "高速波形表示、トレースのグループ化、デコーダーによる意味付き表示を提供。",
+    "transfer": "ギヤや制御モードなど、CSV内の状態列を意味付きの帯にして表示する。",
+    "caveat": "状態帯は操作原理からの応用提案。生の通信バスをデコードする機能とは分ける。"
+  },
+  {
+    "name": "PicoScope",
+    "category": "計測・波形",
+    "url": "https://www.picotech.com/library/knowledge-bases/oscilloscopes/mask-limit-testing",
+    "feature": "波形が許容マスクを超えた箇所の強調と、違反回数の集計に対応。",
+    "transfer": "固定絶対差に加え、時間に応じて変わる上限・下限の許容帯を追加する。",
+    "caveat": "一般的な固定許容差と超過ナビは実装済み。判定規則と時間境界を明記する。"
+  }
+]

@@ -1,0 +1,106 @@
+[
+  {
+    "name": "Power Query",
+    "category": "CSV・分析・BI",
+    "url": "https://learn.microsoft.com/en-us/power-query/connectors/text-csv",
+    "feature": "CSV取込時に文字コード・区切り・型判定方法を指定し、結果を確認できる。",
+    "transfer": "名前行・単位行なし・時間列・先頭データを読込前に確認する画面。",
+    "caveat": "型の自動推定も誤る可能性があるため、推定内容を表示し訂正可能にする。"
+  },
+  {
+    "name": "Origin",
+    "category": "CSV・分析・BI",
+    "url": "https://www.originlab.com/index.aspx?go=Products/Origin/HandlingRepetitiveTasks",
+    "feature": "読込設定と解析テンプレートを再利用し、複数データの一括処理と結果集計を行う。",
+    "transfer": "既存比較テンプレートを試験セットへ順次適用し、評価一覧とレポートを作る。",
+    "caveat": "新しい試験の時間差を無条件に流用せず、対応付けや時間合わせの失敗を区別する。"
+  },
+  {
+    "name": "Tableau",
+    "category": "CSV・分析・BI",
+    "url": "https://help.tableau.com/current/pro/desktop/en-us/actions_dashboards.htm",
+    "feature": "一つのビューで選択したデータを使い、ほかのビューを絞り込む連動操作。",
+    "transfer": "XY・分布・生データ表・時系列を同じ選択データで連動させる。",
+    "caveat": "表示の強調と解析対象の絞り込みを区別し、対象範囲を明示する。"
+  },
+  {
+    "name": "Power BI",
+    "category": "CSV・分析・BI",
+    "url": "https://learn.microsoft.com/en-us/power-bi/create-reports/desktop-bookmarks",
+    "feature": "ブックマークに含めるデータ条件・表示状態・対象ビューを個別指定できる。",
+    "transfer": "テンプレート適用時に表示だけ戻すか比較条件も戻すかを選択する。",
+    "caveat": "ブックマークは復元範囲の参考であり、IndexedDBの保存状態表示を備える根拠ではない。"
+  },
+  {
+    "name": "LabPlot",
+    "category": "CSV・分析・BI",
+    "url": "https://labplot.org/pages/features/",
+    "feature": "読込フィルタ、プロジェクト整理、小型グラフ、分布図、各種ファイル形式とSVG等の出力。",
+    "transfer": "計測器別の読込設定、チャンネル候補の小型波形、区間分布の比較。",
+    "caveat": "大量信号の小型波形は検索結果などに限定し、既存の遅延読込を損なわない。"
+  },
+  {
+    "name": "Veusz",
+    "category": "CSV・分析・BI",
+    "url": "https://veusz.github.io/features/",
+    "feature": "色・サイズを持つXY、複数の図や軸、PDF・SVG・EMF等のベクター出力。",
+    "transfer": "XYの第3信号色分けと、資料で拡大しても読めるSVG出力。",
+    "caveat": "別途公式読込マニュアルで外部データ参照／文書内保存・再読込も確認。ログハッシュ等の来歴記録は本ビューア向けの独自案。"
+  },
+  {
+    "name": "RAWGraphs",
+    "category": "CSV・分析・BI",
+    "url": "https://github.com/rawgraphs/rawgraphs-app",
+    "feature": "表や貼り付けデータをブラウザ内で処理し、編集可能なSVGの可視化を作る。",
+    "transfer": "Excelからの貼り付け読込と、後段の資料編集に使えるベクター出力。",
+    "caveat": "ローカル処理自体は本ビューアも既存。貼り付け時の列・単位確認を省略しない。"
+  },
+  {
+    "name": "Datawrapper",
+    "category": "CSV・分析・BI",
+    "url": "https://www.datawrapper.de/features",
+    "feature": "注釈・強調、色の識別性確認、レスポンシブ表示、PDF・SVG出力。",
+    "transfer": "波形内の矢印注記、色と線種による識別、資料用の出力プリセット。",
+    "caveat": "既存メモ・PNG出力の拡張として取り入れ、クラウドへのログ送信は導入しない。"
+  },
+  {
+    "name": "DataGraph",
+    "category": "CSV・分析・BI",
+    "url": "https://www.visualdatatools.com/DataGraph/Manual.pdf",
+    "feature": "描画グループ単位の条件マスクと、Hide／Excludeによる軸範囲の扱いの区別。",
+    "transfer": "運転条件を共通マスクとしてXY・統計へ適用し、非表示と解析除外を分ける。",
+    "caveat": "公式PDFの検索索引にある該当節を確認。全文取得は失敗し、現行UIの詳細は未確認。"
+  },
+  {
+    "name": "Orange",
+    "category": "CSV・分析・BI",
+    "url": "https://orangedatamining.com/widget-catalog/visualize/scatterplot/",
+    "feature": "XY点群の選択出力、色・形・サイズへの属性設定、選択点ラベル、回帰線。",
+    "transfer": "XYで選んだ点を元の時刻・CSV行へ戻し、波形と表で確認する。",
+    "caveat": "元行IDを描画後も保持する。点の位置をランダムにずらすジッターは計測波形では採用しない。"
+  },
+  {
+    "name": "gnuplot",
+    "category": "CSV・分析・BI",
+    "url": "https://gnuplot.info/docs_6.1/loc14384.html",
+    "feature": "複数のグラフを同じ画面やページへ配置するmultiplot。別の公式節で関数フィットも確認。",
+    "transfer": "時系列・XY・分布を一つの解析シートに配置し、選択範囲で比較する。",
+    "caveat": "参照した文書は6.1系列。最新安定版の全環境での操作性や描画速度を実測していない。"
+  },
+  {
+    "name": "KNIME",
+    "category": "CSV・分析・BI",
+    "url": "https://docs.knime.com/ap/latest/analytics_platform_components_guide/",
+    "feature": "処理を再利用可能なコンポーネントにまとめ、設定と実行状態を表示する。",
+    "transfer": "読込・時間合わせ・集計・レポートの処理状態と再利用レシピを表示する。",
+    "caveat": "ノード編集環境全体の導入は大きすぎるため、最初は処理一覧と未更新表示に限定する。"
+  },
+  {
+    "name": "SciDAVis",
+    "category": "CSV・分析・BI",
+    "url": "https://scidavis.sourceforge.net/about/node3.html",
+    "feature": "表・図・メモをプロジェクトで整理し、FFT・フィルタ・フィット・SVG/PDF出力を扱う。",
+    "transfer": "一つの試験に複数の解析結果をまとめる。振動用途が明確なら周波数解析を追加する。",
+    "caveat": "機能概要は2017年表記。現行UIや対応環境は未確認で、最新版の根拠には使用しない。"
+  }
+]

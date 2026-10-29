@@ -1,0 +1,842 @@
+[
+  {
+    "rank": 1,
+    "title": "読み込み前プレビューと単位行なし対応",
+    "phase": "A",
+    "cost": "M",
+    "category": "読み込み",
+    "current": "単位行なしの3点CSVが2点になり、先頭0秒が消えることを実測。文字コード・読込後プレビューは既存。",
+    "proposal": "名前行／単位行なし／時間列／区切りを先頭数行で確認し、装置別の読み込み設定を保存する。",
+    "benefit": "最初のデータ欠落を防ぎ、Excelでの前加工を減らす。",
+    "sources": [
+      "Power Query",
+      "LabPlot",
+      "Origin"
+    ],
+    "originalRank": 1
+  },
+  {
+    "rank": 2,
+    "title": "すべての解析で対象区間・時間基準を統一",
+    "phase": "A",
+    "cost": "M",
+    "category": "正確さ",
+    "current": "比較・メモは選択区間優先、XY・CSVは表示範囲。XYは保存済みシフトを使う。",
+    "proposal": "共通の「選択区間／表示範囲／全体」と「元時刻／時間合わせ後」を表示し、実行前に対象を確認できるようにする。",
+    "benefit": "同じ画面から違う区間を解析・出力してしまう混乱を減らす。",
+    "sources": [
+      "Grafana",
+      "ParaView"
+    ],
+    "originalRank": 2
+  },
+  {
+    "rank": 3,
+    "title": "波形と同期する生データ表",
+    "phase": "A",
+    "cost": "M",
+    "category": "探索",
+    "current": "ホバー、2点計測、統計はあるが、波形と行選択が連動する常設表はない。",
+    "proposal": "クリックした時刻へ表をスクロール。原時刻・補正後時刻・値・欠損を表示し、行選択から波形へ戻る。",
+    "benefit": "Excelを開き直さず、異常点の前後を正確に確認できる。",
+    "sources": [
+      "ETAS MDA",
+      "asammdf",
+      "Kibana",
+      "ParaView"
+    ],
+    "originalRank": 3
+  },
+  {
+    "rank": 4,
+    "title": "データ品質の診断パネル",
+    "phase": "A",
+    "cost": "M",
+    "category": "正確さ",
+    "current": "読み込みエラーや比較欠損数は既存。全体の時刻品質をまとめる常設画面はない。",
+    "proposal": "時刻重複・逆転・間隔の飛び・欠損率・一定値を集計し、該当区間へ移動。数値として解釈できないセルを明示する。",
+    "benefit": "試験差と計測不良を切り分け、解析の前提を確認できる。",
+    "sources": [
+      "Power Query",
+      "DewesoftX",
+      "LabPlot"
+    ],
+    "originalRank": 4
+  },
+  {
+    "rank": 5,
+    "title": "復元・保存状態の常設表示",
+    "phase": "A",
+    "cost": "S",
+    "category": "保存",
+    "current": "200 MiB上限の自動復元あり。対象外は一時通知、保存失敗は主にコンソール。",
+    "proposal": "各ファイルに「次回復元可能／今回のみ／保存失敗」、最終保存時刻と再試行を表示する。",
+    "benefit": "翌日開けると思ったログが残っていない事態を減らす。",
+    "sources": [],
+    "basis": "現状の監査からの独自提案",
+    "originalRank": 5
+  },
+  {
+    "rank": 6,
+    "title": "単位検証と明示的な単位変換",
+    "phase": "A",
+    "cost": "M",
+    "category": "正確さ",
+    "current": "時間s/ms補正と比較の単位不一致除外は既存。Drive Indexはkm/h・L/h・s前提。",
+    "proposal": "まず必要単位と結果未更新を表示。次にm/s→km/h、Pa→kPa等の換算候補を確認付きで適用し、元値を保持する。",
+    "benefit": "単位の違う同一信号を比較でき、誤った評価値を防ぐ。",
+    "sources": [
+      "imc FAMOS",
+      "Origin"
+    ],
+    "originalRank": 6
+  },
+  {
+    "rank": 7,
+    "title": "多状態のタイムラインと滞在時間",
+    "phase": "A",
+    "cost": "M",
+    "category": "探索",
+    "current": "Bit表示・Bit不一致時間は既存。ギヤや制御モードなど3値以上の状態表現は未整備。",
+    "proposal": "0/1/2等を停止／走行／減速やギヤ名の帯で表し、状態別秒数・遷移回数・状態ごとの平均を集計する。",
+    "benefit": "制御が切り替わった理由と時間を波形から追いやすい。",
+    "sources": [
+      "Grafana",
+      "Foxglove"
+    ],
+    "originalRank": 7
+  },
+  {
+    "rank": 8,
+    "title": "比較テンプレートによる複数試験の一括評価",
+    "phase": "A",
+    "cost": "L",
+    "category": "繰り返し",
+    "current": "テンプレート保存と複数ファイル比較は既存。試験セットを順に処理する一括実行はない。",
+    "proposal": "対応付け・条件・許容差を試験セットへ適用し、試験×評価項目の一覧と個別レポートを作る。時間合わせは試験ごとに再確認可能にする。",
+    "benefit": "同じ操作を何度も繰り返す作業を大きく減らす。",
+    "sources": [
+      "Origin",
+      "NI DIAdem",
+      "imc FAMOS"
+    ],
+    "originalRank": 8
+  },
+  {
+    "rank": 9,
+    "title": "基準・比較・差分を選べるCSV出力",
+    "phase": "A",
+    "cost": "M",
+    "category": "出力",
+    "current": "通常CSV保存は基準の表示範囲と表示列。比較側は直接含まれず、計算差分は別生成が必要。",
+    "proposal": "出力対象を選べる画面を用意。各ファイルの原時刻表と共通時刻へ補間した比較表を区別し、条件も併記する。",
+    "benefit": "報告用の差分表や後工程のExcel集計を短い手順で作れる。",
+    "sources": [
+      "asammdf",
+      "Kibana",
+      "Perspective"
+    ],
+    "originalRank": 9
+  },
+  {
+    "rank": 10,
+    "title": "イベント条件に継続時間・ヒステリシス",
+    "phase": "A",
+    "cost": "M",
+    "category": "探索",
+    "current": "比較・論理式によるイベント検出とジャンプは既存。",
+    "proposal": "「100超が0.5秒継続」「95未満で解除」「0.1秒以下の途切れを統合」を追加。欠損は正常とみなさない。",
+    "benefit": "ノイズ由来の細かいイベントを減らし、本当に見る区間を絞れる。",
+    "sources": [
+      "DewesoftX"
+    ],
+    "originalRank": 10
+  },
+  {
+    "rank": 11,
+    "title": "複数の解析ページと固定参照チャンネル",
+    "phase": "B",
+    "cost": "M",
+    "category": "操作",
+    "current": "配置保存・お気に入りは既存。燃料／速度／制御を同時に保持するページはない。",
+    "proposal": "ログを共有したまま解析ページを切り替え、車速などの基準段を上部に固定する。ページ間の時刻同期は選択式。",
+    "benefit": "チャンネルの出し入れと配置変更を減らす。",
+    "sources": [
+      "PlotJuggler",
+      "Foxglove",
+      "Perfetto"
+    ],
+    "originalRank": 11
+  },
+  {
+    "rank": 12,
+    "title": "チャンネルの階層・タグ・説明辞書",
+    "phase": "B",
+    "cost": "M",
+    "category": "操作",
+    "current": "名前・単位・日本語別名検索、お気に入り、共通／未対応絞り込みは既存。",
+    "proposal": "エンジン／変速機／燃料等のツリーとタグ、意味・取得元・推奨表示を追加。規則と手動の両方で分類する。",
+    "benefit": "数百信号から目当ての信号を探す時間を減らす。",
+    "sources": [
+      "asammdf",
+      "LabPlot",
+      "Vector CANape"
+    ],
+    "originalRank": 12
+  },
+  {
+    "rank": 13,
+    "title": "XY・分布・時系列の連動選択",
+    "phase": "B",
+    "cost": "L",
+    "category": "探索",
+    "current": "XY散布図は既存。点を選んで元の時刻区間へ戻る操作はない。",
+    "proposal": "XY上の点群を囲むと該当時刻を全波形と表で強調。複数の離れた時刻を保持する。",
+    "benefit": "散布図の外れ点が、いつ・どんな条件で発生したか追跡できる。",
+    "sources": [
+      "Tableau",
+      "Orange",
+      "ParaView"
+    ],
+    "originalRank": 13
+  },
+  {
+    "rank": 14,
+    "title": "条件を選択式で作り解析全体へ適用",
+    "phase": "B",
+    "cost": "M",
+    "category": "探索",
+    "current": "AND/ORのイベント式は既存。追加は式を書かない条件作成と共通の抽出条件。",
+    "proposal": "ギヤや状態の件数一覧から選び、温度・車速の条件を追加。XY・表・統計に適用範囲と除外数を表示する。",
+    "benefit": "式に不慣れでも条件別に調べられ、選択漏れに気付きやすい。",
+    "sources": [
+      "Datasette",
+      "Metabase",
+      "DataGraph"
+    ],
+    "originalRank": 44
+  },
+  {
+    "rank": 15,
+    "title": "解析プロジェクトを1ファイルで持ち運ぶ",
+    "phase": "B",
+    "cost": "L",
+    "category": "保存",
+    "current": "設定JSON・比較テンプレート・HTMLレポート・自動復元は別々。",
+    "proposal": "元ログを含める／含めないを選べるパッケージに、配置・条件・メモ・ログ照合情報を収録する。読み込み前に容量と内容を表示。",
+    "benefit": "別PCで同じ解析を再開しやすくなる。",
+    "sources": [
+      "Veusz",
+      "LabPlot",
+      "Rerun"
+    ],
+    "originalRank": 14
+  },
+  {
+    "rank": 16,
+    "title": "割合・非対称・区間別の許容差",
+    "phase": "B",
+    "cost": "M",
+    "category": "評価",
+    "current": "チャンネルごとの固定絶対差と超過ナビは既存。",
+    "proposal": "±値に加え±%、上限下限別、運転モード別、基準に沿った許容帯を選べるようにする。ゼロ近傍には絶対差を併用。",
+    "benefit": "運転条件で許容幅が変わる試験を評価できる。",
+    "sources": [
+      "PicoScope",
+      "DewesoftX"
+    ],
+    "originalRank": 15
+  },
+  {
+    "rank": 17,
+    "title": "繰り返しイベントを同じ起点で重ねる",
+    "phase": "B",
+    "cost": "L",
+    "category": "評価",
+    "current": "ファイル間の時間合わせは既存。1ログ内の多数イベントを切り出す比較はない。",
+    "proposal": "加速開始・変速・弁切替を0秒にそろえ、全回・平均・ばらつきを表示。元時刻へ戻れるようにする。",
+    "benefit": "応答の再現性や一回だけ遅れる現象を確認できる。",
+    "sources": [
+      "imc FAMOS",
+      "NI DIAdem"
+    ],
+    "originalRank": 16
+  },
+  {
+    "rank": 18,
+    "title": "自動時間合わせの曖昧さを可視化",
+    "phase": "B",
+    "cost": "M",
+    "category": "正確さ",
+    "current": "RMSE、重なり率、候補プレビュー、無変化信号の除外は既存。",
+    "proposal": "シフト量ごとの一致度曲線、上位候補、ピークの近さを表示。複数信号でも照合し、周期波形の別周期一致を知らせる。",
+    "benefit": "誤った自動合わせに気付きやすくなる。",
+    "sources": [],
+    "basis": "現状の監査からの独自提案",
+    "originalRank": 17
+  },
+  {
+    "rank": 19,
+    "title": "多ログ比較の結果マトリクス",
+    "phase": "B",
+    "cost": "M",
+    "category": "評価",
+    "current": "基準対各比較の結果は既存。全体を一目で俯瞰する表はない。",
+    "proposal": "行=チャンネル、列=試験で最大差・RMS・判定を色分け。悪化順で並べ、セルから波形へ移動する。",
+    "benefit": "試験数が増えても問題の組合せを見つけやすい。",
+    "sources": [
+      "Perspective",
+      "Tableau",
+      "Grafana"
+    ],
+    "originalRank": 18
+  },
+  {
+    "rank": 20,
+    "title": "解析条件とデータ由来をレポートに残す",
+    "phase": "B",
+    "cost": "M",
+    "category": "保存",
+    "current": "メモに条件・画像・数値は既存。",
+    "proposal": "ログのハッシュ、アプリ版、単位換算、補間方式、評価区間、データ品質、テンプレート版を出力へ添付する。",
+    "benefit": "後日同じ結果を再現し、条件の違いを説明しやすい。",
+    "sources": [],
+    "basis": "現状の監査からの独自提案",
+    "originalRank": 19
+  },
+  {
+    "rank": 21,
+    "title": "時間重み付き統計を選択可能にする",
+    "phase": "B",
+    "cost": "M",
+    "category": "正確さ",
+    "current": "現行の平均・RMS差は有効サンプルの等重み。時間積分関数は既存。",
+    "proposal": "従来値を維持し、時間重み平均・RMS・有効時間を別指標として追加。補間・欠損・端点の規則を明記する。",
+    "benefit": "不等間隔データでも長く滞在した状態の影響を評価できる。",
+    "sources": [],
+    "basis": "現状の監査からの独自提案",
+    "originalRank": 20
+  },
+  {
+    "rank": 22,
+    "title": "長い時刻欠落をまたがない補間設定",
+    "phase": "B",
+    "cost": "M",
+    "category": "正確さ",
+    "current": "NaNをまたぐ補間と外挿はしない。ただし両端が有効値の長い時刻間隔には閾値がない。",
+    "proposal": "最大補間間隔を指定し、長い空白を未評価扱いにする。アナログ／状態別に保持規則を選び、既定は互換を維持。",
+    "benefit": "記録が途切れた時間を滑らかな実測波形と取り違えにくい。",
+    "sources": [
+      "Grafana",
+      "asammdf"
+    ],
+    "originalRank": 21
+  },
+  {
+    "rank": 23,
+    "title": "ヒストグラム・百分位・箱ひげ図",
+    "phase": "B",
+    "cost": "M",
+    "category": "探索",
+    "current": "平均・σ・min/maxは既存。分布表示はない。",
+    "proposal": "区間ごとの分布、中央値、P95/P99、箱ひげを比較する。サンプル数重みと滞在時間重みを区別。",
+    "benefit": "平均だけでは見えないばらつきや裾の長さを把握できる。",
+    "sources": [
+      "LabPlot",
+      "Origin",
+      "Metabase"
+    ],
+    "originalRank": 22
+  },
+  {
+    "rank": 24,
+    "title": "XYを時刻・状態・第3信号で色分け",
+    "phase": "B",
+    "cost": "M",
+    "category": "探索",
+    "current": "XYはファイル別の色。描画点数と間引き状況が見えにくい。",
+    "proposal": "色=時間／温度／ギヤを選択し、入出力点数、除外数、時間基準を表示。動作の進行方向も示す。",
+    "benefit": "同じ車速・負荷でも結果が違う条件を見分けられる。",
+    "sources": [
+      "Orange",
+      "Veusz"
+    ],
+    "originalRank": 23
+  },
+  {
+    "rank": 25,
+    "title": "全体ナビゲーターにしおり・問題区間を表示",
+    "phase": "B",
+    "cost": "S",
+    "category": "操作",
+    "current": "全体ナビゲーターと超過箇所の前後移動は既存。",
+    "proposal": "名前付きしおり、メモ、イベント、欠損の位置を小さな帯で表示。種類の表示切替と前後移動を統一する。",
+    "benefit": "長時間ログで気になる場所に戻りやすい。",
+    "sources": [
+      "Perfetto",
+      "Saleae Logic"
+    ],
+    "originalRank": 24
+  },
+  {
+    "rank": 26,
+    "title": "サンプル単位のカーソル移動",
+    "phase": "B",
+    "cost": "S",
+    "category": "操作",
+    "current": "2点カーソル計測は既存。観測点を一つずつ追う専用操作を拡張する案。",
+    "proposal": "左右キーで元サンプルを前後移動し、生データ表と同期。移動基準のファイルと補間の有無を表示する。",
+    "benefit": "1点だけのスパイクや切替の前後を確認しやすい。",
+    "sources": [
+      "asammdf",
+      "Saleae Logic"
+    ],
+    "originalRank": 41
+  },
+  {
+    "rank": 27,
+    "title": "点・区間に直接注記し分類する",
+    "phase": "B",
+    "cost": "M",
+    "category": "出力",
+    "current": "画像・条件付き区間メモは既存。",
+    "proposal": "波形上に矢印・短い説明・原因タグ・確認済みを置き、メモ一覧から検索・絞り込みする。",
+    "benefit": "気付きが数値や場所と結び付き、レビューが速くなる。",
+    "sources": [
+      "Datawrapper",
+      "Veusz",
+      "Grafana"
+    ],
+    "originalRank": 25
+  },
+  {
+    "rank": 28,
+    "title": "複数区間を保存して同条件で比較",
+    "phase": "B",
+    "cost": "M",
+    "category": "評価",
+    "current": "選択区間は一つ。区間メモは保存できる。",
+    "proposal": "暖機前／暖機後や複数加速の区間セットを保持し、統計・差分・レポートへ同じセットを渡す。",
+    "benefit": "区間の手入力や選び直しを減らす。",
+    "sources": [
+      "MATLAB Signal Analyzer",
+      "NI DIAdem"
+    ],
+    "originalRank": 26
+  },
+  {
+    "rank": 29,
+    "title": "操作名を検索できるコマンドパレット",
+    "phase": "B",
+    "cost": "S",
+    "category": "操作",
+    "current": "Ctrl+Kはチャンネル検索へ移動。各種ショートカットも既存。",
+    "proposal": "別キーで「差分」「時間合わせ」「CSV保存」等を検索して実行。チャンネル検索とは競合させず、最近の操作も提示する。",
+    "benefit": "メニューの場所を覚えなくても機能にたどり着ける。",
+    "sources": [
+      "Perfetto",
+      "Rerun"
+    ],
+    "originalRank": 27
+  },
+  {
+    "rank": 30,
+    "title": "テンプレート適用前の差分プレビュー",
+    "phase": "B",
+    "cost": "M",
+    "category": "保存",
+    "current": "設定プリセット・比較テンプレート・お気に入りはあるが、保持対象が異なる。",
+    "proposal": "変更される表示・式・対応・メモを一覧表示し、「表示だけ／条件も」を選べるようにする。版と不足チャンネルを表示。",
+    "benefit": "別用途の設定を適用して作業状態を失う混乱を減らす。",
+    "sources": [
+      "Power BI",
+      "Origin"
+    ],
+    "originalRank": 28
+  },
+  {
+    "rank": 31,
+    "title": "試験ログに属性を付けて探す",
+    "phase": "C",
+    "cost": "M",
+    "category": "繰り返し",
+    "current": "読み込み中ファイルの表示名は設定できる。ログ群を属性検索する台帳はない。",
+    "proposal": "車両・試験条件・温度・改訂・担当等をローカル台帳へ登録し、該当ログを比較へ追加する。",
+    "benefit": "ファイル名の記憶に頼らず比較対象を選べる。",
+    "sources": [
+      "NI DIAdem",
+      "Datasette"
+    ],
+    "originalRank": 29
+  },
+  {
+    "rank": 32,
+    "title": "計算式のレシピ集と結果プレビュー",
+    "phase": "C",
+    "cost": "M",
+    "category": "繰り返し",
+    "current": "式、補完、説明、積分・微分・移動平均・遅延は既存。",
+    "proposal": "燃料積算・仕事・加速度等のレシピを信号差し替えで使う。単位・サンプル結果・参照先を適用前に表示する。",
+    "benefit": "式を毎回書かずに、計算の誤りを確認できる。",
+    "sources": [
+      "PlotJuggler",
+      "Veusz",
+      "imc FAMOS"
+    ],
+    "originalRank": 30
+  },
+  {
+    "rank": 33,
+    "title": "相関・回帰とチャンネル関係の一覧",
+    "phase": "C",
+    "cost": "M",
+    "category": "探索",
+    "current": "XYで目視確認できる。相関行列や回帰結果はない。",
+    "proposal": "対象区間の相関行列、散布図、単純回帰を追加。欠損の除外、時間遅れ、相関と因果の違いを明示する。",
+    "benefit": "関連しそうな信号を絞り込める。",
+    "sources": [
+      "Origin",
+      "LabPlot",
+      "Orange"
+    ],
+    "originalRank": 31
+  },
+  {
+    "rank": 34,
+    "title": "重い処理を画面から分離して中断可能にする",
+    "phase": "C",
+    "cost": "L",
+    "category": "性能",
+    "current": "ストリーミング・必要列の遅延読み込み・描画間引きは既存。大容量の実測性能は今回未測定。",
+    "proposal": "計測して重い処理だけWorker化。進捗・キャンセル・メモリ量を表示し、再利用可能な列のキャッシュを管理する。",
+    "benefit": "大きいログで操作が止まる場合の待ち時間を減らす。",
+    "sources": [
+      "Perspective",
+      "Papa Parse"
+    ],
+    "originalRank": 32
+  },
+  {
+    "rank": 35,
+    "title": "極値を保つ描画と表示精度の明示",
+    "phase": "C",
+    "cost": "M",
+    "category": "性能",
+    "current": "LTTBと元データによる数値比較は既存。",
+    "proposal": "MinMax系の表示を選べるようにし、描画点数／元点数・間引き中を表示。ピーク候補へのズームで原点を確認する。",
+    "benefit": "短いスパイクの見落としを減らす。",
+    "sources": [
+      "Apache ECharts",
+      "Foxglove"
+    ],
+    "originalRank": 33
+  },
+  {
+    "rank": 36,
+    "title": "SVG等のベクター画像を出力",
+    "phase": "C",
+    "cost": "M",
+    "category": "出力",
+    "current": "PNG保存・画像コピー・HTMLレポートは既存。",
+    "proposal": "線や文字を拡大しても読みやすいSVGを追加。出力サイズとフォントを指定し、複数Y軸や注記も検証する。",
+    "benefit": "PowerPointや文書へ貼ったグラフを読みやすくできる。",
+    "sources": [
+      "Veusz",
+      "Datawrapper",
+      "RAWGraphs"
+    ],
+    "originalRank": 34
+  },
+  {
+    "rank": 37,
+    "title": "報告書の構成テンプレート",
+    "phase": "C",
+    "cost": "M",
+    "category": "出力",
+    "current": "メモ付きHTMLレポートは既存。",
+    "proposal": "要点→条件→比較表→図→未評価理由を選べる構成と、印刷ページ・図番号・見出しを追加する。",
+    "benefit": "結果の並べ替えや説明追記にかかる時間を減らす。",
+    "sources": [
+      "NI DIAdem",
+      "Origin",
+      "Tableau"
+    ],
+    "originalRank": 35
+  },
+  {
+    "rank": 38,
+    "title": "通知の履歴と重要度の整理",
+    "phase": "C",
+    "cost": "S",
+    "category": "操作",
+    "current": "トースト通知はある。連続操作で複数通知が画面に重なる場合を確認。",
+    "proposal": "同種の完了通知をまとめ、保存失敗等だけ残す。履歴から詳細と再実行へ移動できるようにする。",
+    "benefit": "波形を通知で隠さず、見逃した問題にも戻れる。",
+    "sources": [
+      "Foxglove"
+    ],
+    "originalRank": 36
+  },
+  {
+    "rank": 39,
+    "title": "日時の時間軸とタイムゾーン",
+    "phase": "C",
+    "cost": "L",
+    "category": "読み込み",
+    "current": "主対象は数値のTime/時間列とs/ms。",
+    "proposal": "ISO日時、日付＋時刻、経過秒を区別し、表示タイムゾーンと原時刻を保持する。",
+    "benefit": "試験機や設備の長期ログと照合しやすい。",
+    "sources": [
+      "Grafana",
+      "LabPlot",
+      "DataGraph"
+    ],
+    "originalRank": 37
+  },
+  {
+    "rank": 40,
+    "title": "更新された同じログを再読み込み",
+    "phase": "C",
+    "cost": "M",
+    "category": "繰り返し",
+    "current": "ファイル読込と復元はある。更新ファイルへの差し替え専用手順はない。",
+    "proposal": "明示操作で新しいファイルを選び、既存配置を維持して差し替える。列・範囲・ハッシュの変化を表示する。",
+    "benefit": "試験データが追加・修正された後の再確認を省力化できる。",
+    "sources": [
+      "Veusz",
+      "LabPlot"
+    ],
+    "originalRank": 38
+  },
+  {
+    "rank": 41,
+    "title": "複数回の実測からばらつき帯を作る",
+    "phase": "C",
+    "cost": "L",
+    "category": "評価",
+    "current": "重ね合わせ・基準対比較は既存。複数回の代表値帯はない。",
+    "proposal": "整列した試験の中央値・上下百分位・min/max帯を表示。帯を作った試験数と欠損区間を示す。 平均・SD・min/maxを参考にした案で、中央値・百分位帯は独自拡張。",
+    "benefit": "一回の差なのか通常のばらつきなのか判断しやすい。",
+    "sources": [
+      "Origin",
+      "PicoScope"
+    ],
+    "originalRank": 39
+  },
+  {
+    "rank": 42,
+    "title": "Excelから表を貼り付けて読み込む",
+    "phase": "C",
+    "cost": "S",
+    "category": "読み込み",
+    "current": "入力はCSV/TRNファイル。",
+    "proposal": "タブ区切りの貼り付け入力を追加し、1位のプレビューで時間列・単位・型を確認してから取り込む。",
+    "benefit": "小さな比較表を一度CSV保存する手間を減らす。",
+    "sources": [
+      "RAWGraphs",
+      "Datawrapper"
+    ],
+    "originalRank": 40
+  },
+  {
+    "rank": 43,
+    "title": "分割された連番ログを連結して見る",
+    "phase": "C",
+    "cost": "M",
+    "category": "読み込み",
+    "current": "複数ファイルは基本的に比較対象として読み込む。",
+    "proposal": "同一試験の分割ログを時刻順に仮想連結する。重複・欠測・時刻リセットを確認し、出典ファイルの境界を残す。",
+    "benefit": "長時間計測を区切りごとに開き直す必要がなくなる。",
+    "sources": [
+      "asammdf"
+    ],
+    "originalRank": 42
+  },
+  {
+    "rank": 44,
+    "title": "対数軸・換算軸を明示的に選択",
+    "phase": "C",
+    "cost": "S",
+    "category": "探索",
+    "current": "Y軸範囲・複数軸は既存。対数表示の専用操作は未整備。",
+    "proposal": "正値信号の対数軸と、既知の換算式による第二軸を追加。ゼロ・負値・換算の由来を明示する。",
+    "benefit": "値の桁が違う信号や単位を読み取りやすくできる。",
+    "sources": [
+      "Veusz",
+      "imc FAMOS"
+    ],
+    "originalRank": 43
+  },
+  {
+    "rank": 45,
+    "title": "テンプレートの共通パラメーター",
+    "phase": "C",
+    "cost": "M",
+    "category": "繰り返し",
+    "current": "現在のテンプレートは主に固定の配置・式・対応を保存。",
+    "proposal": "試験番号、信号接頭辞、規定値を一か所で指定して展開。置換結果と不足信号を確認してから実行する。",
+    "benefit": "似た試験向けのテンプレートが大量に増えるのを防げる。",
+    "sources": [
+      "Chronograf",
+      "Foxglove",
+      "KNIME"
+    ],
+    "originalRank": 45
+  },
+  {
+    "rank": 46,
+    "title": "区間ループ再生と固定幅の追従窓",
+    "phase": "C",
+    "cost": "M",
+    "category": "探索",
+    "current": "カーソルとズームは既存。時刻を自動送りする閲覧はない。",
+    "proposal": "区間を低速・倍速で再生し、前後一定秒の波形・状態・数値を連動させる。空白時間は無断で圧縮しない。",
+    "benefit": "制御の切替順序を説明し、異常前後を繰り返し確認しやすい。",
+    "sources": [
+      "Rerun",
+      "Foxglove"
+    ],
+    "originalRank": 46
+  },
+  {
+    "rank": 47,
+    "title": "計算の依存関係と更新状態を見えるようにする",
+    "phase": "C",
+    "cost": "M",
+    "category": "正確さ",
+    "current": "式編集・再計算と比較結果の無効化は既存。",
+    "proposal": "元信号→換算→積算→評価のつながりを表示し、一時無効化や条件変更で未更新になった段階を示す。",
+    "benefit": "多くの計算信号を作ったときに、どの条件で得た値か確認できる。",
+    "sources": [
+      "KNIME",
+      "Grafana"
+    ],
+    "originalRank": 47
+  },
+  {
+    "rank": 48,
+    "title": "MDF/MAT/HDF5/Parquetなどの入力拡張",
+    "phase": "D",
+    "cost": "XL",
+    "category": "専門用途",
+    "current": "CSV/TRNに特化。",
+    "proposal": "需要の多い形式を一つずつ追加。まず既存変換ツールとの連携を検討し、ネイティブ対応は容量・ライセンス・オフライン配布を評価する。",
+    "benefit": "変換工程を省けるが、対応形式ごとの検証負担が大きい。",
+    "sources": [
+      "asammdf",
+      "LabPlot",
+      "Vector vSignalyzer"
+    ],
+    "originalRank": 48
+  },
+  {
+    "rank": 49,
+    "title": "FFT・スペクトログラム",
+    "phase": "D",
+    "cost": "L",
+    "category": "専門用途",
+    "current": "時系列演算とXYはあるが、周波数解析UIはない。",
+    "proposal": "等間隔性、サンプル周波数、窓関数、振幅単位を確認し、選択区間で周波数解析する。",
+    "benefit": "周期振動には有効。低速な車両制御・燃費比較では優先度が下がる。",
+    "sources": [
+      "MATLAB Signal Analyzer",
+      "PicoScope",
+      "PlotJuggler"
+    ],
+    "originalRank": 49
+  },
+  {
+    "rank": 50,
+    "title": "動画・位置情報を波形と同期",
+    "phase": "D",
+    "cost": "XL",
+    "category": "専門用途",
+    "current": "数値波形が中心。",
+    "proposal": "動画フレーム・GPS位置と時刻を合わせ、波形の異常時に現象を確認する。",
+    "benefit": "実車・ロボットの調査には有効だが、入力形式と同期誤差の扱いが増える。",
+    "sources": [
+      "Foxglove",
+      "Rerun",
+      "DewesoftX"
+    ],
+    "originalRank": 50
+  },
+  {
+    "rank": 51,
+    "title": "ローカルSQL・列指向エンジン",
+    "phase": "D",
+    "cost": "XL",
+    "category": "性能",
+    "current": "専用JavaScript処理と配列が主体。",
+    "proposal": "大量の試験横断集計に限定してDuckDB-Wasm等を検討。file://動作・メモリ・配布方式を先に実証する。",
+    "benefit": "大規模集計には有効。ただし入れ替えるだけで高速化する保証はない。",
+    "sources": [
+      "DuckDB-Wasm",
+      "Perspective",
+      "Datasette"
+    ],
+    "originalRank": 51
+  },
+  {
+    "rank": 52,
+    "title": "計測中のライブ表示",
+    "phase": "D",
+    "cost": "XL",
+    "category": "専門用途",
+    "current": "保存後のCSV/TRN解析が主用途。",
+    "proposal": "外部から増えるデータや計測接続に対応し、表示窓・停止・記録を分離する。",
+    "benefit": "試験中にも見られるが、ブラウザ権限や接続・取得保証が別課題になる。",
+    "sources": [
+      "PlotJuggler",
+      "DewesoftX",
+      "LabPlot"
+    ],
+    "originalRank": 52
+  },
+  {
+    "rank": 53,
+    "title": "異常候補・類似波形の自動提案",
+    "phase": "D",
+    "cost": "L",
+    "category": "専門用途",
+    "current": "しきい値による説明可能な検出は既存。",
+    "proposal": "まず変化点・外れ値・類似区間をローカル計算で候補化。根拠と元波形を示し、正常／異常の確定は分ける。 外れ値検出は公式機能を確認。類似波形・変化点は別途検討する独自案。",
+    "benefit": "見落とし補助になるが、誤検出率の評価用データが必要。",
+    "sources": [
+      "Orange",
+      "Origin"
+    ],
+    "originalRank": 53
+  },
+  {
+    "rank": 54,
+    "title": "拡張機能・解析プラグイン",
+    "phase": "D",
+    "cost": "XL",
+    "category": "専門用途",
+    "current": "式による計算拡張は既存。",
+    "proposal": "固定の拡張APIとサンドボックスを定義し、独自解析を別モジュールとして配布する。",
+    "benefit": "専門用途を増やせるが、互換性と保守の負担が大きい。",
+    "sources": [
+      "PlotJuggler",
+      "Foxglove"
+    ],
+    "originalRank": 54
+  },
+  {
+    "rank": 55,
+    "title": "オンラインの共同レビュー",
+    "phase": "D",
+    "cost": "XL",
+    "category": "共有",
+    "current": "ローカル完結とファイル出力が強み。",
+    "proposal": "共有サーバー、権限、コメント、履歴を必要とするチーム向けの別構成として検討する。",
+    "benefit": "チームで使う場合に有効。最初の改良ではローカルのレポート共有を優先する。",
+    "sources": [
+      "Grafana",
+      "Metabase",
+      "Power BI"
+    ],
+    "originalRank": 55
+  }
+]

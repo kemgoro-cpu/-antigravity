@@ -1,0 +1,26 @@
+{
+  "products": 37,
+  "proposals": 55,
+  "filters": "passed",
+  "images": "loaded",
+  "internalLinks": "valid",
+  "widths": [
+    {
+      "viewport": 1440,
+      "body": 1440,
+      "root": 1440
+    },
+    {
+      "viewport": 900,
+      "body": 900,
+      "root": 900
+    },
+    {
+      "viewport": 390,
+      "body": 390,
+      "root": 390
+    }
+  ],
+  "pageErrors": [],
+  "externalRequests": []
+}

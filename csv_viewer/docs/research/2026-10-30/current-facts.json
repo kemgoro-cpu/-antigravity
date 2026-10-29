@@ -1,0 +1,81 @@
+{
+  "inspectedDate": "2026-10-30",
+  "branch": "main",
+  "commit": "bbba7af",
+  "syntheticOnly": true,
+  "imports": [
+    {
+      "name": "unit-row.csv",
+      "inputSamples": 3,
+      "parsedSamples": 3,
+      "times": [
+        0,
+        1,
+        2
+      ],
+      "columns": [
+        {
+          "name": "Speed",
+          "unit": "km/h"
+        }
+      ],
+      "header": {
+        "nameRow": 0,
+        "unitRow": 1,
+        "dataStart": 2,
+        "timeIdx": 0,
+        "timeUnit": "s",
+        "timeScale": 1,
+        "timeScaleSource": "unit",
+        "timeScaleUnit": "s",
+        "encoding": "utf-8",
+        "encodingMode": "auto",
+        "isTrn": false,
+        "columnCount": 2
+      }
+    },
+    {
+      "name": "no-unit-row.csv",
+      "inputSamples": 3,
+      "parsedSamples": 2,
+      "times": [
+        1,
+        2
+      ],
+      "columns": [
+        {
+          "name": "Speed",
+          "unit": "1"
+        }
+      ],
+      "header": {
+        "nameRow": 0,
+        "unitRow": 1,
+        "dataStart": 2,
+        "timeIdx": 0,
+        "timeUnit": "0",
+        "timeScale": 1,
+        "timeScaleSource": "auto",
+        "timeScaleUnit": "0",
+        "encoding": "utf-8",
+        "encodingMode": "auto",
+        "isTrn": false,
+        "columnCount": 2
+      }
+    }
+  ],
+  "current": {
+    "selected": [
+      "Speed",
+      "Pressure",
+      "State"
+    ],
+    "resultText": "04\n違いを見つける\n\n選択区間、なければ表示区間を元データで比較します。アナログ値は基準時刻に線形補間。状態信号は直前値を保持します。\n\n比較を更新\nチャンネル順\n許容差の超過度順\n\n0–62 s · 基準 − 比較 · 時間合わせ適用 · 3項目\n\n許容差の判定対象なし\n判定 0 / 3件（未設定・比較不可を除く）\nオレンジの帯は連続する超過点、縦線は単発の超過点です。上下比較では比較側の段に表示します。\n許容差未設定\nPressure\n↗ 比較_ﾛｸﾞ.csv\n最大絶対差\n11.25 kPa\nその時刻\n48 s\n平均差 / RMS差\n-4.96368 / 5.99962\n有効 / 欠損・範囲外\n117 / 4\n許容差 [kPa]\n許容差未設定\nSpeed\n↗ 比較_ﾛｸﾞ.csv\n最大絶対差\n11 km/h\nその時刻\n48 s\n平均差 / RMS差\n0 / 7.03866\n有効 / 欠損・範囲外\n117 / 4\n許容差 [km/h]\n許容差未設定\nState\n↗ 比較_ﾛｸﾞ.csv\n最大絶対差\n1\nその時刻\n8 s\n平均差 / RMS差\n0 / 0.261488\n状態不一致\n4 s\n最初の切替 基準 / 比較\n8 / 10 s\n同じ遷移の時刻差\n2 s\n有効 / 欠損・範囲外\n117 / 4\n許容差 [単位なし]\nカーソル位置の値\n\n波形上のカーソルに追従します。"
+  },
+  "pageErrors": [],
+  "baselineTests": {
+    "unitFiles": 10,
+    "failures": 0,
+    "browserWorkflow": "comparison.browser.js passed"
+  }
+}
