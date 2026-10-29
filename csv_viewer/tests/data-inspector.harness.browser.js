@@ -3,6 +3,12 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const os = require('node:os');
 const { chromium } = require('playwright');
+async function openInspector(page, tab) {
+    if (!await page.locator('#data-inspector').isVisible()) await page.locator('#inspector-open').click();
+    await page.locator('#inspector-tab-' + tab).click();
+    if (tab === 'stats') await page.locator('#inspector-statistics').waitFor();
+}
+
 (async () => {
     const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     try {
@@ -43,13 +49,13 @@ const { chromium } = require('playwright');
         assert.match(await page.locator('#inspector-status').textContent(), /解析対象外/);
         await page.locator('#inspector-close').click();
         assert.equal(await page.evaluate(() => inspectorHarness.ui.cursorTime()), null);
-        await page.locator('#inspector-open-data').click();
+        await openInspector(page, 'data');
         await page.waitForFunction(() => !document.querySelector('.inspector-current'));
 
         await page.evaluate(() => { const h = inspectorHarness; h.context = { ...h.context, rawTime: true, label: '全体 0–300 s · 元の時刻' }; h.ui.schedule(); });
         await page.waitForFunction(() => !document.querySelector('#inspector-sample-table thead')?.textContent.includes('@Cross'));
         assert.match(await page.locator('#inspector-content').textContent(), /時間合わせに依存する計算列/);
-        await page.locator('#inspector-open-quality').click();
+        await openInspector(page, 'quality');
         await page.waitForSelector('#inspector-quality-values');
         assert.match(await page.locator('#inspector-quality-issues').textContent(), /読込時に除外した時刻/);
         assert.equal(await page.locator('#data-inspector img').count(), 0);
@@ -75,13 +81,29 @@ const { chromium } = require('playwright');
         await page.evaluate(() => inspectorHarness.release());
         await page.waitForFunction(() => document.querySelectorAll('#inspector-sample-table tbody tr').length === 21);
         assert.equal(await page.locator('#inspector-sample-table tbody tr').first().locator('td').nth(1).textContent(), '0.02');
+        // Finishing a raw-column load after changing tabs must not replace statistics.
+        const loadCount = await page.evaluate(() => inspectorHarness.loads);
+        await page.evaluate(() => {
+            const h = inspectorHarness; delete h.file.colData.signal;
+            h.loadGate = new Promise(resolve => { h.release = resolve; }); h.ui.setOpen('quality');
+        });
+        await page.waitForFunction(previous => inspectorHarness.loads > previous, loadCount);
+        await page.evaluate(() => inspectorHarness.ui.setOpen('stats'));
+        await page.locator('#inspector-statistics').waitFor();
+        await page.evaluate(() => inspectorHarness.release());
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await page.locator('#inspector-tab-stats').getAttribute('aria-selected'), 'true');
+        assert.equal(await page.locator('#inspector-statistics').count(), 1);
+        assert.equal(await page.locator('#inspector-sample-table').count(), 0);
+        await page.evaluate(() => inspectorHarness.ui.setOpen('data'));
+        await page.waitForFunction(() => document.querySelectorAll('#inspector-sample-table tbody tr').length === 21);
         assert.deepEqual(await page.evaluate(() => Object.keys(inspectorHarness.ui.collectSettings()).sort()), ['fileKey', 'fileName', 'open', 'tab']);
         const calls = await page.evaluate(() => inspectorHarness.renderCount);
         await page.waitForTimeout(100);
         assert.ok((await page.evaluate(() => inspectorHarness.renderCount)) - calls < 3, 'no schedule/render loop');
         await page.setViewportSize({ width: 390, height: 844 });
         await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; document.documentElement.style.cssText = '--bg-main:#fff;--bg-surface:#f7f9fb;--bg-hover:#e8f1f7;--border:#bfccd9;--text-primary:#182838;--text-secondary:#4a6074;--accent-soft:#00685c'; });
-        await page.locator('#inspector-open-quality').click();
+        await openInspector(page, 'quality');
         await page.waitForSelector('#inspector-quality-values');
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '390px body must not overflow horizontally');
         const screenshot = path.join(os.tmpdir(), 'csv-data-inspector-390-light.png'); await page.screenshot({ path: screenshot });

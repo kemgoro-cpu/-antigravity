@@ -1,9 +1,9 @@
-/* Read-only original samples and quality diagnostics for the shared analysis scope. */
+/* Original samples, quality diagnostics and statistics for the shared analysis scope. */
 (function (root) {
     'use strict';
     function init(api) {
         const doc = document, Q = root.CSVDataQuality, esc = api.esc;
-        const PAGE_SIZE = 100, DETAIL_LIMIT = 1000;
+        const PAGE_SIZE = 100, DETAIL_LIMIT = 1000, TABS = ['data', 'quality', 'stats'];
         const finite = Number.isFinite, fmt = n => finite(n) ? String(n) : '—';
         const ids = new WeakMap(); let nextId = 0;
         const refId = value => { if (!value || typeof value !== 'object') return ''; if (!ids.has(value)) ids.set(value, ++nextId); return ids.get(value); };
@@ -12,17 +12,16 @@
         let quality = null, detailFilter = 'all', queuedSeek = null, lastFileRef = null;
         const timeCache = new WeakMap();
         const panel = doc.createElement('section'); panel.id = 'data-inspector'; panel.className = 'data-inspector'; panel.hidden = true;
-        panel.setAttribute('aria-label', '元データと品質診断');
-        panel.innerHTML = `<div class="inspector-heading"><div class="inspector-tabs" role="tablist" aria-label="確認する内容"><button type="button" id="inspector-tab-data" role="tab" aria-controls="inspector-content" data-inspector-tab="data">元データ</button><button type="button" id="inspector-tab-quality" role="tab" aria-controls="inspector-content" data-inspector-tab="quality">品質診断</button></div><label class="inspector-file-label">ファイル <select id="inspector-file" aria-label="元データ・品質診断のファイル"></select></label><button type="button" id="inspector-refresh" class="btn-secondary">更新</button><button type="button" id="inspector-close" class="btn-secondary" aria-label="元データ・品質診断を閉じる">閉じる</button></div><p id="inspector-context" class="inspector-context"></p><p id="inspector-status" class="inspector-status" role="status"></p><div id="inspector-content" class="inspector-content" role="tabpanel"></div>`;
+        panel.setAttribute('aria-label', '調べる：元データ・品質・統計');
+        panel.innerHTML = `<div class="inspector-heading"><div class="inspector-tabs" role="tablist" aria-label="確認する内容"><button type="button" id="inspector-tab-data" role="tab" aria-controls="inspector-content" data-inspector-tab="data">元データ</button><button type="button" id="inspector-tab-quality" role="tab" aria-controls="inspector-content" data-inspector-tab="quality">品質診断</button><button type="button" id="inspector-tab-stats" role="tab" aria-controls="inspector-content" data-inspector-tab="stats">統計</button></div><label class="inspector-file-label">ファイル <select id="inspector-file" aria-label="元データ・品質診断のファイル"></select></label><button type="button" id="inspector-refresh" class="btn-secondary">更新</button><button type="button" id="inspector-close" class="btn-secondary" aria-label="調べるパネルを閉じる">閉じる</button></div><p id="inspector-context" class="inspector-context"></p><p id="inspector-status" class="inspector-status" role="status"></p><div id="inspector-content" class="inspector-content" role="tabpanel"></div>`;
         const body = doc.querySelector('.compare-body');
         if (body) body.after(panel); else doc.querySelector('.main-content')?.append(panel);
-        const bar = doc.querySelector('.analysis-context'), openButtons = [];
-        for (const [tab, label] of [['data', '元データ'], ['quality', '品質診断']]) {
-            const button = doc.createElement('button'); button.type = 'button'; button.id = 'inspector-open-' + tab;
-            button.className = 'btn-secondary inspector-open'; button.textContent = label;
-            button.setAttribute('aria-controls', panel.id); button.setAttribute('aria-expanded', 'false');
-            button.addEventListener('click', () => setOpen(tab)); bar?.append(button); openButtons.push(button);
-        }
+        const bar = doc.querySelector('.analysis-context'), openButton = doc.createElement('button');
+        openButton.type = 'button'; openButton.id = 'inspector-open';
+        openButton.className = 'btn-secondary inspector-open'; openButton.textContent = '調べる';
+        openButton.title = '元データ・品質診断・統計を確認します';
+        openButton.setAttribute('aria-controls', panel.id); openButton.setAttribute('aria-expanded', 'false');
+        openButton.addEventListener('click', () => setOpen(settings.open ? false : settings.tab)); bar?.append(openButton);
         const $ = id => panel.querySelector('#' + id), content = $('inspector-content');
         const setStatus = text => { $('inspector-status').textContent = text || ''; };
         function currentFile() { return api.state.files[selectedId] || null; }
@@ -30,10 +29,8 @@
         function dataOf(file, column) { return (file.colData || file.data || {})[column.id]; }
         function updateControls() {
             panel.hidden = !settings.open;
-            for (const button of openButtons) {
-                const selected = settings.open && button.id.endsWith(settings.tab);
-                button.classList.toggle('btn-active', selected); button.setAttribute('aria-expanded', String(selected));
-            }
+            openButton.classList.toggle('btn-active', settings.open); openButton.setAttribute('aria-expanded', String(settings.open));
+            panel.querySelector('.inspector-file-label').hidden = settings.tab === 'stats';
             for (const button of panel.querySelectorAll('[data-inspector-tab]')) {
                 const selected = button.dataset.inspectorTab === settings.tab;
                 button.classList.toggle('active', selected); button.setAttribute('aria-selected', String(selected));
@@ -222,7 +219,26 @@
                 content.prepend(warning);
             }
         }
-        function renderTab() { updateControls(); if (settings.tab === 'quality') renderQuality(); else renderData(); }
+        function renderStats() {
+            const context = api.analysisContext();
+            $('inspector-context').textContent = context.label;
+            content.innerHTML = `<div id="inspector-statistics" class="inspector-statistics"><p class="inspector-note">表示中の全ファイル・チャンネルを集計します。数値は有効サンプルの等重み統計です。元データ・品質診断のファイル選択とは独立しています。</p>${api.statsHTML?.(context) || '<p class="inspector-empty">チャンネルを選ぶと統計を確認できます。</p>'}</div>`;
+        }
+        function renderTab() { updateControls(); if (settings.tab === 'quality') renderQuality(); else if (settings.tab === 'stats') renderStats(); else renderData(); }
+        function revealSelectedRow() {
+            const selected = cursor;
+            requestAnimationFrame(() => {
+                if (!settings.open || settings.tab !== 'data' || cursor !== selected || !selected) return;
+                const row = content.querySelector(`tr[data-sample-index="${selected.index}"]`);
+                if (!row) return;
+                const rowRect = row.getBoundingClientRect(), viewport = content.getBoundingClientRect();
+                const headerHeight = content.querySelector('thead')?.getBoundingClientRect().height || 0;
+                // Scroll only the inspector. scrollIntoView would also move the page/chart.
+                const top = viewport.top + Math.min(headerHeight, viewport.height / 2);
+                if (rowRect.top < top) content.scrollTop += rowRect.top - top;
+                else if (rowRect.bottom > viewport.bottom) content.scrollTop += rowRect.bottom - viewport.bottom;
+            });
+        }
         function positionOf(index) {
             if (!snapshot) return -1;
             for (let i = 0; i < snapshot.indices.length; i++) if (snapshot.indices[i] === index) return i;
@@ -233,7 +249,7 @@
             if (!s || position < 0) { setStatus('この点は解析対象外です。解析対象を「全体」にすると確認できます。'); return false; }
             cursor = { fileId: s.fileId, file: s.file, index }; page = Math.floor(position / PAGE_SIZE);
             setStatus(`元レコード ${sourceRow(s.file, index) ?? '不明'}、表示時刻 ${fmt(s.file.timeData[index] + s.offset)} sを選択しました。`);
-            renderTab(); if (navigate) api.focusTime(s.file.timeData[index] + s.offset); api.render(); return true;
+            renderTab(); revealSelectedRow(); if (navigate) api.focusTime(s.file.timeData[index] + s.offset); api.render(); return true;
         }
         function nearestPosition(t) {
             const s = snapshot, a = s.indices;
@@ -249,7 +265,7 @@
             return best;
         }
         function seekTime(t) {
-            if (!settings.open || !finite(t)) return false;
+            if (!settings.open || settings.tab === 'stats' || !finite(t)) return false;
             if (!snapshot || activeKey) { queuedSeek = { time: t }; schedule(); return false; }
             const range = snapshot.context.range;
             if (!range || t < range[0] || t > range[1]) { setStatus('指定時刻は共通の解析対象外です。解析対象を変更してから確認してください。'); return false; }
@@ -261,6 +277,11 @@
         async function refresh(force = false) {
             syncFiles(); updateControls();
             if (!settings.open) return;
+            if (settings.tab === 'stats') {
+                // Statistics use the existing rendered-series collector, including every
+                // visible file. They must not load/filter by the sample-table file.
+                setStatus(''); content.setAttribute('aria-busy', 'false'); renderStats(); return;
+            }
             const initial = capture();
             $('inspector-context').textContent = initial.context.label;
             if (!initial.file) {
@@ -298,16 +319,22 @@
             const wasOpen = settings.open;
             if (tab === false || tab === null) {
                 settings.open = false; generation++; activeKey = ''; completedKey = ''; cursor = null; queuedSeek = null; updateControls(); api.render();
-                if (wasOpen) api.resize?.(); api.save(); openButtons.find(b => b.id.endsWith(settings.tab))?.focus(); return;
+                if (wasOpen) api.resize?.(); api.save(); openButton.focus(); return;
             }
-            const nextTab = tab === 'quality' ? 'quality' : 'data';
-            if (settings.tab !== nextTab) { completedKey = ''; content.scrollTop = 0; }
+            const nextTab = TABS.includes(tab) ? tab : 'data';
+            if (settings.tab !== nextTab) { generation++; activeKey = ''; completedKey = ''; queuedSeek = null; content.scrollTop = 0; }
             settings.open = true; settings.tab = nextTab; updateControls(); schedule(); api.save();
             if (!wasOpen) api.resize?.();
         }
         panel.querySelectorAll('[data-inspector-tab]').forEach(button => {
             button.onclick = () => setOpen(button.dataset.inspectorTab);
-            button.onkeydown = event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setOpen(settings.tab === 'data' ? 'quality' : 'data'); $('inspector-tab-' + settings.tab).focus(); } };
+            button.onkeydown = event => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const index = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1
+                    : (TABS.indexOf(settings.tab) + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
+                setOpen(TABS[index]); $('inspector-tab-' + settings.tab).focus();
+            };
         });
         $('inspector-close').onclick = () => setOpen(false);
         $('inspector-refresh').onclick = () => { completedKey = ''; refresh(true); };
@@ -338,7 +365,7 @@
             collectSettings: () => ({ open: settings.open, tab: settings.tab, fileName: settings.fileName, fileKey: settings.fileKey }),
             applySettings: input => {
                 const s = input && typeof input === 'object' ? input : {};
-                settings = { open: s.open === true, tab: s.tab === 'quality' ? 'quality' : 'data', fileName: typeof s.fileName === 'string' ? s.fileName : '', fileKey: typeof s.fileKey === 'string' ? s.fileKey : '' };
+                settings = { open: s.open === true, tab: TABS.includes(s.tab) ? s.tab : 'data', fileName: typeof s.fileName === 'string' ? s.fileName : '', fileKey: typeof s.fileKey === 'string' ? s.fileKey : '' };
                 pendingFileName = settings.fileName; pendingFileKey = settings.fileKey; selectedId = ''; cursor = null; snapshot = null; quality = null;
                 generation++; activeKey = ''; completedKey = ''; updateControls(); schedule(); api.resize?.();
             },

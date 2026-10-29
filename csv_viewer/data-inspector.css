@@ -5,6 +5,7 @@
 .inspector-tabs button { border:0; padding:5px 9px; border-radius:4px; background:transparent; color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer; }
 .inspector-tabs button.active { background:var(--bg-hover); color:var(--text-primary); box-shadow:inset 0 -2px var(--accent-soft); }
 .inspector-file-label { display:flex; align-items:center; gap:5px; font-size:11px; min-width:0; flex:1; }
+.inspector-file-label[hidden] { display:none; }
 .inspector-file-label select { width:clamp(100px,25vw,360px); max-width:100%; min-width:0; }
 .data-inspector select,.data-inspector input { border:1px solid var(--border); border-radius:3px; padding:3px 5px; background:var(--bg-main); color:var(--text-primary); font:inherit; font-size:11px; }
 .data-inspector button { font-size:11px; }
@@ -41,6 +42,9 @@
 .inspector-quality-counts span { font-size:10px; color:var(--text-secondary); }
 .inspector-quality-counts strong { font-size:13px; font-variant-numeric:tabular-nums; }
 .inspector-open { padding:4px 9px!important; min-height:26px; }
+.inspector-statistics .measure-title { white-space:normal; font-size:12px; }
+.inspector-statistics .measure-hint { white-space:normal; font-size:11px; }
+.inspector-statistics td:not(:first-child) { font-family:'Roboto Mono',monospace; }
 @media(max-width:700px) {
     .main-content:has(> .data-inspector:not([hidden])) { overflow-y:auto; }
     .main-content:has(> .data-inspector:not([hidden])) > * { flex-shrink:0; }

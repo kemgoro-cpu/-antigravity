@@ -1119,7 +1119,6 @@ const state = {
     measureMode:    false,               // カーソル計測モード（M）
     measure:        { tA: null, tB: null }, // 計測カーソル位置(秒)。永続化しない
     events:         { expr: '', intervals: [] }, // イベント検出結果（区間はメインファイル基準。永続化しない）
-    statsPanelVisible: false, // 表示範囲の統計サマリパネル（Stats）を表示中か
     shiftFileId:    null,   // which sub file is the drag target
     shiftDrag:      null,   // { startClientX, startOffset }
     numGrids:       0,
@@ -1391,7 +1390,6 @@ const dom = {
     customValidation: $('custom-ram-validation'),
     monoColorBtn: $('mono-color-btn'),
     measureBtn: $('measure-mode-btn'),
-    statsBtn:   $('stats-panel-btn'),
     eventExpr:      $('event-expr'),
     eventDetectBtn: $('event-detect-btn'),
     eventValidation: $('event-validation'),
@@ -5976,12 +5974,11 @@ function renderChart() {
         dom.exportPng.disabled = true;
         dom.copyChart.disabled = true;
         dom.measureBtn.disabled = true;
-        dom.statsBtn.disabled = true;
         dom.exportCsv.disabled = true;
         dom.exportReport.disabled = true;
         state.numGrids = 0;
         if (state.measureMode) exitMeasureMode(false); // 表示チャンネルが無くなったら計測も解除
-        updateStatsPanel(); // グリッドが無くなったらパネルも消す
+        updateStatsPanel(); // 表示チャンネルが無い状態も統計タブへ反映
         return;
     }
     dom.overlay.classList.add('hidden');
@@ -5989,7 +5986,6 @@ function renderChart() {
     dom.copyChart.disabled = false;
     dom.resetBtn.disabled = false;
     dom.measureBtn.disabled = false;
-    dom.statsBtn.disabled = false;
     dom.exportCsv.disabled = false;
     dom.exportReport.disabled = false;
     state.numGrids = n;
@@ -6807,35 +6803,18 @@ function getAnalysisContext() {
 }
 
 function toggleStatsPanel() {
-    state.statsPanelVisible = !state.statsPanelVisible;
-    dom.statsBtn.classList.toggle('btn-active', state.statsPanelVisible);
-    updateStatsPanel();
-    saveSettings();
+    const inspection = dataInspector?.collectSettings();
+    dataInspector?.setOpen(inspection?.open && inspection.tab === 'stats' ? false : 'stats');
 }
 
-/** 統計サマリパネルを現在の表示範囲に合わせて再構築する（非表示時は消す） */
+/** 統計は「調べる」のタブで更新する。計算・レポートの定義は共用する。 */
 function updateStatsPanel() {
-    const existing = document.getElementById('stats-panel');
-    if (!state.statsPanelVisible || !state.chart || state.numGrids === 0) {
-        existing?.remove();
-        return;
-    }
-    const range = getAnalysisContext().range;
-    if (!range) { existing?.remove(); return; }
-
-    let panel = existing;
-    if (!panel) {
-        panel = document.createElement('div');
-        panel.id = 'stats-panel';
-        panel.className = 'stats-panel';
-        document.querySelector('.chart-container')?.appendChild(panel);
-    }
-    panel.innerHTML = buildStatsTableHTML(range[0], range[1]);
+    dataInspector?.schedule();
 }
 
 /**
  * 表示範囲 [t0, t1] の統計行（チャンネル × ファイル）を収集する。
- * 統計パネル（F5）とレポート出力（F9）で共用。
+ * 調べるパネルの統計タブとレポート出力で共用。
  * @returns {{label:string, color:string, min:number, max:number, mean:number, sigma:number, n:number}[]}
  */
 function collectStatsRows(t0, t1) {
@@ -6879,7 +6858,6 @@ function buildStatsTableHTML(t0, t1) {
     return html;
 }
 
-dom.statsBtn.addEventListener('click', toggleStatsPanel);
 
 // ─────────────────────────────────────────────────────────────
 // イベント検出: 条件式（例 Actual_Speed > 120）を式パーサで評価し、
@@ -7941,7 +7919,8 @@ function collectSettings() {
         theme: state.theme,
         // イベント検出の条件式（区間は保存しない。次回は式だけ復元して手動で再検出）
         eventExpr: dom.eventExpr?.value || '',
-        statsPanel: state.statsPanelVisible,
+        // Keep the legacy flag for older readers; inspection is the current source of truth.
+        statsPanel: !!(dataInspector?.collectSettings().open && dataInspector.collectSettings().tab === 'stats'),
         fontScale: state.fontScale,
         rowHeightPx: state.rowHeightPx,
         gridHeights: state.gridHeights,
@@ -8583,7 +8562,12 @@ function applySettings(rawSettings) {
     if (s.unitRowIdx) dom.unitRow.value = s.unitRowIdx;
     if (s.encodingMode && dom.encoding) dom.encoding.value = s.encodingMode;
     window.CSVImportPreview?.applySettings(s.importSettings);
-    dataInspector?.applySettings(s.inspection);
+    // Legacy v7 could show a sample/quality dock and floating statistics together.
+    // Prefer statistics on migration, preserving the sample file identity for its tabs.
+    // F5 was never a registered shortcut; do not override browser reload here.
+    const inspection = s.inspection && typeof s.inspection === 'object' ? { ...s.inspection } : {};
+    if (s.statsPanel === true) { inspection.open = true; inspection.tab = 'stats'; }
+    dataInspector?.applySettings(inspection);
 
     // サンプリングモードを復元
     if (s.samplingMode !== undefined) dom.sampling.value = s.samplingMode;
@@ -8591,11 +8575,6 @@ function applySettings(rawSettings) {
     // チャート表示設定を復元
     if (s.theme === 'light' || s.theme === 'dark') applyTheme(s.theme);
     if (typeof s.eventExpr === 'string' && dom.eventExpr) dom.eventExpr.value = s.eventExpr;
-    if (s.statsPanel != null) {
-        state.statsPanelVisible = !!s.statsPanel;
-        dom.statsBtn?.classList.toggle('btn-active', state.statsPanelVisible);
-        // パネル本体はファイル読み込み後のrenderChartが構築する
-    }
     if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
         state.fontScale = s.fontScale;
         if (dom.fontScale) dom.fontScale.value = s.fontScale;
@@ -9123,7 +9102,7 @@ comparisonWorkspace = CSVWorkspace({
     exitBrush: exitBoxZoom,
     exitArrange: exitArrangeMode,
     clearMeasure: () => exitMeasureMode(),
-    stats: () => { if (!state.statsPanelVisible) toggleStatsPanel(); else updateStatsPanel(); },
+    stats: () => dataInspector?.setOpen('stats'),
     analysisChanged: () => { updateStatsPanel(); dataInspector?.schedule(); },
     favoriteNames: () => { const favs = loadChannelFavorites(); return Object.values(favs).flatMap(f => Array.isArray(f) ? f : f.names || []); },
     select: async (names, replace) => {
@@ -9165,6 +9144,9 @@ comparisonWorkspace.bindChart();
 dataInspector = CSVDataInspector.init({
     state, mainFile: getMainFile, selectedNames: () => [...state.selectedNames],
     analysisContext: getAnalysisContext,
+    statsHTML: context => context.range && state.numGrids > 0
+        ? buildStatsTableHTML(context.range[0], context.range[1])
+        : '<p class="inspector-empty">解析対象と表示チャンネルを選ぶと統計を確認できます。</p>',
     effectiveOffset: file => comparisonWorkspace.effectiveOffset(file),
     fileKey: file => {
         const id = Object.keys(state.files).find(id => state.files[id] === file);

@@ -5,6 +5,12 @@ const { pathToFileURL } = require('node:url');
 const { chromium } = require('playwright');
 const name = '同名_ﾛｸﾞ.csv';
 const input = (value, count) => ({ name, mimeType: 'text/csv', buffer: Buffer.from('Time,Signal\ns,V\n' + Array.from({ length: count }, (_, i) => `${i / 1000},${value}`).join('\n')) });
+async function openInspector(page, tab) {
+    if (!await page.locator('#data-inspector').isVisible()) await page.locator('#inspector-open').click();
+    await page.locator('#inspector-tab-' + tab).click();
+    if (tab === 'stats') await page.locator('#inspector-statistics').waitFor();
+}
+
 (async () => {
     const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     try {
@@ -36,7 +42,7 @@ const input = (value, count) => ({ name, mimeType: 'text/csv', buffer: Buffer.fr
         await page.locator('#column-search').fill('Signal');
         await page.locator('[data-channel="Signal"] .col-item-top').click();
         await page.locator('#analysis-scope').selectOption('all');
-        await page.locator('#inspector-open-data').click();
+        await openInspector(page, 'data');
         const second = await page.evaluate(() => Object.keys(__csvViewerDebug.state.files).find(id => __csvViewerDebug.state.files[id].timeData.length === 5001));
         await page.locator('#inspector-file').selectOption(second);
         const waitValue = async value => page.waitForFunction(value => document.querySelector('#inspector-sample-table tbody tr td:nth-child(4)')?.textContent === String(value)

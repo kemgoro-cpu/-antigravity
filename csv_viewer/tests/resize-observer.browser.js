@@ -6,6 +6,12 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { chromium } = require('playwright');
 
+async function openInspector(page, tab) {
+    if (!await page.locator('#data-inspector').isVisible()) await page.locator('#inspector-open').click();
+    await page.locator('#inspector-tab-' + tab).click();
+    if (tab === 'stats') await page.locator('#inspector-statistics').waitFor();
+}
+
 (async () => {
     // Real scrollbars are essential: removing one changes the observed content width.
     const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge', ignoreDefaultArgs: ['--hide-scrollbars'] });
@@ -40,7 +46,7 @@ const { chromium } = require('playwright');
 
         // The restored sidebar wraps the toolbar, leaving an old, oversized canvas.
         // Resizing that canvas removes its scrollbar and changes the observed width.
-        await page.locator('#stats-panel-btn').click();
+        await openInspector(page, 'stats');
         await page.locator('#sidebar-resize-handle').focus();
         await page.keyboard.press('End');
         await settle();

@@ -1407,10 +1407,8 @@ input[type="text"]:focus {
 .diff-ch-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .diff-exists { color: var(--text-secondary); font-size: 10px; flex-shrink: 0; }
 
-/* カーソル計測パネル（Measureモード。チャート右上）と
-   表示範囲統計パネル（Stats。チャート右下、スライダーの上）は同じ見た目 */
-.measure-panel,
-.stats-panel {
+/* カーソル計測パネル（Measureモード。チャート右上） */
+.measure-panel {
     position: absolute;
     top: 12px;
     right: 18px;
@@ -1425,18 +1423,17 @@ input[type="text"]:focus {
     max-height: 45%;
     overflow: auto;
 }
-.stats-panel { top: auto; bottom: 46px; }  /* Xスライダーに被らない位置 */
 .measure-title { font-weight: 600; color: var(--accent-soft); margin-bottom: 6px; white-space: nowrap; }
 .measure-dt    { font-weight: 500; color: var(--text-primary); font-family: 'Roboto Mono', monospace; font-size: 11px; }
 .measure-hint  { color: var(--text-secondary); white-space: nowrap; }
-.measure-panel table, .stats-panel table { border-collapse: collapse; white-space: nowrap; }
-.measure-panel th, .stats-panel th {
+.measure-panel table { border-collapse: collapse; white-space: nowrap; }
+.measure-panel th {
     color: var(--text-secondary); font-weight: 500; text-align: right;
     padding: 2px 7px; border-bottom: 1px solid var(--border);
 }
-.measure-panel th:first-child, .stats-panel th:first-child { text-align: left; }
-.measure-panel td, .stats-panel td { padding: 2px 7px; text-align: right; font-family: 'Roboto Mono', monospace; color: var(--text-primary); }
-.measure-panel td:first-child, .stats-panel td:first-child { text-align: left; font-family: inherit; }
+.measure-panel th:first-child { text-align: left; }
+.measure-panel td { padding: 2px 7px; text-align: right; font-family: 'Roboto Mono', monospace; color: var(--text-primary); }
+.measure-panel td:first-child { text-align: left; font-family: inherit; }
 .measure-swatch {
     display: inline-block; width: 8px; height: 8px; border-radius: 2px;
     margin-right: 5px; vertical-align: baseline;

@@ -8,6 +8,12 @@ const root = path.resolve(__dirname, '..');
 const url = pathToFileURL(path.join(root, 'index.html')).href;
 const file = (name, text) => ({ name, mimeType: 'text/csv', buffer: Buffer.from(text) });
 
+async function openInspector(page, tab) {
+    if (!await page.locator('#data-inspector').isVisible()) await page.locator('#inspector-open').click();
+    await page.locator('#inspector-tab-' + tab).click();
+    if (tab === 'stats') await page.locator('#inspector-statistics').waitFor();
+}
+
 (async () => {
     const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     const errors = [];
@@ -52,8 +58,8 @@ const file = (name, text) => ({ name, mimeType: 'text/csv', buffer: Buffer.from(
 
         // Valid interval with no source records: no fabricated zero statistic or CSV.
         await page.evaluate(() => window.__csvViewerDebug.selectAnalysisRange([10.1, 10.2])); await settled(page);
-        await page.locator('#stats-panel-btn').click();
-        assert.equal(await page.locator('#stats-panel tbody tr').count(), 0);
+        await openInspector(page, 'stats');
+        assert.equal(await page.locator('#inspector-statistics tbody tr').count(), 0);
         await page.evaluate(() => window.__csvViewerDebug.showXYPlotModal());
         await page.waitForFunction(() => document.querySelector('#xy-data-count').textContent.includes('有効 0 点'));
         assert.deepEqual(await page.evaluate(() => echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.map(s => s.data.length)), [0, 0]);
@@ -81,8 +87,8 @@ const file = (name, text) => ({ name, mimeType: 'text/csv', buffer: Buffer.from(
         await reversed.locator('#file-input').setInputFiles([file('reset-main.csv', resetCsv), file('reset-sub.csv', resetCsv)]);
         await loaded(reversed, 2); await select(reversed, 'Pressure');
         await reversed.evaluate(() => window.__csvViewerDebug.selectAnalysisRange([0, 2])); await settled(reversed);
-        await reversed.locator('#stats-panel-btn').click();
-        const statsRows = await reversed.locator('#stats-panel tbody tr').allTextContents();
+        await openInspector(reversed, 'stats');
+        const statsRows = await reversed.locator('#inspector-statistics tbody tr').allTextContents();
         assert.equal(statsRows.length, 2);
         for (const text of statsRows) assert.match(text, /3\s*$/);
         await reversed.locator('[data-pane="results"]').click(); await reversed.locator('#compare-calculate').click();

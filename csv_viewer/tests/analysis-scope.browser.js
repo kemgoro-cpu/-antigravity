@@ -4,6 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {chromium} = require('playwright');
+async function openInspector(page, tab) {
+    if (!await page.locator('#data-inspector').isVisible()) await page.locator('#inspector-open').click();
+    await page.locator('#inspector-tab-' + tab).click();
+    if (tab === 'stats') await page.locator('#inspector-statistics').waitFor();
+}
+
 (async()=>{
  const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'msedge'});
  const context=await browser.newContext({viewport:{width:1600,height:1000},acceptDownloads:true});
@@ -25,7 +31,7 @@ const {chromium} = require('playwright');
   await page.locator('[data-pane="results"]').click();await page.locator('#compare-calculate').click();
   await page.waitForFunction(()=>document.querySelectorAll('.compare-result').length===2);
   assert.match(await page.locator('#compare-results-status').innerText(),/10–30/);
-  await page.locator('#stats-panel-btn').click();assert.match(await page.locator('#stats-panel').innerText(),/10.00.*30.00/);
+  await openInspector(page, 'stats');assert.match(await page.locator('#inspector-statistics').innerText(),/10.00.*30.00/);
   let dl=page.waitForEvent('download');await page.evaluate(()=>window.__csvViewerDebug.exportVisibleCSV());let file=await dl;
   let rows=fs.readFileSync(await file.path(),'utf8').trim().split(/\r?\n/);assert.equal(rows.length,43);assert.equal(Number(rows[2].split(',')[0]),10);assert.equal(Number(rows.at(-1).split(',')[0]),30);
   await page.evaluate(()=>window.__csvViewerDebug.showXYPlotModal());
@@ -34,7 +40,7 @@ const {chromium} = require('playwright');
   assert.deepEqual(await page.evaluate(()=>echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.map(s=>s.data.length)),[41,41]);
   await page.locator('.xy-modal .modal-close-btn').click();
   await page.locator('#analysis-scope').selectOption('visible');await settle();assert.deepEqual((await scope()).range,[40,50]);
-  assert.match(await page.locator('#stats-panel').innerText(),/40.00.*50.00/);
+  assert.match(await page.locator('#inspector-statistics').innerText(),/40.00.*50.00/);
   dl=page.waitForEvent('download');await page.evaluate(()=>window.__csvViewerDebug.exportVisibleCSV());file=await dl;
   rows=fs.readFileSync(await file.path(),'utf8').trim().split(/\r?\n/);assert.equal(rows.length,23);
   await page.locator('#analysis-scope').selectOption('all');await settle();assert.deepEqual((await scope()).range,[0,60]);

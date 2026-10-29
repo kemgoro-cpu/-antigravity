@@ -12,6 +12,12 @@ const images = path.join(root, 'docs/images');
 const samples = ['基準_ﾛｸﾞ.csv', '比較_ﾛｸﾞ.csv'].map(name => path.join(root, 'docs/samples', name));
 const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
+async function openInspector(page, tab) {
+    if (!await page.locator('#data-inspector').isVisible()) await page.locator('#inspector-open').click();
+    await page.locator('#inspector-tab-' + tab).click();
+    if (tab === 'stats') await page.locator('#inspector-statistics').waitFor();
+}
+
 (async () => {
     const sampleHashes = samples.map(hash);
     const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge', ignoreDefaultArgs: ['--hide-scrollbars'] });
@@ -51,10 +57,10 @@ const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('
         await page.locator('#column-search').fill('');
         await page.locator('.offset-input').fill('-2'); await page.locator('.offset-input').press('Tab');
         await page.evaluate(() => window.__csvViewerDebug.selectAnalysisRange([10, 30]));
-        await page.locator('#inspector-open-data').click();
+        await openInspector(page, 'data');
         await settle();
         await capture('data-inspector', null, '選択区間10〜30秒の波形と、元サンプルの数値表。');
-        await page.locator('#inspector-open-quality').click();
+        await openInspector(page, 'quality');
         await settle();
         await capture('quality-inspector', null, '時刻全体と共通の解析区間の値を区別した品質診断。合成ログの正常例。');
         assert.deepEqual(errors, []);
