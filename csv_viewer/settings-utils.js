@@ -5,7 +5,7 @@
     'use strict';
 
     // 現行の設定スキーマバージョン(app.jsのsaveSettingsが書き込む値と一致させること)
-    const SETTINGS_VERSION = 6;
+    const SETTINGS_VERSION = 7;
 
     // 配列であるべきキー(違う型が入っていたら該当キーだけ捨てる)
     const ARRAY_KEYS = ['fileInfos', 'selectedNames', 'customRAMs', 'chartGroups', 'bitManualOff', 'mergedGroups', 'customModes'];
@@ -22,7 +22,7 @@
         return root.DriveIndex.LEGACY_CYCLE_ID;
     }
     // プレーンオブジェクトであるべきキー
-    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights', 'sidebarCollapsed', 'comparison'];
+    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights', 'sidebarCollapsed', 'comparison', 'importSettings', 'inspection'];
 
     /**
      * 保存済み設定を現行スキーマに揃える。
@@ -73,6 +73,15 @@
         out._version = SETTINGS_VERSION;
         // v6: comparison workspace is opt-in data; legacy settings start with a clean workspace.
         if (version < 6 && !out.comparison) out.comparison = {};
+        // Older versions had row-number controls only. Preserve deliberately
+        // non-default row layouts; default 1/2 keeps the new unit-row detection.
+        if (version < 7 && !out.importSettings) {
+            const nameRow = Number(out.nameRowIdx ?? 1), unitRow = Number(out.unitRowIdx ?? 2);
+            const customRows = Number.isInteger(nameRow) && nameRow > 0 && Number.isInteger(unitRow) && unitRow > 0
+                && (nameRow !== 1 || unitRow !== 2);
+            out.importSettings = { nameMode: customRows ? 'manual' : 'auto', unitMode: customRows ? 'manual' : 'auto',
+                timeColumn: 'auto', delimiter: 'auto', reviewBeforeLoad: false };
+        }
 
         return {
             ok: true,

@@ -103,19 +103,61 @@
         return cleaned.includes('time') || cell.includes('時間');
     }
 
-    function detectHeaderRows(raw, fallbackNameRow = 0, fallbackUnitRow = 1) {
-        const scanLimit = Math.min(50, raw.length);
-        for (let r = 0; r < scanLimit; r++) {
-            const row = raw[r];
-            if (!row || row.length < 2) continue;
-            const hasTime = row.some(c => isTimeHeader(c));
-            if (!hasTime) continue;
-            return {
-                nameRow: r,
-                unitRow: r + 1 < raw.length ? r + 1 : -1,
-            };
+    function normalizeImportOptions(options = {}) {
+        const row = (value, fallback) => Number.isInteger(Number(value)) && Number(value) >= 0 ? Number(value) : fallback;
+        const timeColumn = options.timeColumn !== 'auto' && options.timeColumn !== '' && options.timeColumn != null
+            && Number.isInteger(Number(options.timeColumn)) && Number(options.timeColumn) >= 0 ? Number(options.timeColumn) : 'auto';
+        return {
+            nameMode: options.nameMode === 'manual' ? 'manual' : 'auto',
+            nameRow: row(options.nameRow, 0),
+            unitMode: ['none', 'manual'].includes(options.unitMode) ? options.unitMode : 'auto',
+            unitRow: row(options.unitRow, 1),
+            timeColumn,
+            delimiter: [',', '\t', ';', '|'].includes(options.delimiter) ? options.delimiter : 'auto',
+            encodingMode: ['utf-8', 'shift-jis', 'utf-16le', 'utf-16be'].includes(options.encodingMode) ? options.encodingMode : 'auto',
+        };
+    }
+
+    // Prefer retaining a possible first data row over silently consuming it as units.
+    // A time unit such as "s" remains a unit row even with dimensionless "1" units.
+    function looksLikeDataRow(row, timeIdx) {
+        if (!row) return false;
+        if (getTimeUnitScale(row[timeIdx]).explicit) return false;
+        return row.some(cell => Number.isFinite(toTrnNumber(cell)) || /^nan$/i.test(String(cell).trim()));
+    }
+
+    function detectHeaderRows(raw, fallbackNameRow = 0, fallbackUnitRow = 1, options = {}) {
+        const opts = normalizeImportOptions({ ...options, nameRow: fallbackNameRow, unitRow: fallbackUnitRow });
+        let nameRow = opts.nameRow;
+        if (opts.nameMode !== 'manual') {
+            const found = raw.slice(0, 50).findIndex(row => row && row.length >= 2 && row.some(isTimeHeader));
+            if (found >= 0) nameRow = found;
         }
-        return { nameRow: fallbackNameRow, unitRow: fallbackUnitRow };
+        if (opts.unitMode === 'none' || fallbackUnitRow === -1) return { nameRow, unitRow: -1 };
+        if (opts.unitMode === 'manual') return { nameRow, unitRow: opts.unitRow };
+        const headers = raw[nameRow] || [];
+        const timeIdx = opts.timeColumn === 'auto' ? Math.max(0, headers.findIndex(isTimeHeader)) : opts.timeColumn;
+        const next = nameRow + 1;
+        return { nameRow, unitRow: next < raw.length && !looksLikeDataRow(raw[next], timeIdx) ? next : -1 };
+    }
+
+    function resolveImportLayout(raw, options = {}) {
+        const opts = normalizeImportOptions(options);
+        const { nameRow, unitRow } = detectHeaderRows(raw, opts.nameRow, opts.unitRow, opts);
+        const headers = raw[nameRow] || [];
+        const detectedTime = headers.findIndex(isTimeHeader);
+        const timeIdx = opts.timeColumn === 'auto' ? Math.max(0, detectedTime) : opts.timeColumn;
+        const dataStart = Math.max(nameRow, unitRow) + 1;
+        let error = '';
+        if (!raw.length) error = 'CSV行がありません。文字コードと区切り文字を確認してください。';
+        else if (nameRow >= raw.length || headers.length < 2) error = '名前行に2列以上の見出しがありません。名前行と区切り文字を確認してください。';
+        else if (unitRow >= raw.length || (unitRow >= 0 && unitRow <= nameRow)) error = '単位行は名前行より後の行を指定してください。単位がない場合は「なし」を選びます。';
+        else if (timeIdx >= headers.length) error = '指定した時間列がありません。時間列を選び直してください。';
+        else if (dataStart >= raw.length) error = 'データ開始行以降のデータがありません。名前行と単位行を確認してください。';
+        const warnings = [];
+        if (opts.timeColumn === 'auto' && detectedTime < 0) warnings.push('時間列を自動検出できないため先頭列を使用します。時間列を確認してください。');
+        if (unitRow >= 0 && looksLikeDataRow(raw[unitRow], timeIdx)) warnings.push('単位行に数値が含まれます。先頭データを単位として読み飛ばしていないか確認してください。');
+        return { nameRow, unitRow, dataStart, timeIdx, error, warnings };
     }
 
     function toNumber(v) {
@@ -249,6 +291,8 @@
         decodeBytes,
         detectTextEncoding,
         detectHeaderRows,
+        normalizeImportOptions,
+        resolveImportLayout,
         getTimeScaleInfo,
         getTimeUnitScale,
         getStringSimilarity,

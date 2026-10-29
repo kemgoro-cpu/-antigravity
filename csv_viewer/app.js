@@ -7,6 +7,7 @@
 // （本文のインデントは差分を最小にするため意図的に変えていない）
 (function () {
 let comparisonWorkspace = null;
+let dataInspector = null;
 
 // ─────────────────────────────────────────────────────────────
 // Error notification system
@@ -1159,6 +1160,7 @@ const state = {
 // 復元待ちの設定（ファイル読込後に適用される）
 let _pendingSettings = null;
 let _sessionRestoreNames = null;
+let _sessionRestorePending = true;
 
 // FileRecord: { name, shortName, columns, timeData, colData, role, offset, file, previewRows, headerInfo }
 //   role: 'main' | 'sub'
@@ -1899,13 +1901,29 @@ $('overlay-browse-btn')?.addEventListener('click', () => dom.fileInput.click());
 // 対応するファイル拡張子（.csv と .trn）
 const SUPPORTED_EXTENSIONS = ['.csv', '.trn'];
 
-function handleFiles(files) {
+let _importReviewQueue = Promise.resolve();
+function handleFiles(files, options = {}) {
+    const supported = [];
     Array.from(files).forEach(f => {
         const ext = f.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
-        if (SUPPORTED_EXTENSIONS.includes(ext)) parseCSV(f);
+        if (SUPPORTED_EXTENSIONS.includes(ext)) supported.push(f);
         else showError(`未対応の形式です: ${f.name}`, 'CSV または TRN ファイルをアップロードしてください。');
     });
+    if (!supported.length) return;
+    // Capture defaults once; concurrent reads cannot change another file's settings.
+    const defaults = window.CSVImportPreview?.getOptions();
+    const review = options.review || window.CSVImportPreview?.collectSettings().reviewBeforeLoad;
+    if (!review) {
+        supported.forEach(file => parseCSV(file, null, defaults));
+        return;
+    }
+    _importReviewQueue = _importReviewQueue.then(async () => {
+        const selected = await window.CSVImportPreview.confirmFiles(supported, defaults);
+        if (selected) selected.forEach(({ file, options: importOptions }) => parseCSV(file, null, importOptions));
+    }).catch(error => showError('読み込み前の確認を開けませんでした', error.message));
 }
+
+window.CSVImportPreview?.init({ createModal, esc, onChange: () => saveSettings(), handleFiles });
 
 function createParseJob(name, detail) {
     const id = 'job_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -1926,6 +1944,7 @@ function finishParseJob(job) {
     if (!job) return;
     state.parseJobs.delete(job.id);
     renderParseJobs();
+    dataInspector?.schedule();
     // Completion removes the job just before inserting its file. Check on the next
     // turn so a failed/cancelled restore cannot leave settings saving suspended.
     if (_sessionRestoreNames) setTimeout(async () => {
@@ -1995,6 +2014,8 @@ const {
     decodeBytes,
     detectTextEncoding,
     detectHeaderRows: detectHeaderRowsBase,
+    normalizeImportOptions,
+    resolveImportLayout,
     getTimeScaleInfo,
     normalizeChannelName,
     scoreAliasCandidate,
@@ -2028,7 +2049,7 @@ const _origFileById = new Map();
 const _restoreOrderById = new Map();
 let _nextSessionOrder = 0;
 
-async function parseCSV(file, restoreOrder = null) {
+async function parseCSV(file, restoreOrder = null, importOptions = null) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     _origFileById.set(fileId, file);
     if (Number.isInteger(restoreOrder) && restoreOrder >= 0) {
@@ -2036,14 +2057,15 @@ async function parseCSV(file, restoreOrder = null) {
         _nextSessionOrder = Math.max(_nextSessionOrder, restoreOrder + 1);
     }
     const trn = isTrnFile(file.name);
-    const requestedEncoding = getRequestedEncoding();
+    const options = normalizeImportOptions(importOptions || window.CSVImportPreview?.getOptions() || {
+        nameRow: parseInt(dom.nameRow.value, 10) - 1, unitRow: parseInt(dom.unitRow.value, 10) - 1, encodingMode: getRequestedEncoding(),
+    });
+    const requestedEncoding = options.encodingMode;
     // ヘッダー行のヒントはパース開始時点のSettings値をファイルごとに固定する（B4対策）。
     // 検出結果はUI表示としてdom.nameRow/unitRowへ書き戻されるため、並行パース中に
     // DOMから読み直すと他ファイルの検出値に汚染される。以降のチェーンはこの値だけを使う。
-    const headerHints = {
-        nameRow: parseInt(dom.nameRow.value, 10) - 1,
-        unitRow: parseInt(dom.unitRow.value, 10) - 1,
-    };
+    const headerHints = options;
+    const requestedDelimiter = options.delimiter === 'auto' ? undefined : options.delimiter;
     const parseJob = createParseJob(file.name, 'Detecting encoding...');
     let encoding = 'utf-8';
     try {
@@ -2083,6 +2105,7 @@ async function parseCSV(file, restoreOrder = null) {
         try {
             updateParseJob(parseJob, 'ヘッダーを解析中...', 0);
             Papa.parse(file, {
+                delimiter: requestedDelimiter,
                 encoding,
                 header: false,
                 dynamicTyping: false,
@@ -2090,7 +2113,7 @@ async function parseCSV(file, restoreOrder = null) {
                 preview: 50,
                 complete: res => {
                     try {
-                        onHeaderParsed(fileId, file.name, file, res.data, undefined, encoding, requestedEncoding, parseJob, headerHints);
+                        onHeaderParsed(fileId, file.name, file, res.data, res.meta.delimiter, encoding, requestedEncoding, parseJob, headerHints);
                     } catch (e) {
                         finishParseJob(parseJob);
                         showError(`ヘッダーのパースに失敗しました: ${file.name}`, e.stack || e.message);
@@ -2114,7 +2137,8 @@ function detectHeaderRows(raw, hints) {
     return detectHeaderRowsBase(
         raw,
         Number.isInteger(hints?.nameRow) ? hints.nameRow : parseInt(dom.nameRow.value, 10) - 1,
-        Number.isInteger(hints?.unitRow) ? hints.unitRow : parseInt(dom.unitRow.value, 10) - 1
+        Number.isInteger(hints?.unitRow) ? hints.unitRow : parseInt(dom.unitRow.value, 10) - 1,
+        hints || {}
     );
 }
 
@@ -2150,10 +2174,9 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
         return;
     }
 
-    const { nameRow, unitRow } = detectHeaderRows(raw, headerHints);
-    const dataStart = Math.max(nameRow, unitRow >= 0 ? unitRow : nameRow) + 1;
-
-    const parseIssue = describeHeaderParseIssue(raw, nameRow, unitRow, dataStart);
+    const layout = resolveImportLayout(raw, headerHints);
+    const { nameRow, unitRow, dataStart, timeIdx } = layout;
+    const parseIssue = layout.error || describeHeaderParseIssue(raw, nameRow, unitRow, dataStart);
     if (parseIssue) {
         finishParseJob(parseJob);
         showError(`CSVヘッダーを読み取れません: ${fileName}`, parseIssue);
@@ -2170,14 +2193,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
     const isTrn = isTrnFile(fileName);
     const readNumber = isTrn ? toTrnNumber : toNumber;
 
-    let timeIdx = headers.findIndex(h => isTimeHeader(h));
-    if (timeIdx < 0) {
-        timeIdx = 0;
-        showWarning(
-            `Time列が見つかりません: ${fileName}`,
-            '先頭列を時間軸として使用します。意図と違う場合は、時間列のヘッダーに Time または 時間 を含めてください。'
-        );
-    }
+    if (layout.warnings.length) showWarning(`読み込み設定を確認してください: ${fileName}`, layout.warnings.join('\n'));
 
     const timeHeader = headers[timeIdx] || '';
     const timeUnit = unitRow >= 0 ? (raw[unitRow][timeIdx] || '').trim().toLowerCase() : '';
@@ -2212,6 +2228,10 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
 
     // Phase 2: Stream-parse to extract ONLY time data (no column values yet)
     const timeChunks = [];
+    const sourceRows = [];
+    const invalidTimeRows = [];
+    const invalidTimeDetails = [];
+    let invalidTimeCount = 0;
     let rowIdx = 0;
     let trnDataIssue = '';
 
@@ -2246,8 +2266,15 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     }
                 }
                 const t = readNumber(row[timeIdx]);
-                if (!isNaN(t)) {
+                if (Number.isFinite(t)) {
                     timeChunks.push(t * timeScaleInfo.scale);
+                    sourceRows.push(rowIdx);
+                } else {
+                    invalidTimeCount++;
+                    if (invalidTimeRows.length < 1000) {
+                        invalidTimeRows.push(rowIdx);
+                        invalidTimeDetails.push({ sourceRow: rowIdx, raw: String(row[timeIdx] ?? '').slice(0, 80) });
+                    }
                 }
             },
             complete: async function() {
@@ -2280,8 +2307,12 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
 
                     state.files[fileId] = {
                         name: fileName, shortName, columns, timeData,
+                        importOptions: { ...headerHints },
+                        sourceRowNumbers: Uint32Array.from(sourceRows),
+                        importDiagnostics: { invalidTimeCount, invalidTimeRows, invalidTimeDetails, rowsScanned: Math.max(0, rowIdx - dataStart), sourceRowNumbering: 'nonempty-record-1based' },
                         sessionOrder: _restoreOrderById.get(fileId) ?? _nextSessionOrder++,
                         colData: {},  // empty — columns loaded on demand
+                        columnDiagnostics: {}, // collected with each original column's lazy load
                         role, offset: 0,
                         file,         // File reference for lazy column loading
                         previewRows: raw.slice(0, Math.min(raw.length, dataStart + 4)),
@@ -2411,7 +2442,11 @@ function loadColumnsForFile(fileId, colNames) {
         return new Promise(resolve => {
             try {
                 const tempArrs = {};
-                for (const col of stillNeeded) tempArrs[col.id] = [];
+                const columnDiagnostics = {};
+                for (const col of stillNeeded) {
+                    tempArrs[col.id] = [];
+                    columnDiagnostics[col.id] = { invalidValueCount: 0, invalidValueRows: [], missingCount: 0 };
+                }
 
                 let rowIdx = 0;
                 let trnDataIssue = '';
@@ -2444,9 +2479,21 @@ function loadColumnsForFile(fileId, colNames) {
                             }
                         }
                         const t = readNumber(row[timeIdx]);
-                        if (isNaN(t)) return;
+                        if (!Number.isFinite(t)) return;
                         for (const col of stillNeeded) {
-                            tempArrs[col.id].push(readNumber(row[col.idx]));
+                            const cell = row[col.idx];
+                            const value = readNumber(cell);
+                            const raw = String(cell ?? '');
+                            const diagnostics = columnDiagnostics[col.id];
+                            if (/^(?:NaN)?$/i.test(raw.trim())) {
+                                diagnostics.missingCount++;
+                            } else if (!Number.isFinite(value)) {
+                                diagnostics.invalidValueCount++;
+                                if (diagnostics.invalidValueRows.length < 1000) diagnostics.invalidValueRows.push({
+                                    index: tempArrs[col.id].length, sourceRow: rowIdx, raw: raw.slice(0, 80),
+                                });
+                            }
+                            tempArrs[col.id].push(value);
                         }
                     },
                     complete: function() {
@@ -2461,6 +2508,7 @@ function loadColumnsForFile(fileId, colNames) {
                             finishParseJob(loadJob);
                             for (const col of stillNeeded) {
                                 f.colData[col.id] = new Float32Array(tempArrs[col.id]);
+                                (f.columnDiagnostics ||= {})[col.id] = columnDiagnostics[col.id];
                             }
                             console.log(`[CSV Viewer] Columns loaded: [${colNamesStr}] (${tempArrs[stillNeeded[0].id].length} rows)`);
                             // Bitチャンネル自動検出
@@ -2947,6 +2995,7 @@ dom.clearBtn.addEventListener('click', async () => {
     state.files         = {};
     state.comparison = CSVCompare.cleanSettings();
     comparisonWorkspace?.clear();
+    dataInspector?.clear();
     state.selectedNames = new Set();
     state.chartGroups   = [];
     state.channelAliases = {};
@@ -3079,6 +3128,7 @@ function renderFileList() {
             </div>
             ${timeUnitRow}
             ${offsetRow}
+            <div class="file-session-row" data-session-file="${esc(fid)}" aria-label="${esc(f.name)}の自動復元用保存状態"></div>
         `;
 
         // Click on sub file row in shift mode → change active shift target
@@ -3094,6 +3144,8 @@ function renderFileList() {
 
         dom.fileList.appendChild(li);
     }
+
+    renderSessionStatus();
 
     // Role toggle（左クリック）
     dom.fileList.querySelectorAll('[data-roleid]').forEach(el => {
@@ -4032,6 +4084,50 @@ async function applyCycleTraceColumns() {
     renderChart();
 }
 
+// Result freshness uses inputs, not view-only zoom/color changes. Array identities
+// distinguish reloaded data while avoiding an O(rows) scan during ordinary saves.
+const _driveInputIds = new WeakMap();
+let _driveInputCounter = 0;
+function driveInputId(value) {
+    if (!value || typeof value !== 'object') return null;
+    if (!_driveInputIds.has(value)) _driveInputIds.set(value, ++_driveInputCounter);
+    return _driveInputIds.get(value);
+}
+
+function getDriveIndexInputSignature() {
+    const di = state.driveIndex;
+    return JSON.stringify({
+        channels: di.channels, cycleId: di.cycleId, phases: di.phaseOverride,
+        roadLoad: di.roadLoadByFile, autoAlign: di.autoAlign, align: di.alignByFile,
+        formulas: (state.customRAMs || []).map(c => [c.name, c.expr, c.unit]),
+        modes: (state.customModes || []).map(m => [m.id, driveInputId(m.trace), m.phases]),
+        files: [getMainFileId(), ...getSubFileIds()].filter(Boolean).map(id => {
+            const f = state.files[id];
+            if (!f) return [id, null];
+            return [id, driveInputId(f), f.role, driveInputId(f.timeData), f.timeData?.length,
+                f.headerInfo?.timeScale, f.headerInfo?.timeScaleUnit, f.headerInfo?.timeScaleSource,
+                ['target', 'actual', 'fuel'].map(k => {
+                    const c = resolveColumnForFile(f, di.channels[k]);
+                    return c ? [c.id, c.name, c.unit] : null;
+                })];
+        }),
+    });
+}
+
+function getDriveIndexResultState() {
+    return window.UnitValidation.resultState(state.driveIndex, getDriveIndexInputSignature());
+}
+
+function validateDriveFile(file, channels = state.driveIndex.channels) {
+    const actual = resolveColumnForFile(file, channels.actual);
+    const target = channels.target ? resolveColumnForFile(file, channels.target) : null;
+    const fuel = channels.fuel ? resolveColumnForFile(file, channels.fuel) : null;
+    return window.UnitValidation.validateDriveInputs({
+        actualUnit: actual?.unit, targetUnit: target?.unit, useModeTrace: !channels.target,
+        fuelUnit: fuel?.unit, hasFuel: !!fuel, timeMetadata: file.headerInfo,
+    });
+}
+
 /**
  * 実測車速チャンネルと走行モードが揃えば指標・燃費を計算し state.driveIndex に格納する。
  * 目標車速は原則「選択モードの法規トレース」を使う（di.channels.target にCSV列名がある場合のみその列を目標にする）。
@@ -4058,10 +4154,20 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     // 解決結果を state に反映（永続化・モーダル表示用）
     di.channels = { target: targetName || null, actual: actualName || null, fuel: fuelName || null };
 
+    const computation = (di.computeVersion || 0) + 1;
+    di.computeVersion = computation;
+    const inputSignature = getDriveIndexInputSignature();
+    di.calculating = true;
+    di.resultSignature = null;
+    di.validationSummary = '';
+    updateDriveIndexButton();
+    try {
+
     // モード判別と整合に使うため、メインの実測車速を先にロードする。
     const mainActualCol = resolveColumnForFile(mainFile, actualName);
-    if (mainActualCol) await loadColumnsForFile(getMainFileId(), [mainActualCol.name]);
-    const mainActual = mainActualCol ? mainFile.colData[mainActualCol.id] : null;
+    const mainValidation = validateDriveFile(mainFile);
+    if (mainActualCol && mainValidation.ok) await loadColumnsForFile(getMainFileId(), [mainActualCol.name]);
+    const mainActual = mainActualCol && mainValidation.ok ? mainFile.colData[mainActualCol.id] : null;
 
     // 実効モードID: 手動選択 > 総時間判別（軽量・高速） > （それで決まらなければ）車速ベストフィット。
     //   前後に余分データがあると総時間判別は外れるため、その場合は波形ベストフィットにフォールバックする。
@@ -4075,7 +4181,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         effectiveId = explicitId; detName = '—';
     } else {
         // 最高車速でのタイブレークを効かせるため、実測車速も渡す
-        const det = window.DriveIndex.detectCycle(mainFile.timeData, mainActual);
+        const det = mainValidation.ok ? window.DriveIndex.detectCycle(mainFile.timeData, mainActual) : null;
         if (det && det.id && !det.ambiguous && !det.speedMismatch) {
             effectiveId = det.id; detName = det.name;
         } else if (di.autoAlign && mainActual) {
@@ -4117,8 +4223,12 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
 
     // 実測車速が無い、またはモードトレース指定なのにモード未選択（トレース取得不可）なら計算しない。
     if (!actualName || (useModeTrace && !modeTrace)) {
+        if (di.computeVersion !== computation || getDriveIndexInputSignature() !== inputSignature) return null;
         di.results = [];
         di.lastResult = null;
+        di.resultSignature = inputSignature;
+        di.validationSummary = mainValidation.issues.filter(i => i.field !== 'fuel').map(i => i.message).join(' ')
+            || '走行モードと実測車速を選んで再計算してください。';
         // 結果を捨てたので、前回の判別で作った目標車速チャンネルも撤去する
         await applyCycleTraceColumns();
         updateDriveIndexButton();
@@ -4148,14 +4258,25 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             continue;
         }
 
+        const validation = validateDriveFile(f);
+        entry.unitValidation = validation;
+        if (!validation.ok) {
+            entry.result = null;
+            entry.reason = validation.issues.filter(i => i.field !== 'fuel').map(i => i.message).join(' ');
+            results.push(entry);
+            continue;
+        }
+        if (validation.issues.length) entry.warning = validation.issues.map(i => i.message).join(' ') + ' 燃費は未評価です。';
+        if (fuelName && !fCol) entry.warning = '燃料流量の対応チャンネルがないため、燃費は未評価です。';
+
         // 必要列を遅延ロード（目標トレース利用時は目標列ロード不要）
         const need = [aCol.name];
         if (tCol) need.push(tCol.name);
-        if (fCol) need.push(fCol.name);
+        if (fCol && validation.fuelAllowed) need.push(fCol.name);
         await loadColumnsForFile(fid, need);
 
         const actual = f.colData[aCol.id];
-        const fuel   = fCol ? f.colData[fCol.id] : null;
+        const fuel   = fCol && validation.fuelAllowed ? f.colData[fCol.id] : null;
         if (!f.timeData || !actual) {
             entry.result = null;
             entry.reason = 'データなし';
@@ -4217,7 +4338,11 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         results.push(entry);
     }
 
+    // A concurrent file/condition change must never publish old calculations as current.
+    if (di.computeVersion !== computation || getDriveIndexInputSignature() !== inputSignature) return null;
     di.results = results;
+    di.resultSignature = inputSignature;
+    di.validationSummary = results.filter(r => !r.result).map(r => r.reason).join(' ');
     // メインの結果をボタン表示用に保持（後方互換）
     const mainEntry = results.find(r => r.role === 'main' && r.result);
     di.lastResult = mainEntry ? {
@@ -4232,6 +4357,12 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     await applyCycleTraceColumns();
     updateDriveIndexButton();
     return di.results;
+    } finally {
+        if (di.computeVersion === computation) {
+            di.calculating = false;
+            updateDriveIndexButton();
+        }
+    }
 }
 
 /** ツールバーボタンのラベル/状態を直近結果に合わせて更新する */
@@ -4239,13 +4370,16 @@ function updateDriveIndexButton() {
     const btn = dom.driveIndexBtn;
     if (!btn) return;
     const di = state.driveIndex;
+    const resultState = getDriveIndexResultState();
     const labelEl = btn.querySelector('.di-label') || btn;
-    if (di.lastResult) {
+    btn.dataset.resultStatus = resultState.status;
+    btn.title = resultState.reason;
+    if (di.lastResult && resultState.status === 'current') {
         btn.classList.add('di-active');
         labelEl.textContent = di.lastResult.cycleName || 'Drive Index';
     } else {
         btn.classList.remove('di-active');
-        labelEl.textContent = 'Drive Index';
+        labelEl.textContent = resultState.status === 'stale' ? 'Drive Index・未更新' : 'Drive Index・未評価';
     }
 }
 
@@ -4334,7 +4468,8 @@ function buildDriveIndexAllTables(results, roadLoadByFile, alignByFile) {
         const body = entry.result
             ? buildDriveIndexTable(entry.result)
             : `<p class="di-empty">${esc(entry.reason || '計算できませんでした')}</p>`;
-        return `<div class="di-file-section">${head}${alignInputs}${rlInputs}${body}</div>`;
+        const warning = entry.warning ? `<p class="di-empty" role="status">${esc(entry.warning)}</p>` : '';
+        return `<div class="di-file-section">${head}${alignInputs}${rlInputs}${warning}${body}</div>`;
     }).join('');
 }
 
@@ -4370,13 +4505,17 @@ function showDriveIndexModal() {
     const di = state.driveIndex;
     const REG = window.DriveIndex.CYCLE_REGISTRY;
 
-    const colNames  = mainFile.columns.filter(c => !c.isCustom).map(c => c.name);
-    const speedOpts = sel => colNames.map(n => `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    // Explicit conversion may be done in Custom RAM; allow its named output as
+    // an input while excluding generated cycle traces and cross-file formulas.
+    const driveCols = mainFile.columns.filter(c => !c.isCycleTrace && !c.isCrossFile);
+    const colNames = driveCols.map(c => c.name);
+    const channelOptions = sel => driveCols.map(c => `<option value="${esc(c.name)}" ${c.name === sel ? 'selected' : ''}>${esc(c.name)} [${esc(c.unit || '単位なし')}]${c.isCustom ? '（計算）' : ''}</option>`).join('');
+    const speedOpts = sel => `<option value="" ${!sel ? 'selected' : ''}>（選択してください）</option>` + channelOptions(sel);
     const fuelOpts  = sel => `<option value="" ${!sel ? 'selected' : ''}>（なし）</option>`
-        + colNames.map(n => `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join('');
+        + channelOptions(sel);
     // 目標車速: 既定は選択モードの法規トレース（value=""）。CSV列を明示選択した時だけその列を目標にする。
     const targetOpts = sel => `<option value="" ${!sel ? 'selected' : ''}>（選択モードの法規トレースを使用）</option>`
-        + colNames.map(n => `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join('');
+        + channelOptions(sel);
     // 走行モード: 内蔵サイクル＋カスタムモード（独自モードは optgroup でまとめる）
     const cycleOpts = () => {
         const cur = window.DriveIndex.resolveCycleId(di.cycleId);
@@ -4391,6 +4530,9 @@ function showDriveIndexModal() {
         return html;
     };
     const detName = di.lastResult ? di.lastResult.detectedName : '—';
+    const draftOwner = {};
+    di.draftOwner = draftOwner;
+    di.draftDirty = false;
 
     const { modal, close } = createModal(`
         <h3 id="drive-index-title"><i class='bx bx-tachometer'></i> Driving Index（モード走行品質・燃費）</h3>
@@ -4402,13 +4544,17 @@ function showDriveIndexModal() {
             <label>燃料流量<select class="di-ch-fuel">${fuelOpts(di.channels.fuel)}</select></label>
             <label class="di-align-toggle"><input type="checkbox" class="di-auto-align" ${di.autoAlign ? 'checked' : ''}>前後の余分データを自動整合</label>
         </div>
+        <p class="di-note">必要単位: 目標・実測車速は km/h、燃料流量は L/h、時間は秒基準です。s / ms の明示された時間は既存の読み込み補正を使用します。</p>
+        <div class="di-unit-status" aria-live="polite"></div>
+        <details class="di-unit-help"><summary>単位が違う・分からないとき</summary><p>必要単位のチャンネルを選び直してください。m/s の車速は Custom RAM で「元信号 * 3.6」、L/min の流量は「元信号 * 60」を作り、単位を km/h / L/h に設定して選択できます。元データは変更しません。g/s 等の質量流量は密度が必要なため自動換算しません。単位なしの信号は計測仕様を確認し、同じ値を参照する Custom RAM に確認済みの単位を指定してください。</p></details>
+        <p class="di-result-status" role="status" aria-live="polite"></p>
         <details class="di-custom-modes">
             <summary>カスタムモードを追加（MDC等・時間-車速を貼り付け）</summary>
             <div class="di-cm-body">
                 <div class="di-cm-list"></div>
                 <div class="di-cm-form">
                     <input type="text" class="di-cm-name" placeholder="モード名（例: MDC）">
-                    <textarea class="di-cm-data" rows="5" placeholder="時間,車速 を1行ずつ貼り付け（Excel/CSVからコピペ可）&#10;0,0&#10;1,0.5&#10;2,1.8&#10;..."></textarea>
+                    <textarea class="di-cm-data" rows="5" placeholder="時間[s],車速[km/h] を1行ずつ貼り付け（単位を確認してください）&#10;0,0&#10;1,0.5&#10;2,1.8&#10;..."></textarea>
                     <div class="di-cm-msg"></div>
                     <button class="btn-primary btn-sm di-cm-add"><i class='bx bx-plus'></i> モード追加</button>
                 </div>
@@ -4425,7 +4571,60 @@ function showDriveIndexModal() {
         </div>`, {
         modalClass: 'drive-index-modal',
         labelledBy: 'drive-index-title',
+        onClose: () => {
+            if (di.draftOwner === draftOwner) {
+                di.draftDirty = false;
+                di.draftOwner = null;
+                updateDriveIndexButton();
+            }
+        },
     });
+
+    const selectedChannels = () => ({
+        target: modal.querySelector('.di-ch-target').value || null,
+        actual: modal.querySelector('.di-ch-actual').value || null,
+        fuel: modal.querySelector('.di-ch-fuel').value || null,
+    });
+    const renderInputUnits = () => {
+        const selected = selectedChannels();
+        modal.querySelector('.di-unit-status').innerHTML = [getMainFileId(), ...getSubFileIds()].filter(Boolean).map(fid => {
+            const f = state.files[fid];
+            if (!f) return '';
+            const validation = validateDriveFile(f, selected);
+            const descriptions = validation.checks.map(c => `${c.label}: ${c.unit || '単位なし'}${c.ok ? ' ✓' : ' 要確認'}`);
+            const messages = validation.issues.map(i => `<div>${esc(i.message)}</div>`).join('');
+            const confirmTime = validation.issues.some(i => i.field === 'time' && i.status === 'unknown')
+                ? `<div>元の時間単位を確認して指定: <button type="button" class="btn-secondary btn-sm" data-di-time-file="${esc(fid)}" data-di-time-unit="s">秒 (s)</button> <button type="button" class="btn-secondary btn-sm" data-di-time-file="${esc(fid)}" data-di-time-unit="ms">ミリ秒 (ms)</button></div>` : '';
+            return `<div class="di-note" data-di-unit-file="${esc(fid)}"><strong>${esc(f.shortName || f.name)}</strong>: ${esc(descriptions.join(' / '))}${messages}${confirmTime}</div>`;
+        }).join('');
+    };
+    const renderFreshness = () => {
+        const freshness = getDriveIndexResultState();
+        const el = modal.querySelector('.di-result-status');
+        el.dataset.status = freshness.status;
+        el.textContent = (freshness.status === 'current' ? '更新済み — ' : freshness.status === 'stale' ? '未更新 — ' : '未評価 — ') + freshness.reason;
+        // Keep coefficient/alignment inputs available while withholding old values.
+        modal.querySelectorAll('.di-table').forEach(table => { table.hidden = freshness.status !== 'current'; });
+        updateDriveIndexButton();
+    };
+    const markDraftChanged = () => {
+        di.draftDirty = true;
+        renderInputUnits();
+        renderFreshness();
+    };
+    modal.addEventListener('input', e => {
+        if (e.target.matches('.di-controls input, .di-controls select, .di-phase-rows input, .di-file-rl input, .di-file-align input')) markDraftChanged();
+    });
+    modal.addEventListener('change', e => {
+        if (e.target.matches('.di-controls input, .di-controls select, .di-phase-rows input, .di-file-rl input, .di-file-align input')) markDraftChanged();
+    });
+    modal.addEventListener('click', async e => {
+        const button = e.target.closest('[data-di-time-file]');
+        if (!button) return;
+        await setManualTimeUnit(button.dataset.diTimeFile, button.dataset.diTimeUnit);
+        if (modal.isConnected) markDraftChanged();
+    });
+    renderInputUnits();
 
     // ── フェーズ編集行 ──
     const phaseRowsEl = modal.querySelector('.di-phase-rows');
@@ -4444,7 +4643,7 @@ function showDriveIndexModal() {
                 <button class="di-p-del" title="この区間を削除">×</button>
             </div>`).join('');
         phaseRowsEl.querySelectorAll('.di-p-del').forEach(b =>
-            b.addEventListener('click', e => e.target.closest('.di-phase-row').remove()));
+            b.addEventListener('click', e => { e.target.closest('.di-phase-row').remove(); markDraftChanged(); }));
     };
     const readPhaseRows = () => [...phaseRowsEl.querySelectorAll('.di-phase-row')].map(r => ({
         name:  r.querySelector('.di-p-name').value.trim() || 'phase',
@@ -4463,6 +4662,7 @@ function showDriveIndexModal() {
         const rows = readPhaseRows();
         rows.push({ name: 'phase ' + (rows.length + 1), start: 0, end: 0 });
         renderPhaseRows(rows);
+        markDraftChanged();
     });
     // モード変更でフェーズ既定値を入れ替え（手動編集はリセット）
     modal.querySelector('.di-cycle').addEventListener('change', e =>
@@ -4549,11 +4749,14 @@ function showDriveIndexModal() {
         renderPhaseRows(registryPhasesOf(id));    // カスタムは既定フェーズ無し（空）
         cmNameEl.value = ''; cmDataEl.value = '';
         cmMsgEl.textContent = `「${name}」を追加しました`; cmMsgEl.className = 'di-cm-msg ok';
+        markDraftChanged();
     });
 
     // 結果テーブル描画（ファイル別）
     const renderResult = () => {
         modal.querySelector('.di-result').innerHTML = buildDriveIndexAllTables(di.results, di.roadLoadByFile, di.alignByFile);
+        renderInputUnits();
+        renderFreshness();
     };
     renderResult();
 
@@ -4585,11 +4788,7 @@ function showDriveIndexModal() {
     // 再計算
     modal.querySelector('.di-recompute').addEventListener('click', async () => {
         di.cycleId = modal.querySelector('.di-cycle').value || null;
-        di.channels = {
-            target: modal.querySelector('.di-ch-target').value || null,
-            actual: modal.querySelector('.di-ch-actual').value || null,
-            fuel:   modal.querySelector('.di-ch-fuel').value || null,
-        };
+        di.channels = selectedChannels();
         di.autoAlign = modal.querySelector('.di-auto-align').checked;
         readRoadLoadInputs(); // ファイル別の走行抵抗を取り込む
         readAlignInputs();    // ファイル別のサイクル切り出し（開始/終了）を取り込む
@@ -4600,9 +4799,26 @@ function showDriveIndexModal() {
             edited.every((p, i) => p.name === defaults[i].name && +p.start === +defaults[i].start && +p.end === +defaults[i].end);
         di.phaseOverride = same ? null : edited;
 
-        await computeDriveIndex({ autoDetect: false });
-        renderResult();
-        saveSettings();
+        const button = modal.querySelector('.di-recompute');
+        button.disabled = true;
+        di.draftDirty = false;
+        try {
+            const pending = computeDriveIndex({ autoDetect: false });
+            renderFreshness();
+            await pending;
+            if (modal.isConnected) {
+                if (di.draftDirty) renderFreshness();
+                else renderResult();
+            }
+            saveSettings();
+        } catch (error) {
+            di.resultSignature = null;
+            di.validationSummary = '計算できませんでした。入力条件を確認して再計算してください。';
+            if (modal.isConnected) renderFreshness();
+            showWarning('Drive Indexを更新できませんでした', error.message);
+        } finally {
+            button.disabled = false;
+        }
     });
 
     modal.querySelector('.di-close').addEventListener('click', close);
@@ -5658,7 +5874,7 @@ function getActiveGroups() {
             const mvd  = mainFile.colData[col.id];
             if (!mvd) continue;
             const mPts = new Array(mtd.length);
-            for (let i = 0; i < mtd.length; i++) mPts[i] = [mtd[i], isNaN(mvd[i]) ? null : mvd[i]];
+            for (let i = 0; i < mtd.length; i++) mPts[i] = [mtd[i], Number.isFinite(mvd[i]) ? mvd[i] : null];
 
             // 単色モード時はファイルの色を使う、通常時はチャンネル個別の色
             const mainFileId = getMainFileId();
@@ -5696,7 +5912,7 @@ function getActiveGroups() {
                 if (!svd) continue;
                 const offset = comparisonWorkspace?.effectiveOffset(sf) ?? sf.offset;
                 const sPts   = new Array(std.length);
-                for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, isNaN(svd[i]) ? null : svd[i]];
+                for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, Number.isFinite(svd[i]) ? svd[i] : null];
 
                 const subColor = state.monoColorMode
                     ? (state.fileColors[subId] || sc.color)
@@ -5730,6 +5946,7 @@ let _lastAutoRow = null;
 
 function renderChart() {
     comparisonWorkspace?.schedule();
+    dataInspector?.schedule();
     if (!state.chart) initChart();
     // notMerge replaces tooltip views; cancel pending tooltip positioning before rebuilding them.
     state.chart.dispatchAction({ type: 'hideTip' });
@@ -5823,8 +6040,9 @@ function renderChart() {
     // Compute global time range across all loaded files (including offsets)
     const { min: globalXMin, max: globalXMax } = CSVChartOptions.computeGlobalXRange(
         Object.values(state.files)
-            .filter(f => f.timeData && f.timeData.length > 0)
-            .map(f => ({ first: f.timeData[0], last: f.timeData[f.timeData.length - 1], offset: comparisonWorkspace?.effectiveOffset(f) ?? (f.offset || 0) })));
+            .map(f => ({ range: CSVAnalysis.extent(f), offset: comparisonWorkspace?.effectiveOffset(f) ?? (f.offset || 0) }))
+            .filter(f => f.range)
+            .map(f => ({ first: f.range[0], last: f.range[1], offset: f.offset })));
 
     const AXIS_GAP = DL.axisGap; // フォントに連動(大きいフォントで軸同士が重ならないように)
     const groupLayouts = CSVChartOptions.computeGroupLayouts(
@@ -5976,6 +6194,22 @@ function renderChart() {
                     itemStyle: { color: EVENT_AREA_COLOR },
                     data: areaData,
                 },
+            });
+        });
+    }
+
+    const inspectionTime = dataInspector?.cursorTime();
+    if (Number.isFinite(inspectionTime)) {
+        order.forEach((groupId, gi) => {
+            const axisMap = yAxisIndexByGroup.get(groupId);
+            series.push({
+                id: `inspection-cursor-${gi}`, type: 'line', data: [],
+                xAxisIndex: gi, yAxisIndex: axisMap?.values().next().value ?? 0,
+                silent: true, animation: false, z: 8,
+                markLine: { symbol: 'none', silent: true, animation: false,
+                    label: { show: gi === 0, formatter: '元データ', color: T.accent },
+                    lineStyle: { color: T.accent, width: 1.5, type: 'dashed' },
+                    data: [{ xAxis: inspectionTime }] },
             });
         });
     }
@@ -6439,6 +6673,16 @@ dom.chartEl.addEventListener('click', e => {
     renderChart(); // カーソル線の再描画（updateMeasurePanelもrenderChart内で呼ばれる）
 });
 
+// 波形と元データ表を、補間を使わず同じ原サンプルへ接続する。
+dom.chartEl.addEventListener('click', e => {
+    if (!dataInspector || !state.chart || state.measureMode || state.brushMode || state.shiftMode || state.arrangeMode || state.mergeDrag) return;
+    const rect = dom.chartEl.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    if (!state.gridRegions.some((_, i) => state.chart.containPixel({ gridIndex: i }, point))) return;
+    const t = state.chart.convertFromPixel({ xAxisIndex: 0 }, point[0]);
+    if (Number.isFinite(t)) dataInspector.seekTime(t);
+});
+
 /**
  * timeDataの [t0, t1] 区間のサンプルを集計する（NaNはスキップ）。
  * @returns {{min:number,max:number,mean:number,rms:number,n:number}|null} 点が無ければnull
@@ -6558,6 +6802,10 @@ function getVisibleXRange() {
     return [t0, t1];
 }
 
+function getAnalysisContext() {
+    return comparisonWorkspace?.analysisContext() || CSVAnalysis.resolve(null, getVisibleXRange(), null);
+}
+
 function toggleStatsPanel() {
     state.statsPanelVisible = !state.statsPanelVisible;
     dom.statsBtn.classList.toggle('btn-active', state.statsPanelVisible);
@@ -6572,7 +6820,7 @@ function updateStatsPanel() {
         existing?.remove();
         return;
     }
-    const range = getVisibleXRange();
+    const range = getAnalysisContext().range;
     if (!range) { existing?.remove(); return; }
 
     let panel = existing;
@@ -6609,7 +6857,7 @@ function collectStatsRows(t0, t1) {
 
 /** 表示範囲 [t0, t1] の統計テーブルHTML（行 = チャンネル × ファイル） */
 function buildStatsTableHTML(t0, t1) {
-    let html = `<div class="measure-title">表示範囲の統計　`
+    let html = `<div class="measure-title">解析対象の統計　`
         + `<span class="measure-dt">${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s</span></div>`;
     if (!(_lastRenderedLookup && _lastRenderedLookup.mainFile)) {
         return html + `<div class="measure-hint">データがありません</div>`;
@@ -7319,7 +7567,8 @@ function exportVisibleCSV() {
     const { groups: activeGroups, order: activeOrder } =
         _lastRenderedGroups || { groups: new Map(), order: [] };
 
-    const range = getVisibleXRange();
+    const range = getAnalysisContext().range;
+    if (!range) { showWarning('解析対象の区間を指定してください'); return; }
     const t0 = range ? Math.min(range[0], range[1]) : -Infinity;
     const t1 = range ? Math.max(range[0], range[1]) : Infinity;
 
@@ -7333,7 +7582,7 @@ function exportVisibleCSV() {
             if (seen.has(chName)) continue;
             seen.add(chName);
             const col = lookup.colByName.get(chName);
-            if (col && mainFile.colData[col.id]) cols.push(col);
+            if (col && mainFile.colData[col.id] && !(getAnalysisContext().rawTime && col.isCrossFile)) cols.push(col);
         }
     }
     if (!cols.length) {
@@ -7367,7 +7616,7 @@ function exportVisibleCSV() {
         rows++;
     }
     if (!rows) {
-        showWarning('表示範囲内にデータ点がありません');
+        showWarning('解析対象の区間内にデータ点がありません');
         return;
     }
 
@@ -7400,11 +7649,16 @@ function exportVisibleCSV() {
  * チャート画像・ファイル情報・表示範囲の統計・Drive Index・Custom RAM・
  * イベント検出結果を1枚の自己完結HTMLレポートとして保存する（F9）。
  */
-function exportReportHTML() {
+async function exportReportHTML() {
     const mainFile = getMainFile();
     if (!mainFile || state.numGrids === 0) return;
+    const context = getAnalysisContext();
+    if (!context.range) return showWarning('解析対象の区間を指定してください');
+    comparisonWorkspace?.showAnalysisRange();
+    await new Promise(requestAnimationFrame);
+    if (mainFile !== getMainFile() || JSON.stringify(context) !== JSON.stringify(getAnalysisContext())) return showWarning('解析条件が変わりました。もう一度レポートを保存してください');
     const imgURL = getChartImageDataURL();
-    const range = getVisibleXRange() || [mainFile.timeData[0], mainFile.timeData[mainFile.timeData.length - 1]];
+    const range = context.range;
     const [t0, t1] = [Math.min(range[0], range[1]), Math.max(range[0], range[1])];
     const now = new Date();
     const fmtNum = v => (v == null || Number.isNaN(v)) ? '—' : fmtVal(v);
@@ -7423,7 +7677,7 @@ function exportReportHTML() {
     const statsRows = collectStatsRows(t0, t1);
     let statsHtml = '';
     if (statsRows.length) {
-        statsHtml = `<h2>表示範囲の統計（${esc(t0.toFixed(2))} – ${esc(t1.toFixed(2))} s）</h2>`
+        statsHtml = `<h2>解析対象の統計（${esc(context.label)}）</h2>`
             + `<table><thead><tr><th>チャンネル</th><th>min</th><th>max</th><th>mean</th><th>σ</th><th>n</th></tr></thead><tbody>`
             + statsRows.map(r =>
                 `<tr><td><span class="sw" style="background:${esc(r.color)}"></span>${esc(r.label)}</td>`
@@ -7434,7 +7688,9 @@ function exportReportHTML() {
 
     // ── Drive Index（計算済みのときだけ）──
     let diHtml = '';
-    const diResults = (state.driveIndex.results || []).filter(r => r.result);
+    const diStatus = typeof getDriveIndexResultState === 'function' ? getDriveIndexResultState() : { status: 'current' };
+    const diResults = diStatus.status === 'current' ? (state.driveIndex.results || []).filter(r => r.result) : [];
+    if (diStatus.status === 'stale') diHtml = `<h2>Drive Index</h2><p>未更新：${esc(diStatus.reason || '条件が変更されています。再計算してください。')}</p>`;
     if (diResults.length) {
         const metrics = [
             ['iwr', 'IWR [%]'], ['rmsse', 'RMSSE [km/h]'], ['ascr', 'ASCR [%]'], ['dr', 'DR [%]'],
@@ -7442,12 +7698,13 @@ function exportReportHTML() {
             ['fuelL', '燃料 [L]'], ['fuelKmPerL', '燃費 [km/L]'], ['fuelLper100km', '燃費 [L/100km]'],
         ];
         diHtml = `<h2>Drive Index（${esc(diResults[0].cycleName || '')}）</h2>`
+            + diResults.filter(r => r.warning).map(r => `<p>${esc(r.fileName)}：${esc(r.warning)}</p>`).join('')
             + `<table><thead><tr><th>指標</th>`
             + diResults.map(r => `<th>${esc(r.fileName)}（${r.role}）</th>`).join('')
             + `</tr></thead><tbody>`
             + metrics.map(([key, label]) =>
                 `<tr><td>${esc(label)}</td>`
-                + diResults.map(r => `<td class="num">${fmtNum(r.result[key])}</td>`).join('')
+                + diResults.map(r => `<td class="num">${fmtNum(r.result.total?.[key])}</td>`).join('')
                 + `</tr>`).join('')
             + `</tbody></table>`;
     }
@@ -7496,6 +7753,7 @@ img.chart { max-width: 100%; border: 1px solid #d5d9e2; border-radius: 6px; marg
 <h2>ファイル</h2>
 <table><thead><tr><th>ロール</th><th>ファイル名</th><th>点数</th><th>チャンネル数</th><th>時間範囲</th><th>時間シフト</th></tr></thead><tbody>${filesRows}</tbody></table>
 <h2>チャート</h2>
+${t0 === t1 ? '<p class="meta">波形画像には選択時刻の前後も含みます。統計の対象は選択時刻のサンプルです。</p>' : ''}
 ${imgURL ? `<img class="chart" src="${imgURL}" alt="chart">` : '<p class="meta">チャート画像を取得できませんでした</p>'}
 ${statsHtml}
 ${diHtml}
@@ -7613,6 +7871,7 @@ let _saveSettingsTimer = null;
  *   連続発火する操作で指定すると、短時間の連続変更が1つの履歴エントリにまとまる）
  */
 function saveSettings(coalesceKey = null) {
+    if (typeof updateDriveIndexButton === 'function') updateDriveIndexButton();
     // Undo履歴への記録はdebounceせず同期で行う
     // （debounce後だと「操作直後のCtrl+Z」で最後の操作が履歴に無い事故が起きる）
     recordHistory(coalesceKey);
@@ -7648,8 +7907,10 @@ document.addEventListener('visibilitychange', () => {
 function collectSettings() {
     const sidebar = document.querySelector('.sidebar');
     return {
-        _version: 6,
+        _version: CSVSettings.SETTINGS_VERSION,
         comparison: state.comparison,
+        importSettings: window.CSVImportPreview?.collectSettings(),
+        inspection: dataInspector?.collectSettings(),
         // ファイル情報（名前・ロール・オフセットだけ。データ本体は含めない）
         fileInfos: Object.values(state.files).map(f => ({
             name: f.name,
@@ -7754,7 +8015,7 @@ function buildSettingsForExport() {
     return {
         ...collectSettings(),
         _format: 'CSV Viewer Settings',
-        _version: 6,
+        _version: CSVSettings.SETTINGS_VERSION,
         fileInfos: Object.values(state.files).map(f => ({
             name: f.name,
             role: f.role,
@@ -7781,8 +8042,9 @@ function buildSettingsForExport() {
 function buildPresetSettings() {
     return {
         _format: 'CSV Viewer Preset',
-        _version: 6,
+        _version: CSVSettings.SETTINGS_VERSION,
         comparison: { ...state.comparison, notes: [] },
+        importSettings: window.CSVImportPreview?.collectSettings(),
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
         chartGroups: serializeChartGroups(),
@@ -8012,8 +8274,9 @@ async function showXYPlotModal() {
         + `<div class="xy-controls">`
         + `<label>X: <select id="xy-x-select" aria-label="X軸チャンネル">${colOptions}</select></label>`
         + `<label>Y: <select id="xy-y-select" aria-label="Y軸チャンネル">${colOptions}</select></label>`
-        + `<label class="xy-visible-label"><input type="checkbox" id="xy-visible-only" checked> 表示中の時間範囲のみ</label>`
         + `</div>`
+        + `<p id="xy-analysis-context" class="analysis-result-context">${esc(getAnalysisContext().label)}（上部の解析対象と共通）</p>`
+        + `<p id="xy-data-count" class="analysis-result-context"></p>`
         + `<div id="xy-chart" class="xy-chart"></div>`
         + MODAL_CLOSE_FOOTER;
 
@@ -8022,7 +8285,6 @@ async function showXYPlotModal() {
 
     const xSel = modal.querySelector('#xy-x-select');
     const ySel = modal.querySelector('#xy-y-select');
-    const visChk = modal.querySelector('#xy-visible-only');
     if ([...xSel.options].some(o => o.value === defX)) xSel.value = defX;
     if ([...ySel.options].some(o => o.value === defY)) ySel.value = defY;
 
@@ -8036,11 +8298,14 @@ async function showXYPlotModal() {
     });
     obs.observe(document.body, { childList: true });
 
+    let xyGeneration = 0;
     async function renderXY() {
+        const generation = ++xyGeneration;
         const xName = xSel.value, yName = ySel.value;
         if (!xName || !yName) return;
-        const onlyVisible = visChk.checked;
-        const range = onlyVisible ? getVisibleXRange() : null;
+        const context = getAnalysisContext(), range = context.range;
+        if (!range) return;
+        modal.querySelector('#xy-analysis-context').textContent = `${context.label}（上部の解析対象と共通）`;
 
         // 対象チャンネルを全ファイルでロードしてから系列を組み立てる
         const loads = [];
@@ -8049,22 +8314,26 @@ async function showXYPlotModal() {
             if (names.length) loads.push(loadColumnsForFile(fid, names));
         }
         try { await Promise.all(loads); } catch (e) { /* 欠けた列は下でスキップされる */ }
+        if (generation !== xyGeneration || !document.body.contains(overlay)) return;
 
         const series = [];
+        const counts = [];
         for (const [fid, f] of Object.entries(state.files)) {
             const xc = resolveColumnForFile(f, xName);
             const yc = resolveColumnForFile(f, yName);
             if (!xc || !yc) continue;
+            if (context.rawTime && (xc.isCrossFile || yc.isCrossFile)) { counts.push(`${f.shortName}: 時間合わせに依存する計算のため除外`); continue; }
+            if (!CSVCompare.sameUnit(xc.unit, getMainColumn(xName)?.unit) || !CSVCompare.sameUnit(yc.unit, getMainColumn(yName)?.unit)) { counts.push(`${f.shortName}: 単位不一致で除外`); continue; }
             const xv = f.colData[xc.id], yv = f.colData[yc.id];
             if (!xv || !yv) continue;
 
-            const offset = f.offset || 0;
+            const offset = comparisonWorkspace?.effectiveOffset(f) ?? (f.offset || 0);
             const t = f.timeData;
             const pts = [];
             for (let i = 0; i < t.length; i++) {
                 if (range && (t[i] + offset < range[0] || t[i] + offset > range[1])) continue;
                 const x = xv[i], y = yv[i];
-                if (Number.isNaN(x) || Number.isNaN(y)) continue;
+                if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
                 pts.push([x, y]);
             }
             // 点数上限: 等間隔に間引く
@@ -8074,6 +8343,7 @@ async function showXYPlotModal() {
                 data = [];
                 for (let i = 0; i < pts.length; i += stride) data.push(pts[i]);
             }
+            counts.push(`${f.shortName}: 有効 ${pts.length} 点 / 描画 ${data.length} 点${data.length < pts.length ? '（間引き）' : ''}`);
             series.push({
                 name: f.shortName, type: 'scatter',
                 data, symbolSize: 2.5, large: true, largeThreshold: 5000,
@@ -8081,6 +8351,7 @@ async function showXYPlotModal() {
             });
         }
 
+        modal.querySelector('#xy-data-count').textContent = counts.join(' · ');
         const axisStyle = {
             nameMoveOverlap: false,
             nameTextStyle: { color: T.dim },
@@ -8112,7 +8383,6 @@ async function showXYPlotModal() {
 
     xSel.addEventListener('change', renderXY);
     ySel.addEventListener('change', renderXY);
-    visChk.addEventListener('change', renderXY);
     await renderXY();
 }
 
@@ -8312,6 +8582,8 @@ function applySettings(rawSettings) {
     if (s.nameRowIdx) dom.nameRow.value = s.nameRowIdx;
     if (s.unitRowIdx) dom.unitRow.value = s.unitRowIdx;
     if (s.encodingMode && dom.encoding) dom.encoding.value = s.encodingMode;
+    window.CSVImportPreview?.applySettings(s.importSettings);
+    dataInspector?.applySettings(s.inspection);
 
     // サンプリングモードを復元
     if (s.samplingMode !== undefined) dom.sampling.value = s.samplingMode;
@@ -8648,26 +8920,32 @@ function showPendingFiles(fileInfos) {
 // パース成功時にFile本体を保存し、次回起動時に自動で再読み込みする。
 // ロール・オフセット・選択チャンネルはlocalStorage設定（fileInfosの名前
 // マッチ → applyPendingSettings）の既存機構がそのまま復元する。
-// IndexedDBが使えない環境（プライベートモード等）では黙って無効になる。
+// 保存成功はトランザクション完了後に表示する。失敗・容量超過もファイル一覧へ残す。
 // ─────────────────────────────────────────────────────────────
 
 const SESSION_DB_NAME = 'csvViewerSession';
 const SESSION_STORE = 'files';
 // 保存合計の上限。IndexedDBのquota超過で書き込みが不安定になる前に打ち切る
 const SESSION_TOTAL_MAX_BYTES = 200 * 1024 * 1024;
+const _restoredSessionFiles = new WeakMap();
 
 function openSessionDB() {
     return new Promise((resolve, reject) => {
-        if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+        if (!window.indexedDB) { reject(new DOMException('IndexedDB unavailable', 'NotSupportedError')); return; }
         const req = indexedDB.open(SESSION_DB_NAME, 1);
+        let blocked = false;
         req.onupgradeneeded = () => {
             const db = req.result;
             if (!db.objectStoreNames.contains(SESSION_STORE)) {
                 db.createObjectStore(SESSION_STORE, { keyPath: 'id' });
             }
         };
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+            if (blocked) { req.result.close(); return; }
+            req.result.onversionchange = () => req.result.close(); resolve(req.result);
+        };
         req.onerror = () => reject(req.error);
+        req.onblocked = () => { blocked = true; reject(new Error('別の画面で保存領域が使用されています。画面を閉じて再試行してください。')); };
     });
 }
 
@@ -8677,58 +8955,107 @@ async function sessionStoreRun(mode, fn) {
     try {
         return await new Promise((resolve, reject) => {
             const tx = db.transaction(SESSION_STORE, mode);
-            const req = fn(tx.objectStore(SESSION_STORE));
-            tx.oncomplete = () => resolve(req ? req.result : undefined);
-            tx.onerror = () => reject(tx.error);
-            tx.onabort = () => reject(tx.error);
+            let req;
+            tx.oncomplete = () => resolve(typeof req === 'function' ? req() : req ? req.result : undefined);
+            tx.onerror = () => reject(tx.error || (typeof req === 'function' && req.error) || new Error('保存処理に失敗しました'));
+            tx.onabort = () => reject(tx.error || (typeof req === 'function' && req.error) || new Error('保存処理が中断されました'));
+            try { req = fn(tx.objectStore(SESSION_STORE)); }
+            catch (error) { tx.abort(); reject(error); }
         });
     } finally {
         db.close();
     }
 }
 
-/** パース済みファイルの本体を自動復元ストアへ保存する（上限超過分はスキップ+通知） */
-async function sessionSaveFile(fileId, file, name) {
-    if (!(file instanceof Blob)) return;
-    const fileName = name || file.name || 'restored.csv';
-    const order = state.files[fileId]?.sessionOrder;
-    try {
-        const existing = await sessionStoreRun('readonly', s => s.getAll()) || [];
-        const total = existing.filter(r => r.id !== fileId)
-                              .reduce((acc, r) => acc + (r.size || 0), 0);
-        if (total + file.size > SESSION_TOTAL_MAX_BYTES) {
-            showWarning('セッション保存をスキップしました',
-                `保存容量の上限（${Math.round(SESSION_TOTAL_MAX_BYTES / 1048576)}MB）を超えるため、` +
-                `「${fileName}」は次回の自動復元対象になりません。`);
-            return;
+const sessionStatus = CSVSessionStatus.create({
+    exists: id => !!state.files[id],
+    supported: () => { try { return !!window.indexedDB; } catch (_) { return false; } },
+    now: () => Date.now(),
+    changed: () => renderSessionStatus(),
+    read: () => sessionStoreRun('readonly', s => s.getAll()),
+    write: record => sessionStoreRun('readwrite', store => {
+        // Check capacity and write in one transaction, including other open app tabs.
+        let outcome;
+        const result = () => outcome;
+        const read = store.getAll();
+        read.onsuccess = () => {
+            try {
+                const records = read.result || [];
+                const bytes = records.filter(r => r.id !== record.id)
+                    .reduce((sum, r) => sum + (r.blob?.size ?? r.size ?? 0), 0);
+                if (bytes + record.size > SESSION_TOTAL_MAX_BYTES) {
+                    outcome = { saved: false, existing: records.some(r => r.id === record.id),
+                        reason: '自動復元の合計上限（200 MiB）を超えるため保存しませんでした。元ログを保管し、不要なファイルを外して再試行してください。' };
+                } else { store.put(record); outcome = { saved: true }; }
+            } catch (error) { result.error = error; store.transaction.abort(); }
+        };
+        return result;
+    }),
+    remove: id => sessionStoreRun('readwrite', s => s.delete(id)),
+    clear: ids => sessionStoreRun('readwrite', s => { for (const id of ids) s.delete(id); }),
+});
+
+/** Update only status rows, preserving unfinished offset/time-unit input and focus. */
+function renderSessionStatus() {
+    if (!dom.fileList) return;
+    for (const row of dom.fileList.querySelectorAll('[data-session-file]')) {
+        const id = row.dataset.sessionFile, description = CSVSessionStatus.describe(sessionStatus.get(id));
+        row.replaceChildren();
+        const badge = document.createElement('span');
+        badge.className = 'file-session-badge'; badge.dataset.status = description.status;
+        badge.textContent = description.label; badge.title = description.detail; row.append(badge);
+        if (description.savedAt) {
+            const time = document.createElement('time'); time.className = 'file-session-time';
+            time.dateTime = new Date(description.savedAt).toISOString();
+            time.textContent = '最終成功 ' + new Date(description.savedAt).toLocaleString('ja-JP'); row.append(time);
         }
-        await sessionStoreRun('readwrite', s => s.put({
-            id: fileId, name: fileName, size: file.size, order, addedAt: Date.now(), blob: file,
-        }));
-    } catch (e) {
-        console.warn('[CSV Viewer] セッション保存に失敗:', e);
+        if (description.retry) {
+            const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'file-session-retry';
+            retry.textContent = '再試行'; retry.setAttribute('aria-label', `${state.files[id]?.name || ''}の自動復元用保存を再試行`);
+            retry.addEventListener('click', () => sessionStatus.retry(id)); row.append(retry);
+        }
+        if (['failed', 'skipped', 'unavailable'].includes(description.status)) {
+            const message = document.createElement('span'); message.className = 'file-session-detail';
+            message.textContent = description.detail; row.append(message);
+        }
+    }
+    dom.fileList.querySelectorAll('.session-cleanup-notice').forEach(el => el.remove());
+    for (const notice of sessionStatus.notices()) {
+        const li = document.createElement('li'); li.className = 'session-cleanup-notice'; li.setAttribute('role', 'status');
+        li.textContent = notice.pending ? '自動復元データを削除しています…' : notice.message + '。次回起動時に戻る可能性があります。';
+        if (!notice.pending) {
+            const button = document.createElement('button'); button.type = 'button'; button.className = 'session-cleanup-retry';
+            button.textContent = '削除を再試行'; button.addEventListener('click', () => sessionStatus.retryCleanup(notice.key)); li.append(button);
+        }
+        dom.fileList.prepend(li);
     }
 }
 
-async function sessionDeleteFile(fileId) {
-    try { await sessionStoreRun('readwrite', s => s.delete(fileId)); }
-    catch (e) { console.warn('[CSV Viewer] セッション削除に失敗:', e); }
+/** Keep the original Blob for retry (especially TRN before its CSV conversion). */
+function sessionSaveFile(fileId, file, name) {
+    if (!(file instanceof Blob) || !state.files[fileId]) return;
+    return sessionStatus.save(fileId, file, name || file.name || 'restored.csv', {
+        order: state.files[fileId].sessionOrder,
+        importOptions: state.files[fileId].importOptions,
+    }, _restoredSessionFiles.get(file));
 }
 
-async function sessionClearFiles() {
-    try { await sessionStoreRun('readwrite', s => s.clear()); }
-    catch (e) { console.warn('[CSV Viewer] セッションクリアに失敗:', e); }
-}
+function sessionDeleteFile(fileId) { return sessionStatus.remove(fileId); }
+function sessionClearFiles() { return sessionStatus.clear(); }
 
 /**
  * 起動時に前回セッションのファイルを自動復元する。
- * 復元パースが新しいfileIdで再保存するため、読み出し後にストアを一度空にする
- * （残したままだと次回リロードで同じファイルが重複する）。
+ * 復元元の保存IDを維持し、復元の途中でログを消さない。
  */
 async function restoreSessionFiles() {
+    const generation = sessionStatus.generation();
     let records;
-    try { records = await sessionStoreRun('readonly', s => s.getAll()); }
-    catch (e) { return; }
+    try { records = await sessionStatus.read(); }
+    catch (e) {
+        if (sessionStatus.generation() === generation) showWarning('前回ログの自動復元を確認できませんでした', '元ログから開き直してください。');
+        return;
+    }
+    if (sessionStatus.generation() !== generation) return;
     if (!records || !records.length) return;
     if (Object.keys(state.files).length > 0) return; // 既にファイルがあるなら何もしない
 
@@ -8742,15 +9069,14 @@ async function restoreSessionFiles() {
         const aOrder = recordOrder(a), bOrder = recordOrder(b);
         return aOrder >= 0 && bOrder >= 0 ? aOrder - bOrder : (a.addedAt || 0) - (b.addedAt || 0);
     });
-    try { await sessionStoreRun('readwrite', s => s.clear()); } catch (e) {}
-
     _sessionRestoreNames = new Set(records.filter(r => r.blob).map(r => r.name));
     for (const [order, r] of records.entries()) {
         if (!r.blob) continue;
         // Blobにはファイル名が無いことがあるためFileへ包み直す
         const f = (typeof File !== 'undefined' && r.blob instanceof File)
             ? r.blob : new File([r.blob], r.name || 'restored.csv');
-        parseCSV(f, order);
+        _restoredSessionFiles.set(f, r);
+        parseCSV(f, order, r.importOptions);
     }
     showToast('success', '前回のセッションを復元しました',
         `${records.length} ファイルを再読み込みしています…`);
@@ -8798,6 +9124,7 @@ comparisonWorkspace = CSVWorkspace({
     exitArrange: exitArrangeMode,
     clearMeasure: () => exitMeasureMode(),
     stats: () => { if (!state.statsPanelVisible) toggleStatsPanel(); else updateStatsPanel(); },
+    analysisChanged: () => { updateStatsPanel(); dataInspector?.schedule(); },
     favoriteNames: () => { const favs = loadChannelFavorites(); return Object.values(favs).flatMap(f => Array.isArray(f) ? f : f.names || []); },
     select: async (names, replace) => {
         if (replace) { state.selectedNames.clear(); state.chartGroups = []; }
@@ -8835,6 +9162,24 @@ comparisonWorkspace = CSVWorkspace({
 });
 initChart();
 comparisonWorkspace.bindChart();
+dataInspector = CSVDataInspector.init({
+    state, mainFile: getMainFile, selectedNames: () => [...state.selectedNames],
+    analysisContext: getAnalysisContext,
+    effectiveOffset: file => comparisonWorkspace.effectiveOffset(file),
+    fileKey: file => {
+        const id = Object.keys(state.files).find(id => state.files[id] === file);
+        return id ? sessionStatus.get(id)?.key || '' : '';
+    },
+    isRestoring: () => _sessionRestorePending || state.parseJobs.size > 0,
+    resolveColumn: resolveColumnForFile,
+    loadColumns: (file, names) => {
+        const id = Object.keys(state.files).find(id => state.files[id] === file);
+        return id ? loadColumnsForFile(id, names) : Promise.resolve();
+    },
+    esc, save: saveSettings, render: renderChart,
+    focusTime: t => comparisonWorkspace.focusTime(t),
+    resize: () => { state.chart?.dispatchAction({ type: 'hideTip' }); state.chart?.resize(); },
+});
 CSVWorkspaceUI({
     state, main: getMainFile, loadFiles: handleFiles,
     resize: () => { if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); } },
@@ -8857,7 +9202,7 @@ if (_savedSettings) {
 
 // 設定適用後に前回セッションのファイルを自動復元する
 // （ロール等はapplySettingsが積んだ保留設定がパース完了時に適用する）
-restoreSessionFiles();
+restoreSessionFiles().finally(() => { _sessionRestorePending = false; dataInspector?.schedule(); });
 
 // ─────────────────────────────────────────────────────────────
 // テスト/デバッグ用の公開面（M9）
@@ -8883,6 +9228,9 @@ window.__csvViewerDebug = {
     computeCustomExpr,
     toggleStatsPanel,
     getVisibleXRange,
+    getAnalysisContext,
+    selectAnalysisRange: range => comparisonWorkspace.selectRange(range),
+    dataInspector,
     exportVisibleCSV,
     saveChannelFavorite,
     applyChannelFavorite,
@@ -8890,6 +9238,11 @@ window.__csvViewerDebug = {
     showDiffCurvesModal,
     exportReportHTML,
     showXYPlotModal,
+    computeDriveIndex,
+    getDriveIndexResultState,
+    getDriveIndexInputSignature,
+    addCustomRAM,
+    editCustomRAM,
 };
 
 })();

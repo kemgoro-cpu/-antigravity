@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="manual-revision" content="2026-10-29">
+<meta name="manual-revision" content="2026-10-30">
 <title>CSV Chart Viewer 操作マニュアル</title>
 <style>
 :root{--ink:#182b38;--muted:#536875;--teal:#08786e;--line:#d5e1e5;--paper:#fff;--soft:#eff7f6}
@@ -24,23 +24,23 @@ table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;margin:
 .menu-screen{display:flex;align-items:center;gap:25px}.menu-screen img{width:265px;flex-shrink:0}.menu-screen figcaption{max-width:400px}#toc-toggle{display:none}
 @media(max-width:1120px){#toc-toggle{display:block}nav.open{display:block;position:static;width:auto;max-width:940px;margin:8px auto;columns:2;padding:16px 30px}nav a{break-inside:avoid}}
 @media(max-width:650px){.menu-screen{display:block}.menu-screen img{max-width:100%}nav.open{columns:1}}
-@media print{#analysis figure img{width:78%;margin:auto}.range-screen img{max-height:78mm;object-fit:contain}.tolerance-screen img{max-height:84mm;object-fit:contain}.menu-screen img{width:62mm}.menu-screen figcaption{font-size:9pt}}
+@media print{.import-screen img{max-height:95mm;object-fit:contain}.data-screen img{max-height:90mm;object-fit:contain}#analysis figure img{width:78%;margin:auto}.range-screen img{max-height:78mm;object-fit:contain}.tolerance-screen img{max-height:84mm;object-fit:contain}.menu-screen img{width:62mm}.menu-screen figcaption{font-size:9pt}}
 @media print{#start figure img,#workspace figure img{max-height:110mm;object-fit:contain}#quickstart figure img{max-height:95mm;object-fit:contain}}
 </style>
 </head>
 <body>
 <header class="top"><strong>CSV Chart Viewer · 操作マニュアル</strong><a href="index.html" target="_blank" rel="noopener">ツールを開く</a><a href="docs/CSV-Chart-Viewer-Manual.pdf" download>PDFを保存</a><button id="toc-toggle" type="button" aria-controls="manual-toc" aria-expanded="false">目次</button><button id="print-manual" type="button">印刷</button></header>
-<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモとテンプレート</a><a href="#save">10 保存と共有</a><a href="#analysis">11 計算・イベント・XY</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
+<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモとテンプレート</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
 <main>
 <section class="page" id="start">
-<div class="eyebrow">Operation guide / 2026.10.29</div>
+<div class="eyebrow">Operation guide / 2026.10.30</div>
 <h1>波形を開く。<br>違いを見つけて、記録する。</h1>
 <p class="lead">CSV Chart Viewer 操作マニュアル</p>
 <span class="tag">初めて使う人から、日常の比較作業まで</span><span class="tag">図・実画面・練習用データ付き</span>
 <figure><img data-image="overview.png" alt="2つのログを開き、同じチャンネルの波形を重ねているCSV Chart Viewerの画面"><figcaption>同じ信号の波形を重ね、時間差と値の差を確認します。画面例は同梱する練習用CSVの合成データです。</figcaption></figure>
 <div class="flow"><span>ファイルを開く</span><b>→</b><span>チャンネルを選ぶ</span><b>→</b><span>時間を合わせる</span><b>→</b><span>区間を比較・記録</span></div>
 <div class="two"><div><h3>このツールでできること</h3><p>CSV / TRNの時系列を表示し、複数ログを比較します。差・統計・状態の切り替わり、許容差を超えた区間を確認し、メモやレポートに残せます。</p></div><div><h3>最初に覚える2つの言葉</h3><p><strong>チャンネル</strong>は車速・圧力などの1つの信号。<strong>基準ファイル（Main / M）</strong>は比較の起点、比較ファイル（Sub / s1…）は重ねる相手です。</p></div></div>
-<div class="meta">読む順番：初めての操作 02〜05 ／ 比較と記録 06〜10 ／ 応用 11〜13 ／ 困ったとき 14。<br>対象：2026-10-29の比較ワークスペース。Windows / Microsoft Edgeで画面・操作を確認。表示幅・テーマ・ログによって配置や数値は変わります。第05・08・12章は続きのページがあります。</div>
+<div class="meta">読む順番：初めての操作 02〜05 ／ 比較と記録 06〜10 ／ 応用 11〜13 ／ 困ったとき 14。<br>対象：2026-10-30の比較ワークスペース。Windows / Microsoft Edgeで画面・操作を確認。表示幅・テーマ・ログによって配置や数値は変わります。第04・05・08・10・12章は続きのページがあります。</div>
 </section>
 
 <section class="page" id="quickstart">
@@ -64,12 +64,20 @@ table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;margin:
 
 <section class="page" id="files">
 <div class="chapter"><span class="num">04</span><h2>ログを読み込み、信号を探す</h2></div>
-<div class="detail"><div><h3>まず、形式と時間列を確認</h3><p>標準は名前行・単位行・数値行の順です。CSVの区切りは自動検出し、TRNの空白・タブ等も読み込みます。時間列には<code>Time</code>または<code>時間</code>を使います。</p><pre>Time,Speed,Pressure,State
+<div class="detail"><div><h3>まず、形式と時間列を確認</h3><p>名前行に続く単位行は省略できます。CSVの区切りは自動検出し、TRNの空白・タブ等も読み込みます。時間列は<code>Time</code>または<code>時間</code>を検出し、手動指定もできます。</p><pre>Time,Speed,Pressure,State
 s,km/h,kPa,
 0,0,100,0
-0.5,10,105,0</pre><p>Time／時間を含む行が見つかると、その行と直後の単位行を優先します。見つからない場合は「読み込み設定」の名前行・単位行を使用します。時間列が見つからない場合は警告し、先頭列を使います。</p><h3>一覧は基準ファイルのチャンネル</h3><p>比較側だけにある信号は、そのファイルを基準へ切り替えて探します。検索は名前・単位・検索別名に対応し、スペース区切りの複数語はすべてを含む信号へ絞ります。</p><p>「表示中」等の絞り込みは「絞り込みを解除」で戻します。「全ファイル共通」は対応先があることを示し、単位や測定対象の一致までは保証しません。</p></div><figure><img data-image="sidebar.png" alt="ファイルの時間設定、検索、表示チャンネルを確認する左パネル"><figcaption>Mが基準、s1・s2…が比較相手。検索別名は探すための語で、列の対応付けは第06章で行います。</figcaption></figure></div>
-<div class="note caution"><strong>単位行のないCSVは、そのまま読み込まないでください</strong>Time行の次を単位行とするため、先頭の数値行が読み飛ばされることがあります。元ログを残し、コピーに単位行を追加して読み込みます。</div>
+0.5,10,105,0</pre><p>自動ではTime／時間を含む名前行を探し、次の行が数値データなら単位行なしとして扱います。「指定」では手動設定を優先します。時間列を自動検出できない場合は先頭列を使うため、プレビューで確認します。</p><h3>一覧は基準ファイルのチャンネル</h3><p>比較側だけにある信号は、そのファイルを基準へ切り替えて探します。検索は名前・単位・検索別名に対応し、スペース区切りの複数語はすべてを含む信号へ絞ります。</p><p>「表示中」等の絞り込みは「絞り込みを解除」で戻します。「全ファイル共通」は対応先があることを示し、単位や測定対象の一致までは保証しません。</p></div><figure><img data-image="sidebar.png" alt="ファイルの時間設定、検索、表示チャンネルを確認する左パネル"><figcaption>Mが基準、s1・s2…が比較相手。検索別名は探すための語で、列の対応付けは第06章で行います。</figcaption></figure></div>
+<div class="note"><strong>不慣れな形式は、適用前に確認できます</strong>「設定を確認してファイルを開く」で先頭データと設定を確認します。単位行は「自動／なし／指定」。元ログへ単位行を追加する必要はありません。</div>
 <p class="small">処理中は進捗の×でキャンセルできます。ファイルの虫アイコン「読み込み情報」で文字コード・見出し行・データ開始行・時間単位を確認します。時間は秒へ変換されるため、自動推定が違う場合は各ファイルの「時間」で元の単位s／msを訂正します。</p>
+</section>
+
+<section class="page" id="import-review">
+<div class="chapter"><span class="num">04</span><h2>読み込む前に、設定と先頭データを確認</h2></div>
+<ol class="steps"><li><strong>「設定を確認してファイルを開く」</strong><p>CSV / TRNを1つ以上選びます。画面の通常の選択・ドロップは即時読み込みです。「通常の選択・ドロップでも設定を確認」をONにすると毎回確認できます。</p></li><li><strong>ファイルを選んで、名前・単位・先頭データを見る</strong><p>名前行は自動／指定、単位行は自動／なし／指定。時間列・文字コード・区切りも訂正できます。行番号は1始まりで、空行を数えません。</p></li><li><strong>設定が有効になったら「ファイルを読み込む」</strong><p>複数ファイルは個別に設定できます。「この設定を全ファイルへ適用」は現在の設定を一括でコピーします。キャンセルではファイルを追加しません。</p></li></ol>
+<figure class="import-screen"><img data-image="import-preview-panel.png" alt="読み込み前に名前行、単位行、時間列、文字コード、区切りと先頭データを確認する画面"><figcaption>名前・単位・データ開始の行を表示します。数値の先頭行を単位に指定した場合は注意を表示します。</figcaption></figure>
+<div class="two"><div><h3>同じ装置の設定を再利用する</h3><p>「この設定を次回の既定にする」を選んで確定します。複数の設定を使い分ける場合は、左の読み込み設定にあるプリセットへ保存します。</p></div><div><h3>確認できる範囲</h3><p>プレビューは先頭256 KiB・最大50レコードです。全件の品質検査ではありません。TRNは専用の空白・タブ・パイプ処理を使います。</p></div></div>
+<div class="note caution"><strong>自動判別の結果は、計測仕様と照合します</strong>単位が空欄の列や数値だけの単位行は曖昧な場合があります。「なし／指定」で訂正し、先頭の時刻と値を確認します。文字化けは文字コードを変更して再確認します。</div>
 </section>
 
 <section class="page" id="range">
@@ -77,8 +85,8 @@ s,km/h,kPa,
 <table><thead><tr><th>やりたいこと</th><th>使う操作</th><th>波形上の操作と結果</th></tr></thead><tbody><tr><td>一部分をすぐ大きく見る</td><td>ボックスズーム <kbd>B</kbd></td><td>横ドラッグ → その場で拡大。</td></tr><tr><td>範囲を決めて解析や記録をする</td><td>区間を選択・解析</td><td>横ドラッグ → 色付きの区間と操作バーが表示。</td></tr><tr><td>2つの時刻の値や時間差を読む</td><td>計測 <kbd>M</kbd></td><td>2回クリック → A / Bの値・差・区間統計を表示。</td></tr></tbody></table>
 <figure><img data-image="selection-strip.png" alt="選択した対象区間と、拡大・区間比較・統計・イベント登録・メモ・画像コピーを選べる操作バー"></figure>
 <figure class="range-screen"><img data-image="selection.png" alt="区間を選択すると波形に背景色が付き、拡大・区間比較・統計・記録などの操作が現れる画面"><figcaption>背景色は「対象区間を選択中」の目印。色が付いただけでは、比較の実行やメモ保存はしていません。</figcaption></figure>
-<table class="table-tight"><thead><tr><th>選択後の操作</th><th>実行されること</th></tr></thead><tbody><tr><td>拡大</td><td>選択した区間へズームします。</td></tr><tr><td>区間比較</td><td>右の比較結果を開き、その区間の差を計算します。</td></tr><tr><td>統計</td><td>選択区間へズームし、表示範囲の統計を表示します。</td></tr><tr><td>イベント登録／メモ</td><td>選択区間をイベントに登録、またはメモ入力を開きます。メモは入力後に保存します。</td></tr><tr><td>画像コピー</td><td>選択区間へズームし、波形画像をクリップボードへコピーします。</td></tr><tr><td>×</td><td>選択区間を解除します。</td></tr></tbody></table>
-<div class="note"><strong>比較対象は「選択区間」が優先</strong>色付き区間が残っている間は、別の場所へズームしても比較対象はその選択区間です。表示範囲を比較したいときは、先に操作バーの×で選択を解除してください。</div>
+<table class="table-tight"><thead><tr><th>選択後の操作</th><th>実行されること</th></tr></thead><tbody><tr><td>拡大</td><td>選択した区間へズームします。</td></tr><tr><td>区間比較</td><td>右の比較結果を開き、その区間の差を計算します。</td></tr><tr><td>統計</td><td>選択区間を解析対象にして統計を表示します。</td></tr><tr><td>イベント登録／メモ</td><td>選択区間をイベントに登録、またはメモ入力を開きます。メモは入力後に保存します。</td></tr><tr><td>画像コピー</td><td>選択区間へズームし、波形画像をクリップボードへコピーします。</td></tr><tr><td>×</td><td>選択区間を解除します。</td></tr></tbody></table>
+<div class="note"><strong>「解析対象」で区間を共通に選びます</strong>表示範囲／選択区間／全体から選び、横の開始・終了秒と時間基準を確認します。比較・統計・XY・基準CSV・メモはこの条件を使います。区間を選ぶと「選択区間」に切り替わり、別の場所へズームしても保持されます。画面内を解析したいときは「表示範囲」へ切り替えます。</div>
 </section>
 
 
@@ -92,17 +100,27 @@ s,km/h,kPa,
 <div class="note"><strong>色の意味を区別する</strong>対象区間の背景色は自分で選んだ範囲です。比較結果のオレンジの帯・縦線は許容差超過です。色が付いている理由と、比較結果の評価区間を確認してください。</div>
 </section>
 
+<section class="page" id="data-quality">
+<div class="chapter"><span class="num">05</span><h2>元データへ戻り、品質を確認する</h2></div>
+<p>解析対象バーの「元データ」「品質診断」で、波形の下に確認パネルを開きます。ファイルを選び、今の波形・解析区間と照らし合わせます。元ファイルの編集や値の補修は行いません。</p>
+<figure class="data-screen"><img data-image="data-inspector.png" alt="波形と、その下の元レコード番号・元時刻・表示時刻・選択チャンネルの数値表"><figcaption>行を押すと波形に目印を表示します。通常の波形クリックでは、そのファイルの近いサンプル行へ移動できます。</figcaption></figure>
+<table class="table-tight"><thead><tr><th>確認するもの</th><th>読み方</th></tr></thead><tbody><tr><td>元データ表</td><td>元サンプル時刻上の読み込み数値を100行ずつ表示。計算列は「計算値」と区別。元時刻は秒換算後、表示時刻は有効な時間差を反映します。</td></tr><tr><td>時刻の品質</td><td>ファイル全体の重複・逆転、正の時刻差の中央値の10倍を超える間隔候補、読込時に除外した不正時刻を確認します。</td></tr><tr><td>値の品質</td><td>選択列・解析対象区間を確認します。「欠損合計」は変換不能も含む非有限値の合計。保持明細では空欄・文字NaNと、非空欄の変換不能を区別します。</td></tr><tr><td>変換不能の件数と明細</td><td>元列の全体件数と、解析対象区間に入る保持明細を分けます。明細は先頭1,000件・元文字80文字まで。全件の区間内件数とは限りません。</td></tr></tbody></table>
+<div class="note caution"><strong>「候補」「要確認」は異常の断定ではありません</strong>長い間隔は記録の休止、一定値は正常な停止状態でも生じます。明細から時刻・値を確認し、計測条件と照合します。元データの並べ替え・補間・単位換算はしません。</div>
+<p class="small">比較ワークスペースでは、重複・逆転・非有限時刻のあるデータを差分・補間比較・自動時間合わせで理由付き未評価にします。統計は逆転があっても区間内の有効点を集計し、元の時刻配列は並べ替えません。</p>
+<p class="small">元レコード番号は空行を除く1始まりのCSVレコード番号です。引用符内の改行等があるとテキストエディターの物理行番号と一致しません。表は読み込み済み数値で、全セルの元文字を完全再現するものではありません。診断結果・元データを外部へ送信しません。</p>
+</section>
+
 <section class="page" id="compare">
 <div class="chapter"><span class="num">06</span><h2>基準・信号の対応・表示を決める</h2></div>
 <ol class="steps"><li><strong>「準備」で基準ファイルを確認</strong><p>最初に読み込みが完了したログが初期の基準になります。左のM／s番号、または「基準ファイル」で変更できます。表示名は作業用で、元のファイル名は変えません。</p></li><li><strong>比較ファイルごとに、信号を対応付ける</strong><p>表示中のチャンネルについて、同じ物理量に当たる比較側の列を選びます。3ログ以上なら「比較ファイル」を切り替えて設定します。未対応を選ぶと、その組み合わせを比較から外します。</p></li><li><strong>候補を確定する</strong><p>「名前が一致する候補を選ぶ」は候補入力です。「対応を適用」、または「次へ：時間を合わせる」で確定します。適用前の候補は波形へ反映されません。</p></li></ol>
 <table><thead><tr><th>表示方法</th><th>使う場面と注意</th></tr></thead><tbody><tr><td>重ね合わせ</td><td>基準の実線と比較の破線を同じ段で確認。配置の編集もこの表示で行います。</td></tr><tr><td>上下比較</td><td>ファイル別の段で波形を見る。段にはファイルの表示名が付きます。</td></tr><tr><td>差分</td><td>基準 − 比較を表示。Y軸は自動範囲になり、元の配置は保持します。</td></tr></tbody></table>
-<div class="two"><div><h3>元の時刻で確認</h3><p>保存済みの時間差を一時的に使わず表示します。時間差そのものは消えません。時間合わせに依存するファイル間計算線は非表示になります。</p></div><div><h3>単位と測定対象を確認</h3><p>PaとkPa等は自動換算せず、単位不一致の組み合わせは除外します。単位が両方空欄なら比較対象になりますが、同じ物理量かは利用者が確認します。</p></div></div>
+<div class="two"><div><h3>元の時刻で確認</h3><p>保存済みの時間差を一時的に使わず、表示と共通解析を行います。時間差そのものは消えません。時間合わせに依存するファイル間計算線は非表示になります。</p></div><div><h3>単位と測定対象を確認</h3><p>PaとkPa等は自動換算せず、単位不一致の組み合わせは除外します。単位が両方空欄なら比較対象になりますが、同じ物理量かは利用者が確認します。</p></div></div>
 <div class="note"><strong>基準を変えたら、比較条件も確認</strong>時間差は新基準へ引き直され、チャンネル対応も再構成されます。表示信号と対応を確認し、「比較を更新」を押します。旧基準のイベント区間は解除されます。</div>
 </section>
 
 <section class="page" id="align">
 <div class="chapter"><span class="num">07</span><h2>時間を合わせる：プレビューして適用</h2></div>
-<div class="detail"><div><ol class="steps"><li><strong>比較相手・信号・評価区間を選ぶ</strong><p>練習ではSpeedを選びます。「全区間」は基準ログ全体。「選択／表示区間」は対象区間を優先し、選択がなければ表示範囲を使います。</p></li><li><strong>探索幅を指定</strong><p>±5秒は現在のΔtを中心に前後5秒を探します。ずれが大きい場合は幅を広げます。</p></li><li><strong>「自動合わせをプレビュー」</strong><p>基準・現在・候補とRMSEを確認します。変化のない信号や重なりが不足する区間では候補を出せません。</p></li><li><strong>「この時間差を適用」</strong><p>練習の比較ログは2秒後ろにあるため、適用後は約−2秒です。3ログ以上なら比較相手ごとに行います。</p></li></ol></div><figure><img data-image="align-panel.png" alt="Speedの時間合わせで比較側をマイナス2秒へ移動する候補を確認する画面"><figcaption>灰色＝現在、橙色＝候補、緑＝基準。RMSEは値の誤差の二乗平均平方根で、小さいほどよく合っています。周期波形は特徴点も確認します。</figcaption></figure></div>
+<div class="detail"><div><ol class="steps"><li><strong>比較相手・信号・評価区間を選ぶ</strong><p>練習ではSpeedを選びます。「全区間」は基準ログ全体。「選択／表示区間」は上部の解析対象で指定した区間を使います。</p></li><li><strong>探索幅を指定</strong><p>±5秒は現在のΔtを中心に前後5秒を探します。ずれが大きい場合は幅を広げます。</p></li><li><strong>「自動合わせをプレビュー」</strong><p>基準・現在・候補とRMSEを確認します。変化のない信号や重なりが不足する区間では候補を出せません。</p></li><li><strong>「この時間差を適用」</strong><p>練習の比較ログは2秒後ろにあるため、適用後は約−2秒です。3ログ以上なら比較相手ごとに行います。</p></li></ol></div><figure><img data-image="align-panel.png" alt="Speedの時間合わせで比較側をマイナス2秒へ移動する候補を確認する画面"><figcaption>灰色＝現在、橙色＝候補、緑＝基準。RMSEは値の誤差の二乗平均平方根で、小さいほどよく合っています。周期波形は特徴点も確認します。</figcaption></figure></div>
 <div class="diagram"><svg viewBox="0 0 800 135" role="img" aria-label="比較の時刻12秒にマイナス2秒を加えると表示時刻10秒になり基準と一致する模式図"><path d="M100 43H750M100 99H750" stroke="#b0c2c9"/><path d="M400 75L300 75" stroke="#08786e" stroke-width="3"/><path d="M300 75L310 69V81Z" fill="#08786e"/><circle cx="300" cy="43" r="7" fill="#08786e"/><circle cx="400" cy="99" r="7" fill="#c0701c"/><g font-size="17" fill="#263f4b"><text x="10" y="47">基準</text><text x="10" y="104">比較</text><text x="260" y="26">10秒</text><text x="380" y="128">12秒</text><text x="458" y="80">12 + (−2) = 10秒</text></g><text x="315" y="67" fill="#08786e" font-size="15">−2秒</text></svg></div>
 <p><strong>手動で合わせる：</strong>「2点指定・数値で合わせる」で基準時刻と比較の元時刻を入力し、「2点からプレビュー」→「この時間差を適用」。時間差は<strong>基準時刻 − 比較の元時刻</strong>です。「波形の2点を指定」は基準の実線→比較の灰色破線の順でクリックします。</p>
 <div class="note"><strong>左のファイル欄との違い</strong>「自動」は時間合わせパネルへの入口です。Δt欄の数値変更は確定すると直接適用されます。プレビューで確認したいときは右パネルを使います。</div>
@@ -110,7 +128,7 @@ s,km/h,kPa,
 
 <section class="page" id="results">
 <div class="chapter"><span class="num">08</span><h2>比較結果を読む</h2></div>
-<div class="detail"><div><ol class="steps"><li><strong>チャンネルと対象区間を決める</strong><p>練習ではPressureを表示し、10〜30秒を選択。Speedで時間合わせ−2秒を適用しておきます。</p></li><li><strong>「区間比較」または「比較を更新」</strong><p>対象区間があればその区間、なければ現在の表示範囲を計算します。評価した時刻は結果一覧の上に表示されます。</p></li><li><strong>差の値と、比較できた点数を読む</strong><p>比較側の圧力が5 kPa高いため平均差は−5 kPa。最大絶対差・RMS差は5 kPaで、有効41点・欠損0点です。</p></li></ol><table class="table-tight"><thead><tr><th>項目</th><th>意味</th></tr></thead><tbody><tr><td>最大絶対差／その時刻</td><td>差の絶対値の最大値と発生時刻。</td></tr><tr><td>平均差</td><td>基準 − 比較の平均。差の方向が分かる。</td></tr><tr><td>RMS差</td><td>正負が相殺されない差の大きさ。</td></tr><tr><td>有効／欠損・範囲外</td><td>比較できた点と、比較できなかった基準サンプルの数。</td></tr><tr><td>状態不一致</td><td>Bit信号の値が一致しなかった時間。単なる超過点数とは異なる。</td></tr></tbody></table></div><figure><img data-image="results-panel.png" alt="Pressureで最大差5kPa、平均差マイナス5kPa、許容差3kPaに対して41点超過を示す比較カード"><figcaption>許容差の入力、超過判定、前後移動までが1つのカードにまとまっています。操作は次のページで説明します。</figcaption></figure></div>
+<div class="detail"><div><ol class="steps"><li><strong>チャンネルと対象区間を決める</strong><p>練習ではPressureを表示し、10〜30秒を選択。Speedで時間合わせ−2秒を適用しておきます。</p></li><li><strong>「区間比較」または「比較を更新」</strong><p>上部の解析対象（表示範囲／選択区間／全体）を計算します。評価した時刻と時間基準は結果一覧の上に表示されます。</p></li><li><strong>差の値と、比較できた点数を読む</strong><p>比較側の圧力が5 kPa高いため平均差は−5 kPa。最大絶対差・RMS差は5 kPaで、有効41点・欠損0点です。</p></li></ol><table class="table-tight"><thead><tr><th>項目</th><th>意味</th></tr></thead><tbody><tr><td>最大絶対差／その時刻</td><td>差の絶対値の最大値と発生時刻。</td></tr><tr><td>平均差</td><td>基準 − 比較の平均。差の方向が分かる。</td></tr><tr><td>RMS差</td><td>正負が相殺されない差の大きさ。</td></tr><tr><td>有効／欠損・範囲外</td><td>比較できた点と、比較できなかった基準サンプルの数。</td></tr><tr><td>状態不一致</td><td>Bit信号の値が一致しなかった時間。単なる超過点数とは異なる。</td></tr></tbody></table></div><figure><img data-image="results-panel.png" alt="Pressureで最大差5kPa、平均差マイナス5kPa、許容差3kPaに対して41点超過を示す比較カード"><figcaption>許容差の入力、超過判定、前後移動までが1つのカードにまとまっています。操作は次のページで説明します。</figcaption></figure></div>
 <div class="note"><strong>描画の間引きとは別に、元データで比較</strong>連続値は基準時刻へ線形補間し、Bitは直前値を保持します。欠損をまたぐ補間や範囲外への外挿はしません。平均・RMSは有効サンプルの等重み平均です。</div>
 <p class="small">Bitの「同じ遷移の時刻差」は<strong>比較 − 基準</strong>で、値の差分とは逆向きです。対象区間内の最初の切替が同じ遷移の場合に表示します。チャンネル名を押すと最大差付近へ移動します。</p>
 </section>
@@ -122,23 +140,28 @@ s,km/h,kPa,
 <figure class="tolerance-screen"><img data-image="tolerance.png" alt="Pressureの10〜30秒にオレンジの超過帯が付き、結果に許容差超過1件と表示された差分画面"><figcaption>この例は選択区間内の全41点が超過。オレンジの帯は選択色とは別の目印です。</figcaption></figure>
 <table class="table-tight"><thead><tr><th>カードの表示</th><th>読み方</th></tr></thead><tbody><tr><td>許容差超過</td><td>差の絶対値が許容差を上回る点があります。等値は超過ではありません。</td></tr><tr><td>許容差内／欠損あり</td><td>有効点は許容差内。「欠損あり」は区間全体を正常と確認できた意味ではありません。</td></tr><tr><td>許容差未設定</td><td>差の集計は済んでいますが、許容差での判定はしていません。</td></tr><tr><td>判定不可／比較不可</td><td>有効点なし、未対応、単位不一致、基準固定の計算式など。正常とは扱いません。</td></tr></tbody></table>
 <p class="small">帯の端は実際に超過した基準サンプルの時刻です。欠損・範囲外・許容差以下の点で分断し、正確な閾値交差時刻や超過秒数は推定しません。点数は時間ではありません。</p>
-<div class="note"><strong>評価し直す範囲を確認</strong>超過へ移動中の許容差変更は元の評価区間を再判定します。「比較を更新」は対象区間、なければ現在の表示範囲を評価します。評価対象の時間範囲やチャンネル・対応・時間差・式・時間単位を変えると古い結果と帯を解除します。Y軸ズームや表示方式の切替では維持します。</div>
+<div class="note"><strong>評価し直す範囲を確認</strong>超過へ移動中の許容差変更は元の評価区間を再判定します。「比較を更新」は上部の解析対象を評価します。評価対象の時間範囲やチャンネル・対応・時間差・式・時間単位を変えると古い結果と帯を解除します。Y軸ズームや表示方式の切替では維持します。</div>
 </section>
 
 <section class="page" id="notes">
 <div class="chapter"><span class="num">09</span><h2>発見を残す・次のログに再利用する</h2></div>
-<div class="detail"><div><h3>比較メモを残す</h3><ol class="steps"><li><strong>区間を選び「メモ」へ</strong><p>比較パネルの「メモ・保存」からも開けます。選択区間を優先し、なければ表示範囲を使います。</p></li><li><strong>事実と解釈を分けて書く</strong><p>例：「10〜30秒、Pressure平均差−5 kPa。速度は時間合わせ後に一致。センサーのゼロ点差の可能性は要確認。」</p></li><li><strong>「この区間をメモに保存」</strong><p>区間・信号・ログ・時間差・配置・式・対応・許容差・比較数値と画像を保存します。上限20件、画像が大きい場合は数値と条件だけ保存します。</p></li></ol><p>保存済みメモの区間リンクで条件へ戻せます。同じ名前・数のログが必要です。共有にはHTMLレポートを使います。</p><h3>比較テンプレートを使う</h3><p>名前を入力して「保存」。新しいログを読み込み、テンプレートを選んで「新しいログに適用」。配置・信号・式・対応・許容差・時間合わせ条件を再利用し、実際の時間差は0へ戻して再計算します。</p><p>現在のメモと表示名は保持します。対応・時間合わせ条件は比較ファイルの順（s1・s2…）へ移すため、適用前後に順番を確認します。テンプレートJSONはこの欄の「JSONを読み込む」へ指定し、設定JSONと区別します。</p></div><figure><img data-image="notes-panel.png" alt="保存済み比較メモと、比較テンプレートの保存・適用操作があるパネル"><figcaption>メモは今回の発見、テンプレートは新しいログに移す作業条件。未保存の本文・テンプレート名は再読み込みで消えます。</figcaption></figure></div>
+<div class="detail"><div><h3>比較メモを残す</h3><ol class="steps"><li><strong>区間を選び「メモ」へ</strong><p>比較パネルの「メモ・保存」からも開けます。上部の解析対象（表示範囲／選択区間／全体）を使います。</p></li><li><strong>事実と解釈を分けて書く</strong><p>例：「10〜30秒、Pressure平均差−5 kPa。速度は時間合わせ後に一致。センサーのゼロ点差の可能性は要確認。」</p></li><li><strong>「この区間をメモに保存」</strong><p>区間・信号・ログ・時間差・配置・式・対応・許容差・比較数値と画像を保存します。上限20件、画像が大きい場合は数値と条件だけ保存します。</p></li></ol><p>保存済みメモの区間リンクで条件へ戻せます。同じ名前・数のログが必要です。共有にはHTMLレポートを使います。</p><h3>比較テンプレートを使う</h3><p>名前を入力して「保存」。新しいログを読み込み、テンプレートを選んで「新しいログに適用」。配置・信号・式・対応・許容差・時間合わせ条件を再利用し、実際の時間差は0へ戻して再計算します。</p><p>現在のメモと表示名は保持します。対応・時間合わせ条件は比較ファイルの順（s1・s2…）へ移すため、適用前後に順番を確認します。テンプレートJSONはこの欄の「JSONを読み込む」へ指定し、設定JSONと区別します。</p></div><figure><img data-image="notes-panel.png" alt="保存済み比較メモと、比較テンプレートの保存・適用操作があるパネル"><figcaption>メモは今回の発見、テンプレートは新しいログに移す作業条件。未保存の本文・テンプレート名は再読み込みで消えます。</figcaption></figure></div>
 <div class="note"><strong>HTMLレポートの入口は2つ、出力は同じ</strong>「保存・出力 → HTMLレポートを保存」と「メモ・保存 → メモ付きHTMLレポート」は同じレポートを保存します。保存した比較メモもまとめて含まれます。</div>
 </section>
 
 <section class="page" id="save">
 <div class="chapter"><span class="num">10</span><h2>何を残すかで、保存方法を選ぶ</h2></div>
-<table class="table-tight"><thead><tr><th>目的</th><th>場所</th><th>内容・適用時の注意</th></tr></thead><tbody><tr><td>今の波形画像</td><td>保存・出力 → PNG画像を保存／画像コピー</td><td>表示中の波形画像。元データの再解析には元ログが必要。</td></tr><tr><td>基準側の数値</td><td>基準データをCSV保存</td><td>基準ログの表示範囲×選択信号。計算チャンネルを含み、比較側の線や差分表示そのものは含まない。</td></tr><tr><td>解析・発見を共有</td><td>HTMLレポートを保存／メモ付きHTMLレポート</td><td>同じ出力。現在の画像・統計・Drive Index・式・イベント等と、保存済み比較メモの画像・条件・比較数値。</td></tr><tr><td>同じ解析を再開</td><td>設定をエクスポート／設定をインポート</td><td>設定JSON。表示・比較設定・メモ等を保存するが、生のログ本体は含まない。元ログを用意して使う。</td></tr><tr><td>新ログへ比較条件を移す</td><td>メモ・保存 → 比較テンプレート</td><td>チャンネル・配置・式・対応等を移し、実際の時間差は0へ戻す。JSONも同じ欄で読み込む。</td></tr><tr><td>信号の組を再利用</td><td>チャンネルのお気に入り</td><td>チャンネルの選択を置き換え、各信号を独立した段にする。重ねた配置を復元する用途ではない。</td></tr><tr><td>読み込み・表示設定を再利用</td><td>読み込み設定 → プリセット</td><td>見出し・文字コード・信号・式・配置・軸範囲・比較設定を適用。現在の比較メモはクリアする。</td></tr></tbody></table>
+<table class="table-tight"><thead><tr><th>目的</th><th>場所</th><th>内容・適用時の注意</th></tr></thead><tbody><tr><td>今の波形画像</td><td>保存・出力 → PNG画像を保存／画像コピー</td><td>表示中の波形画像。元データの再解析には元ログが必要。</td></tr><tr><td>基準側の数値</td><td>基準データをCSV保存</td><td>基準ログの解析対象区間×選択信号。計算チャンネルを含み、比較側の線や差分表示そのものは含まない。</td></tr><tr><td>解析・発見を共有</td><td>HTMLレポートを保存／メモ付きHTMLレポート</td><td>同じ出力。共通解析区間の画像・統計・更新状態を区別したDrive Index・式・イベント等と、保存済み比較メモの画像・条件・比較数値。</td></tr><tr><td>同じ解析を再開</td><td>設定をエクスポート／設定をインポート</td><td>設定JSON。表示・比較設定・メモ等を保存するが、生のログ本体は含まない。元ログを用意して使う。</td></tr><tr><td>新ログへ比較条件を移す</td><td>メモ・保存 → 比較テンプレート</td><td>チャンネル・配置・式・対応等を移し、実際の時間差は0へ戻す。JSONも同じ欄で読み込む。</td></tr><tr><td>信号の組を再利用</td><td>チャンネルのお気に入り</td><td>チャンネルの選択を置き換え、各信号を独立した段にする。重ねた配置を復元する用途ではない。</td></tr><tr><td>読み込み・表示設定を再利用</td><td>読み込み設定 → プリセット</td><td>見出し・文字コード・信号・式・配置・軸範囲・比較設定を適用。現在の比較メモはクリアする。</td></tr></tbody></table>
 <figure class="menu-screen"><img data-image="export-panel.png" alt="PNG・画像コピー・基準CSV・HTMLレポート・設定JSONの保存と読込メニュー"><figcaption>プリセット適用前は必要なメモをレポート等へ保存します。設定JSONは、お気に入り・プリセット・テンプレートの保存済み一覧を丸ごと移す形式ではありません。</figcaption></figure>
 <div class="note caution"><strong>差分表示のままCSV保存しても、差分の線は出力されません</strong>差分の数値が必要なら「解析ツール → 計算チャンネルに差分を追加」で作成して表示します。この近道は同名信号用です。名前が違う場合は<code>基準名 - s1:比較名</code>のような計算式を作ります。</div>
-<h3>自動復元とバックアップを分ける</h3>
-<p class="small">同じブラウザ・プロファイル内にログを合計200 MiBまで自動保存し、成功した分は次回復元します。上限超過・保存失敗・ブラウザデータ消去では復元できません。元ログは別途保管してください。</p>
-<p class="small">復元後は基準・比較順、時間単位、Δt、信号を確認して比較を更新します。表示中のズーム、対象区間、計測点、未保存の下書き、比較一覧、検出済みイベントは復元されません。Drive Indexの結果も保存せず、読み込み時に再計算します。</p>
+<h3>解析条件も一緒に残す</h3><p class="small">設定JSONには取込設定、解析対象の種類・選択区間・元時刻の指定を含みます。ログ本体は別に必要です。HTMLレポートは共通の解析区間へ画面を移動して画像を取得し、統計も同じ区間で計算します。単一点の選択では、画像に前後1%の表示幅を付けて注記します。統計は選択した時刻だけが対象です。</p>
+</section>
+
+<section class="page" id="restore">
+<div class="chapter"><span class="num">10</span><h2>次回に復元できるファイルを確認する</h2></div>
+<div class="detail"><div><p>読み込んだログは、同じブラウザ・プロファイル内へ合計200 MiBまで自動保存します。ファイルごとに状態と最終成功時刻が残ります。</p><table class="table-tight"><thead><tr><th>表示</th><th>意味と次の操作</th></tr></thead><tbody><tr><td>保存中</td><td>処理の完了を待ちます。</td></tr><tr><td>保存済み・次回復元可能</td><td>ブラウザ内に保存済みです。</td></tr><tr><td>今回のみ</td><td>合計上限等で保存対象外。理由を確認します。</td></tr><tr><td>保存失敗</td><td>容量不足等の理由を確認し、再試行します。</td></tr><tr><td>非対応</td><td>保存領域を使えない環境です。元ログから再開します。</td></tr></tbody></table><p>更新に失敗しても前回の保存が残る場合は、その旨を別に表示します。「保存失敗」と「何も復元できない」は同じ意味ではありません。</p></div><figure><img data-image="session-status-panel.png" alt="各ファイルの次回復元可能表示と最終保存成功時刻"><figcaption>ファイルの状態表示を見てから終了します。保存が失敗した場合も、現在読み込んだ波形は利用できます。</figcaption></figure></div>
+<h3>再開時に確認すること</h3><p>基準・比較順、時間単位、Δt、表示信号、解析対象を確認し、比較を更新します。ファイルごとの取込設定も復元されます。解析対象の種類・選択区間・元時刻基準は設定に残ります。</p><p>表示中のズーム、A/B計測点、未保存の下書き、比較結果一覧、検出済みイベントは復元しません。Drive Indexの結果自体も保存せず、読み込み後の計算と条件確認が必要です。</p>
+<div class="note caution"><strong>自動復元を、元ログのバックアップにしない</strong>ブラウザデータの消去や保存失敗で使えなくなることがあります。元ログと必要な設定JSONは別途保管してください。ファイルを外す／作業をクリアする操作は復元用の保存も削除します。削除失敗は理由と再試行を表示し、元CSV / TRNは削除しません。</div>
 </section>
 
 <section class="page" id="analysis">
@@ -149,7 +172,7 @@ Pressure - s1:Pressure</pre><p class="small">例の単位は順にPa、m/s、kPa
 Speed > 30 && State == 1</pre><p>検出した区間は再起動で復元しないため、次回は再検出します。条件に該当することと、異常かどうかの判断は分けてください。</p><div class="note"><strong>3つの区間の違い</strong>対象区間は自分で指定。イベントは基準ログの条件式で抽出。許容差超過は基準と比較の差から抽出します。</div></div></div>
 <h3>XY：時間以外の軸で関係を見る</h3>
 <p>「解析ツール → XYプロット」でX・Yを指定します。各ファイル内の同じ時刻のX/Yを組にして描く散布図で、上下比較や差分表示の見た目をそのまま変換する機能ではありません。</p>
-<figure><img data-image="xy-panel.png" alt="XにSpeed、YにPressureを指定し、表示中の時間範囲のみを描くXYプロット"><figcaption>「表示中の時間範囲のみ」は既定ON、OFFでログ全体。未対応・欠損ペアは描かず、各ファイル最大50,000点へ間引きます。時間差は保存済みの値を使い、「元の時刻で確認」には連動しません。</figcaption></figure>
+<figure><img data-image="xy-panel.png" alt="XにSpeed、YにPressureを指定し、共通の解析区間を描くXYプロット"><figcaption>対象区間と元時刻／時間合わせ後は、上部の解析対象に連動します。入力点数・描画点数・欠損や除外理由を確認できます。未対応・欠損ペアは描かず、各ファイル最大50,000点へ間引きます。</figcaption></figure>
 </section>
 
 <section class="page" id="advanced">
@@ -165,9 +188,9 @@ Speed > 30 && State == 1</pre><p>検出した区間は再起動で復元しな�
 
 <section class="page" id="drive">
 <div class="chapter"><span class="num">12</span><h2>Drive Indexで走行モードを評価する</h2></div>
-<ol class="steps"><li><strong>「解析ツール → Drive Index」</strong><p>車速・燃料流量等のチャンネル、目標モード、MT/AT、各ファイルの評価区間を確認します。</p></li><li><strong>必要な条件を入力し「再計算」</strong><p>入力を変えただけでは結果は更新されません。自動判別されたモード・区間が実際の試験と一致するか確認します。</p></li><li><strong>指標と不足条件を読む</strong><p>必要な信号や条件がない指標は「—」です。燃料流量がなければ燃費指標は計算できず、0を意味しません。</p></li></ol>
+<ol class="steps"><li><strong>「解析ツール → Drive Index」</strong><p>車速・燃料流量等のチャンネル、目標モード、MT/AT、各ファイルの評価区間を確認します。</p></li><li><strong>必要な条件を入力し「再計算」</strong><p>入力変更後は旧結果が「未更新」になります。自動判別されたモード・区間、必要単位を確認して再計算します。</p></li><li><strong>指標と不足条件を読む</strong><p>必要な信号や条件がない指標は「—」です。燃料流量がなければ燃費指標は計算できず、0を意味しません。</p></li></ol>
 <table class="table-tight"><thead><tr><th>指標・入力</th><th>意味・条件</th></tr></thead><tbody><tr><td>RMSSE</td><td>目標車速との誤差のRMS。</td></tr><tr><td>IWR／ASCR／DR</td><td>慣性仕事／絶対速度変化／走行距離の、目標に対する偏差。</td></tr><tr><td>ER／EER</td><td>エネルギー系の偏差。適切な走行抵抗A・B・Cと質量が必要。</td></tr><tr><td>開始／終了・整合</td><td>モードトレースの切出し・整合。空欄は手動指定を解除し、自動整合の設定に従う。自動整合OFFならデータ先頭を使用。異なる区間長では目標時間軸も比例補正。</td></tr><tr><td>CSV列を目標に指定</td><td>ログ先頭〜末尾が評価対象。モード用の開始／終了指定と自動整合は使わない。</td></tr></tbody></table>
-<div class="note caution"><strong>単位と評価範囲を確認</strong>車速はkm/h、燃料流量はL/h、時間はsを前提に計算し、信号単位の自動検証・換算はしません。通常の波形ズームや比較用Δtとは独立した評価です。</div>
+<div class="note caution"><strong>単位を検証し、未更新の値を使わない</strong>実測・CSV目標車速はkm/h、燃料流量はL/hが必要です。時間は秒換算済みで、元単位のs / msが明示されていることを確認します。速度・時間が未確認／不一致ならそのファイルは未評価、燃料だけの問題なら燃費は未評価です。入力・単位等の変更後は再計算します。単位の自動換算はしません。</div><p class="small">m/sの速度は計算式「元信号 * 3.6」、L/minの流量は「元信号 * 60」で別の計算チャンネルを作り、適切な単位を指定できます。単位なしの信号は計測仕様を確認します。Drive Indexは共通の解析対象・通常のズーム・比較用Δtとは独立した評価です。</p>
 <h3>独自の走行モードを追加する</h3><p>「カスタムモードを追加」で名前を付け、時間[s]と車速[km/h]の2列を貼り付けます。有効な2行以上、時間は単調増加で指定し、「モード追加」後に選択して再計算します。</p>
 <p class="small">フェーズの名前・開始・終了も編集できます。評価区間の長さを変えた場合はフェーズ時刻も比例補正されるため、再計算後の区間を確認します。</p>
 <p class="small">モードの目標車速は<code>@NEDC_MT</code>等のチャンネルにも追加されます。既定はモードトレースで、CSV目標列を選んだ場合はその列を使用します。アプリの解析結果だけで正式な試験への適合を判断せず、実際の走行パターンと評価条件を確認してください。</p>
@@ -185,7 +208,7 @@ Speed > 30 && State == 1</pre><p>検出した区間は再起動で復元しな�
 
 <section class="page" id="trouble">
 <div class="chapter"><span class="num">14</span><h2>困ったときは、ここから確認</h2></div>
-<table class="table-tight"><thead><tr><th>症状</th><th>確認すること・戻し方</th></tr></thead><tbody><tr><td>ファイルを開いたのに波形がない</td><td>左のチャンネルを選択。左パネルが閉じていたら「ファイル」またはCtrl+K。</td></tr><tr><td>欲しいチャンネルが見つからない</td><td>検索文字を消し、「絞り込みを解除」。基準ファイルにそのチャンネルがあるか確認。</td></tr><tr><td>比較側の線だけ出ない</td><td>準備でチャンネルの対応と単位を確認。「対応を適用」を押したかも確認。</td></tr><tr><td>先頭データが欠ける／単位に数値が出る</td><td>単位行が省略されていないか確認。元ログを残し、コピーに単位行を追加して再読み込み。</td></tr><tr><td>文字が化ける</td><td>読み込み設定の文字コードをShift_JIS等に指定し、該当ファイルを再読み込み。</td></tr><tr><td>時間が1000倍ずれる</td><td>ファイルの「時間」でs / msを確認。自動推定が合わない場合は手動指定。</td></tr><tr><td>自動時間合わせが候補を出さない</td><td>変化がある信号、単位が一致する対応、十分重なる区間、適切な探索幅を選ぶ。周期が反復する信号では特徴点も確認。</td></tr><tr><td>移動したのに比較対象が変わらない</td><td>選択区間が優先され、超過箇所への移動も元の評価区間を保持します。新表示範囲を評価する場合は選択を×で解除し、比較を更新。</td></tr><tr><td>比較結果が消えた</td><td>条件変更で古い結果を無効にしています。「比較を更新」で計算し直す。</td></tr><tr><td>メモを保存できない／画像がない</td><td>波形・区間・本文を確認。上限20件、画像の保存上限、ブラウザ保存容量を確認。先にHTMLレポートへ書き出す。</td></tr><tr><td>差分表示から保存したCSVが差分でない</td><td>CSV保存は基準側の元値。計算差分を作って表示し、そのチャンネルを出力。</td></tr><tr><td>画像コピーが失敗する</td><td>ブラウザ権限や起動方法に依存します。「PNG保存」で代用。</td></tr><tr><td>前回の作業が復元されない</td><td>同じブラウザ・プロファイルか、保存容量やブラウザデータ消去の影響がないか確認。元ログと保存した設定JSONから再開。</td></tr><tr><td>パネルや文字が小さい</td><td>左右パネルを閉じる、表示のフォントを「大」にする。線が重なる場合は上下比較へ切り替える。</td></tr><tr><td>許容差を入れたのに判定されない</td><td>正の値をEnter／欄外クリックで確定。有効点・単位・対応を確認。未設定や比較不可は正常判定ではありません。</td></tr><tr><td>超過の帯が見えない</td><td>比較を更新。単発は縦線、上下比較は比較側の該当段です。表示範囲外なら「最初の超過へ」で移動。</td></tr><tr><td>プリセット適用後にメモが消えた</td><td>プリセットは比較設定を置き換え、現在のメモをクリアします。適用前にレポート等へ保存します。</td></tr></tbody></table>
+<table class="table-tight"><thead><tr><th>症状</th><th>確認すること・戻し方</th></tr></thead><tbody><tr><td>ファイルを開いたのに波形がない</td><td>左のチャンネルを選択。左パネルが閉じていたら「ファイル」またはCtrl+K。</td></tr><tr><td>欲しいチャンネルが見つからない</td><td>検索文字を消し、「絞り込みを解除」。基準ファイルにそのチャンネルがあるか確認。</td></tr><tr><td>比較側の線だけ出ない</td><td>準備でチャンネルの対応と単位を確認。「対応を適用」を押したかも確認。</td></tr><tr><td>先頭データが欠ける／単位に数値が出る</td><td>「設定を確認してファイルを開く」で単位行を「なし」にし、先頭の数値行を確認して再読み込み。</td></tr><tr><td>文字が化ける</td><td>読み込み設定の文字コードをShift_JIS等に指定し、該当ファイルを再読み込み。</td></tr><tr><td>時間が1000倍ずれる</td><td>ファイルの「時間」でs / msを確認。自動推定が合わない場合は手動指定。</td></tr><tr><td>自動時間合わせが候補を出さない</td><td>変化がある信号、単位が一致する対応、十分重なる区間、適切な探索幅を選ぶ。周期が反復する信号では特徴点も確認。</td></tr><tr><td>移動したのに比較対象が変わらない</td><td>上部の「解析対象」を確認。選択区間・全体はズームに追従しません。今の画面を評価する場合は「表示範囲」に切り替えて比較を更新。</td></tr><tr><td>比較結果が消えた</td><td>条件変更で古い結果を無効にしています。「比較を更新」で計算し直す。</td></tr><tr><td>メモを保存できない／画像がない</td><td>波形・区間・本文を確認。上限20件、画像の保存上限、ブラウザ保存容量を確認。先にHTMLレポートへ書き出す。</td></tr><tr><td>差分表示から保存したCSVが差分でない</td><td>CSV保存は基準側の元値。計算差分を作って表示し、そのチャンネルを出力。</td></tr><tr><td>画像コピーが失敗する</td><td>ブラウザ権限や起動方法に依存します。「PNG保存」で代用。</td></tr><tr><td>前回の作業が復元されない</td><td>ファイルごとの保存状態と理由を確認。同じブラウザ・プロファイルか、データ消去の影響も確認。元ログと設定JSONから再開。</td></tr><tr><td>パネルや文字が小さい</td><td>左右パネルを閉じる、表示のフォントを「大」にする。線が重なる場合は上下比較へ切り替える。</td></tr><tr><td>許容差を入れたのに判定されない</td><td>正の値をEnter／欄外クリックで確定。有効点・単位・対応を確認。未設定や比較不可は正常判定ではありません。</td></tr><tr><td>超過の帯が見えない</td><td>比較を更新。単発は縦線、上下比較は比較側の該当段です。表示範囲外なら「最初の超過へ」で移動。</td></tr><tr><td>プリセット適用後にメモが消えた</td><td>プリセットは比較設定を置き換え、現在のメモをクリアします。適用前にレポート等へ保存します。</td></tr></tbody></table>
 <div class="note"><strong>問い合わせるときに残す情報</strong>操作の順番、起きた時刻、ファイル形式、文字コード、名前行／単位行、期待した結果を記録します。「読み込み情報」と画面画像があると再現しやすくなります。社外に渡すときは、測定データやファイル名を確認してください。</div>
 <div class="meta">操作説明・画面例は同梱ソースと実際のブラウザ操作を照合しています。ツール更新後に表示名や手順が変わった場合は、マニュアルも更新してください。練習用CSVを使えば、元の計測ログを変更せずに操作を確認できます。</div>
 </section>

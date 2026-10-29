@@ -3,10 +3,11 @@
     'use strict';
     const finite = Number.isFinite;
     const object = x => x && typeof x === 'object' && !Array.isArray(x);
+    const analysis = typeof module !== 'undefined' && module.exports ? require('./analysis-utils.js') : root.CSVAnalysis;
     function cleanSettings(input) {
         const s = object(input) ? input : {};
         const out = { view: ['overlay', 'stack', 'diff'].includes(s.view) ? s.view : 'overlay',
-            labels: {}, matches: {}, searchAliases: {}, tolerances: {}, notes: [], align: {} };
+            labels: {}, matches: {}, searchAliases: {}, tolerances: {}, notes: [], align: {}, analysis: analysis.clean(s.analysis) };
         for (const k of ['labels', 'searchAliases']) {
             for (const [name, value] of Object.entries(object(s[k]) ? s[k] : {})) {
                 if (typeof value === 'string') Object.defineProperty(out[k], name, { value: value.slice(0, 300), enumerable: true, writable: true, configurable: true });
@@ -44,9 +45,41 @@
         while (lo < hi) { const mid = (lo + hi) >>> 1; if (t[mid] < x) lo = mid + 1; else hi = mid; }
         return lo;
     }
+    // Loaded arrays keep their order. The only in-place time edit in the viewer
+    // is uniform positive unit scaling, which preserves ordering. Keep this check
+    // out of repeated interpolation/hit-test loops without changing any samples.
+    const timeOrderCache = new WeakMap(), pointOrderCache = new WeakMap();
+    function inspectTimeOrder(values, timeOf, cache) {
+        if (!values?.length) return { ok: false, kind: 'empty', reason: '時刻データがありません', index: null };
+        const first = timeOf(values[0]), last = timeOf(values[values.length - 1]);
+        const saved = cache.get(values);
+        if (saved && saved.length === values.length && Object.is(saved.first, first) && Object.is(saved.last, last)) return saved.result;
+        let result = { ok: true, kind: '', reason: '', index: null }, previous;
+        for (let i = 0; i < values.length; i++) {
+            const t = timeOf(values[i]);
+            const kind = !finite(t) ? 'nonfinite' : i && t === previous ? 'duplicate' : i && t < previous ? 'reversed' : '';
+            if (kind) {
+                const reason = kind === 'nonfinite' ? '時刻に非有限値があります' : kind === 'duplicate' ? '時刻が重複しています' : '時刻が逆転しています';
+                result = { ok: false, kind, reason, index: i }; break;
+            }
+            previous = t;
+        }
+        result = Object.freeze(result);
+        cache.set(values, { length: values.length, first, last, result });
+        return result;
+    }
+    function validateTimeOrder(times) { return inspectTimeOrder(times, x => x, timeOrderCache); }
+    function pointTimeOrder(points) { return inspectTimeOrder(points, p => p?.[0], pointOrderCache); }
+    function comparisonTimeIssue(a, b) {
+        for (const [signal, label] of [[a, '基準'], [b, '比較']]) {
+            const order = validateTimeOrder(signal?.t);
+            if (!order.ok) return `${label}の${order.reason}。補間比較は未評価です。元ログを確認してください`;
+        }
+        return '';
+    }
     // No extrapolation, no interpolation through missing values; digital signals use zero-order hold.
     function valueAt(t, v, x, digital = false) {
-        if (!t?.length || !v || !finite(x)) return NaN;
+        if (!t?.length || !v || !finite(x) || !validateTimeOrder(t).ok) return NaN;
         const i = lowerBound(t, x);
         if (t[i] === x) return finite(v[i]) ? v[i] : NaN;
         // Shifting decimal timestamps can move an exact sample a few ULPs.
@@ -73,6 +106,10 @@
         return null;
     }
     function compare(a, b, offset, range, digital = false, tolerance = null, withPoints = false) {
+        const reason = comparisonTimeIssue(a, b);
+        if (reason) return { reason, n: 0, missing: 0, max: null, time: null, mean: null, rms: null,
+            mainTransition: null, subTransition: null, transitionDelta: null, mismatchDuration: null,
+            totalDuration: 0, exceeded: 0, ratio: null, points: [], exceedanceIntervals: [] };
         let n = 0, missing = 0, sum = 0, sq = 0, max = -1, time = null, mismatchDuration = 0, totalDuration = 0, exceeded = 0;
         const points = [], exceedanceIntervals = [];
         const positiveTolerance = finite(tolerance) && tolerance > 0;
@@ -117,6 +154,8 @@
             mismatchDuration: digital ? mismatchDuration : null, totalDuration, exceeded, ratio: n && finite(tolerance) && tolerance > 0 ? max / tolerance : null, points, exceedanceIntervals };
     }
     function alignmentScore(a, b, offset, range) {
+        const reason = comparisonTimeIssue(a, b);
+        if (reason) return { rms: Infinity, n: 0, coverage: 0, reason };
         const begin = lowerBound(a.t, range[0]), end = lowerBound(a.t, range[1]);
         const step = Math.max(1, Math.ceil((end - begin + 1) / 1200));
         let n = 0, count = 0, sq = 0;
@@ -135,7 +174,7 @@
             .sort((a, b) => b.score - a.score || a.col.name.localeCompare(b.col.name));
     }
     function pointAt(points, t, digital = false) {
-        if (!points.length || t < points[0][0] || t > points[points.length - 1][0]) return NaN;
+        if (!points.length || !pointTimeOrder(points).ok || !finite(t) || t < points[0][0] || t > points[points.length - 1][0]) return NaN;
         let lo = 0, hi = points.length;
         while (lo < hi) { const mid = (lo + hi) >>> 1; if (points[mid][0] < t) lo = mid + 1; else hi = mid; }
         const b = points[lo]; if (b?.[0] === t) return finite(b[1]) ? b[1] : NaN;
@@ -143,15 +182,19 @@
         return digital ? a[1] : a[1] + (b[1] - a[1]) * (t - a[0]) / (b[0] - a[0]);
     }
     function pointStats(points, t0, t1) {
+        const ordered = pointTimeOrder(points).ok;
         let lo = 0, hi = points.length;
-        while (lo < hi) { const mid = (lo + hi) >>> 1; if (points[mid][0] < t0) lo = mid + 1; else hi = mid; }
+        if (ordered) while (lo < hi) { const mid = (lo + hi) >>> 1; if (points[mid][0] < t0) lo = mid + 1; else hi = mid; }
         let min = Infinity, max = -Infinity, mean = 0, m2 = 0, sq = 0, n = 0;
-        for (let i = lo; i < points.length && points[i][0] <= t1; i++) {
+        for (let i = lo; i < points.length; i++) {
+            const t = points[i]?.[0];
+            if (ordered && t > t1) break;
+            if (!finite(t) || t < t0 || t > t1) continue;
             const v = points[i][1]; if (!finite(v)) continue;
             n++; min = Math.min(min, v); max = Math.max(max, v); const d = v - mean; mean += d / n; m2 += d * (v - mean); sq += v * v;
         }
         return n ? { n, min, max, mean, rms: Math.sqrt(sq / n), sigma: Math.sqrt(Math.max(0, m2 / n)) } : null;
     }
-    const api = { cleanSettings, lowerBound, valueAt, sameUnit, compare, alignmentScore, candidates, pointAt, pointStats };
+    const api = { cleanSettings, lowerBound, validateTimeOrder, valueAt, sameUnit, compare, alignmentScore, candidates, pointAt, pointStats };
     if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CSVCompare = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

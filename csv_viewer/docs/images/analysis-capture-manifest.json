@@ -1,0 +1,41 @@
+{
+  "revision": "2026-10-30",
+  "generatedAt": "2026-10-29T16:48:52.749Z",
+  "source": "Real application screenshots, isolated Edge, synthetic bundled logs, no image editing.",
+  "sampleHashes": [
+    "8b9d170a15f3dd257ce75b488b97fe9721b7540da7e34576a2bd5a45428438e8",
+    "a5ca99a4870b962f71cd4b2b147bee508c2a1a2d6f606b3cdcc2c9342afde5f4"
+  ],
+  "sourceHashes": {
+    "app.js": "0390e6ce13a9692ff7ae2cd7863d22a447d5be314c8f5b86d0df989c493cdac4",
+    "index.html": "46ce43f86c2eac59d98d2986f80f74d81fb26d2d4f6de411fe9f6531637c8e36",
+    "data-inspector.js": "c187f0537723ca23274ac7050913ca813b8a5f46d26fbf096ba9201080da3557",
+    "data-quality-utils.js": "3dd866f365276bb16a64ef4935980de1f4a76f3eb01f31fb6372dc13c2d7cf3a",
+    "import-preview.js": "1cbd71a9c94e4b01446fbd8c852d26ed9c42347d4873027fd8606ff198e41730",
+    "session-status.js": "db6fcbe4e485283f97fc3dafd6898a5443f587d64b7a96a84df02e02f98936a4"
+  },
+  "shots": [
+    {
+      "file": "import-preview-panel.png",
+      "description": "適用前の複数ファイル確認。まだファイルを読み込んでいない。",
+      "selector": ".import-preview-modal"
+    },
+    {
+      "file": "session-status-panel.png",
+      "description": "2ファイルの自動復元可能表示と最終成功時刻。",
+      "selector": "#file-list"
+    },
+    {
+      "file": "data-inspector.png",
+      "description": "選択区間10〜30秒の波形と、元サンプルの数値表。",
+      "selector": null
+    },
+    {
+      "file": "quality-inspector.png",
+      "description": "時刻全体と共通の解析区間の値を区別した品質診断。合成ログの正常例。",
+      "selector": null
+    }
+  ],
+  "errors": [],
+  "remoteRequests": []
+}

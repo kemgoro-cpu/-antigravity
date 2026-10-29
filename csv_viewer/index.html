@@ -9,6 +9,10 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="compare-workspace.css">
     <link rel="stylesheet" href="workspace-ui.css">
+    <link rel="stylesheet" href="analysis-workflow.css">
+    <link rel="stylesheet" href="import-preview.css">
+    <link rel="stylesheet" href="session-status.css">
+    <link rel="stylesheet" href="data-inspector.css">
 </head>
 <body>
     <div class="app-container">
@@ -31,6 +35,11 @@
                         <button id="browse-files-btn" class="btn-primary">ファイルを選択</button>
                         <input type="file" id="file-input" multiple accept=".csv,.trn" class="hidden">
                     </div>
+                    <div class="import-review-entry">
+                        <button id="import-preview-open" class="btn-secondary">設定を確認してファイルを開く</button>
+                        <input type="file" id="import-preview-files" multiple accept=".csv,.trn" class="hidden">
+                        <label><input type="checkbox" id="import-review-before-load">通常の選択・ドロップでも設定を確認</label>
+                    </div>
                     <div id="parse-status-list" class="parse-status-list"></div>
                     <ul id="file-list" class="file-list"></ul>
                 </div>
@@ -40,9 +49,13 @@
                     <h3><i class='bx bx-cog' aria-hidden="true"></i> 読み込み設定</h3>
                     <div class="settings-grid">
                         <label for="name-row-idx">名前行:</label>
-                        <input type="number" id="name-row-idx" value="1" min="1">
+                        <div class="import-setting-pair"><select id="import-name-mode" aria-label="名前行の選択方法"><option value="auto">自動</option><option value="manual">指定</option></select><input type="number" id="name-row-idx" value="1" min="1" max="49" required disabled></div>
                         <label for="unit-row-idx">単位行:</label>
-                        <input type="number" id="unit-row-idx" value="2" min="1">
+                        <div class="import-setting-pair"><select id="import-unit-mode" aria-label="単位行の選択方法"><option value="auto">自動</option><option value="none">なし</option><option value="manual">指定</option></select><input type="number" id="unit-row-idx" value="2" min="1" max="49" required disabled></div>
+                        <label for="import-time-column">時間列:</label>
+                        <input type="number" id="import-time-column" min="1" step="1" placeholder="空欄は自動" aria-label="時間列番号（空欄は自動）">
+                        <label for="import-delimiter">区切り:</label>
+                        <select id="import-delimiter"><option value="auto">自動</option><option value=",">カンマ</option><option value="&#9;">タブ</option><option value=";">セミコロン</option><option value="|">パイプ</option></select>
                         <label for="encoding-mode">文字コード:</label>
                         <select id="encoding-mode" aria-label="CSV文字コード">
                             <option value="auto" selected>自動</option>
@@ -52,6 +65,7 @@
                             <option value="utf-16be">UTF-16BE</option>
                         </select>
                     </div>
+                    <p class="import-setting-hint">単位行のないCSVにも対応。行番号は空行を除く番号です。TRNの区切りは専用処理します。</p>
                     <div id="parse-preview" class="parse-preview hidden"></div>
                     <div class="preset-row">
                         <select id="settings-preset-select" aria-label="設定プリセット">
@@ -163,7 +177,7 @@
                         <i class='bx bx-ruler' aria-hidden="true"></i> <span class="btn-label">計測</span>
                     </button>
                     <button id="stats-panel-btn" class="btn-secondary" disabled
-                            data-tip-title="統計" data-tip-desc="表示範囲の統計サマリ（min/max/mean/σ）を表示します。ズームに追従">
+                            data-tip-title="統計" data-tip-desc="上部の解析対象に従う統計サマリ（min/max/mean/σ）を表示します">
                         <i class='bx bx-table' aria-hidden="true"></i> <span class="btn-label">統計</span>
                     </button>
                     <div class="toolbar-sep"></div>
@@ -265,7 +279,7 @@
                                 <i class='bx bx-copy' aria-hidden="true"></i> <span>クリップボードにコピー</span> <span class="menu-key">Ctrl+Shift+C</span>
                             </button>
                             <button id="export-csv-btn" class="toolbar-menu-item" role="menuitem" disabled
-                                    data-tip-title="基準データをCSV保存" data-tip-desc="基準ファイルの表示区間と選択チャンネルを保存します（計算チャンネル含む）。比較ファイルや差分表示の線は含みません">
+                                    data-tip-title="基準データをCSV保存" data-tip-desc="基準ファイルの解析対象区間と選択チャンネルを保存します（元の時刻では時間合わせ依存の計算を除外）。比較ファイルや差分表示の線は含みません">
                                 <i class='bx bx-spreadsheet' aria-hidden="true"></i> <span>基準データをCSV保存</span>
                             </button>
                             <button id="export-report-btn" class="toolbar-menu-item" role="menuitem" disabled
@@ -322,6 +336,12 @@
     <script src="lib/echarts.min.js"></script>
     <script src="lib/echarts-theme-v5.js"></script>
     <script src="parser-utils.js"></script>
+    <script src="import-preview.js"></script>
+    <script src="session-status.js"></script>
+    <script src="unit-validation-utils.js"></script>
+    <script src="analysis-utils.js"></script>
+    <script src="data-quality-utils.js"></script>
+    <script src="data-inspector.js"></script>
     <script src="settings-utils.js"></script>
     <script src="history-utils.js"></script>
     <script src="layout-utils.js"></script>

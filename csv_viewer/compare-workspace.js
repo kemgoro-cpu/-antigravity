@@ -42,6 +42,9 @@
         const bar = document.createElement('div'); bar.className = 'compare-bar';
         bar.innerHTML = `<div class="compare-segment" role="group" aria-label="比較の表示方法"><button data-view="overlay">重ね合わせ</button><button data-view="stack">上下比較</button><button data-view="diff">差分</button></div><label class="compare-raw"><input id="compare-raw" type="checkbox">元の時刻で確認</label><button id="compare-select-range" class="btn-secondary" title="ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します">区間を選択・解析</button><span id="compare-view-hint"></span>`;
         heading.after(bar);
+        const contextBar = document.createElement('div'); contextBar.className = 'analysis-context';
+        contextBar.innerHTML = '<label>解析対象 <select id="analysis-scope" aria-label="比較・統計・XY・CSV・メモの対象区間"><option value="visible">表示範囲</option><option value="selection">選択区間</option><option value="all">全体</option></select></label><span id="analysis-context-status" class="analysis-context-status" role="status"></span><span class="analysis-scope-help">比較・統計・XY・CSV・メモで共通</span>';
+        bar.after(contextBar);
         const body = document.createElement('div'); body.className = 'compare-body';
         chartContainer.before(body); body.appendChild(chartContainer);
         const panel = document.createElement('aside'); panel.className = 'compare-panel'; panel.id = 'compare-panel'; panel.setAttribute('aria-label', '比較の準備と結果');
@@ -121,7 +124,11 @@
         $('compare-panel-toggle').onclick = () => { open = !open; applyLayout(); };
         panel.querySelectorAll('[data-pane]').forEach(b => b.onclick = () => setPane(b.dataset.pane));
         bar.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { if (s.arrangeMode) api.exitArrange(); setting().view = b.dataset.view; api.render(); change(); });
-        $('compare-raw').onchange = e => { rawTime = e.target.checked; preview = null; generation++; invalidateResults(); api.render(); schedule(); };
+        $('compare-raw').onchange = e => { rawTime = e.target.checked; persistAnalysis(); preview = null; generation++; invalidateResults(); api.render(); change(); syncAnalysisContext(); };
+        $('analysis-scope').onchange = e => {
+            if (e.target.value === 'selection' && !selection) { e.target.value = setting().analysis.scope; return api.warning('波形上で先に区間を選択してください'); }
+            setting().analysis.scope = e.target.value; persistAnalysis(); intervalChanged(); syncAnalysisContext(); change();
+        };
         $('compare-select-range').setAttribute('aria-pressed', 'false');
         $('compare-select-range').onclick = () => {
             if (intervalMode) { api.exitBrush(); cancelRangeMode(); return; }
@@ -147,9 +154,8 @@
         for (const id of ['compare-range-start', 'compare-range-end']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('compare-range-go').click(); } });
         $('compare-range-all').onclick = () => { api.resetZoom(); schedule(); };
         function fullRange() {
-            const files = Object.values(s.files).filter(f => f.timeData?.length);
-            if (!files.length) return null;
-            return [Math.min(...files.map(f => f.timeData[0] + effectiveOffset(f))), Math.max(...files.map(f => f.timeData[f.timeData.length - 1] + effectiveOffset(f)))];
+            const ranges = Object.values(s.files).map(f => ({ range: root.CSVAnalysis.extent(f), offset: effectiveOffset(f) })).filter(x => x.range);
+            return ranges.length ? [Math.min(...ranges.map(x => x.range[0] + x.offset)), Math.max(...ranges.map(x => x.range[1] + x.offset))] : null;
         }
         function zoom(r, preserveResults = false) {
             if (!r || !r.every(Number.isFinite) || r[1] <= r[0] || !s.numGrids) return api.warning('開始より後の終了時刻を指定してください');
@@ -160,18 +166,49 @@
             finally { resultNavigation = false; }
             api.save(); schedule();
         }
-        function activeRange() { return selection || api.visibleRange() || fullRange(); }
-        function selectRange(r) { selection = [...r]; selectionMain = api.main(); intervalChanged(); $('compare-selection').classList.remove('hidden'); $('compare-selection-label').textContent = `対象区間 ${fmt(r[0])} – ${fmt(r[1])} s`; requestAnimationFrame(() => api.render()); schedule(); }
+        function analysisContext() { return root.CSVAnalysis.resolve(setting().analysis, api.visibleRange(), fullRange()); }
+        function showAnalysisRange() {
+            const range = activeRange(), full = fullRange();
+            if (!range || !full) return;
+            if (range[1] > range[0]) zoom(range, true);
+            else {
+                const padding = Math.max((full[1] - full[0]) / 100, 0.001);
+                zoom([range[0] - padding, range[1] + padding], true);
+            }
+        }
+        function persistAnalysis() {
+            setting().analysis = { ...setting().analysis, range: selection ? [...selection] : null, mainName: selection ? api.main()?.name || setting().analysis.mainName : '', rawTime };
+            if (setting().analysis.scope === 'selection' && !selection) setting().analysis.scope = 'visible';
+        }
+        let contextKey = '';
+        function syncAnalysisContext() {
+            const context = analysisContext();
+            $('analysis-scope').value = context.scope;
+            $('analysis-scope').querySelector('[value="selection"]').disabled = !selection;
+            $('analysis-context-status').textContent = context.label;
+            const key = JSON.stringify(context);
+            if (key !== contextKey) { contextKey = key; api.analysisChanged?.(context); }
+        }
+        function restoreAnalysis() {
+            const a = root.CSVAnalysis.clean(setting().analysis); setting().analysis = a;
+            selection = a.range; selectionMain = selection && api.main()?.name === a.mainName ? api.main() : null;
+            rawTime = a.rawTime; $('compare-raw').checked = rawTime;
+            action.classList.toggle('hidden', !selection);
+            if (selection) $('compare-selection-label').textContent = `選択区間 ${fmt(selection[0])} – ${fmt(selection[1])} s`;
+            syncAnalysisContext();
+        }
+        function activeRange() { return analysisContext().range; }
+        function selectRange(r) { selection = [...r]; selectionMain = api.main(); setting().analysis.scope = 'selection'; persistAnalysis(); intervalChanged(); $('compare-selection').classList.remove('hidden'); $('compare-selection-label').textContent = `選択区間 ${fmt(r[0])} – ${fmt(r[1])} s`; syncAnalysisContext(); api.save(); requestAnimationFrame(() => api.render()); schedule(); }
         action.querySelectorAll('[data-range-action]').forEach(b => b.onclick = () => run(async () => {
             if (!selection) return;
             switch (b.dataset.rangeAction) {
                 case 'zoom': zoom(selection); break;
-                case 'compare': setPane('results'); await computeResults(); break;
-                case 'stats': zoom(selection); api.stats(); break;
+                case 'compare': setting().analysis.scope = 'selection'; persistAnalysis(); syncAnalysisContext(); api.save(); setPane('results'); await computeResults(); break;
+                case 'stats': setting().analysis.scope = 'selection'; persistAnalysis(); syncAnalysisContext(); api.stats(); api.save(); break;
                 case 'event': s.events = { expr: '手動選択区間', intervals: [...s.events.intervals, { t0: selection[0], t1: selection[1] }] }; api.render(); api.save(); api.success('選択区間をイベントとして登録しました'); break;
-                case 'note': setPane('notes'); $('compare-note-text').focus(); break;
+                case 'note': setting().analysis.scope = 'selection'; persistAnalysis(); syncAnalysisContext(); api.save(); setPane('notes'); $('compare-note-text').focus(); break;
                 case 'copy': zoom(selection); await new Promise(requestAnimationFrame); await api.copy(); break;
-                case 'close': selection = null; action.classList.add('hidden'); intervalChanged(); api.clearMeasure(); schedule(); break;
+                case 'close': selection = null; persistAnalysis(); action.classList.add('hidden'); intervalChanged(); api.clearMeasure(); syncAnalysisContext(); change(); break;
             }
         }));
         function currentSub() { const ids = api.subIds(); if (!ids.includes(selectedSub)) selectedSub = ids[0] || ''; return selectedSub; }
@@ -191,7 +228,7 @@
             const files = Object.entries(s.files), mf = api.main(), sf = s.files[currentSub()];
             $('compare-panel-content').innerHTML = `<div class="compare-step"><span>01</span><h2>基準と比較ファイル</h2></div><p class="compare-muted">ファイル名は保持したまま、作業用の名前を付けられます。</p><div class="compare-file-cards">${files.map(([id, f]) => `<label class="compare-file-card"><span>${f.role === 'main' ? '基準' : '比較'} · <small title="${esc(f.name)}">${esc(f.name)}</small></span><input data-file-label="${esc(id)}" value="${esc(label(f))}" aria-label="${esc(f.name)}の表示名" maxlength="120"></label>`).join('') || '<p class="compare-empty">左へCSV / TRNをドロップして開始します。</p>'}</div>${mf ? `<label class="compare-field">基準ファイル<select id="compare-main">${files.map(([id, f]) => `<option value="${esc(id)}"${f.role === 'main' ? ' selected' : ''}>${esc(label(f))}</option>`).join('')}</select></label>` : ''}<div class="compare-step"><span>02</span><h2>チャンネル対応</h2></div>${sf ? `${subSelector()}<p class="compare-muted">表示中のチャンネルをまとめて対応付け。候補は適用するまで波形に反映しません。</p><div class="compare-map-actions"><button id="compare-map-suggest" class="btn-secondary">名前が一致する候補を選ぶ</button><button id="compare-map-apply" class="btn-primary">対応を適用</button></div><div id="compare-map-list"></div><button id="compare-next" class="btn-primary compare-wide">次へ：時間を合わせる →</button>` : '<p class="compare-empty">比較用のファイルをもう1つ追加してください。</p>'}`;
             panel.querySelectorAll('[data-file-label]').forEach(inp => inp.onchange = () => { const f = s.files[inp.dataset.fileLabel]; setting().labels = { ...setting().labels, [f.name]: inp.value.trim() || f.name }; api.renderFiles(); api.render(); change(); });
-            if ($('compare-main')) $('compare-main').onchange = e => run(async () => { generation++; preview = null; selection = null; setResultRows([]); await api.setMain(e.target.value); change(); renderPanel(); });
+            if ($('compare-main')) $('compare-main').onchange = e => run(async () => { generation++; preview = null; selection = null; persistAnalysis(); setResultRows([]); await api.setMain(e.target.value); change(); renderPanel(); });
             if (!sf) return;
             const cols = mf.columns.filter(c => s.selectedNames.has(c.name));
             const draft = draftFor(mapDrafts);
@@ -227,7 +264,7 @@
             const eligible = mf.columns.filter(c => { const sc = api.resolve(sf, c.name); return sc && C.sameUnit(c.unit, sc.unit) && !c.isCrossFile; });
             const a = setting().align[sf.name] || {};
             const defaultChannel = a.channel || eligible.find(c => !c.isCustom && s.selectedNames.has(c.name))?.name || eligible.find(c => !c.isCustom)?.name || eligible[0]?.name;
-            $('compare-panel-content').innerHTML = `<div class="compare-step"><span>03</span><h2>波形を見ながら時間合わせ</h2></div>${subSelector()}<label class="compare-field">基準にするチャンネル<select id="compare-align-channel">${eligible.map(c => `<option${c.name === defaultChannel ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><div class="compare-two"><label class="compare-field">探索幅 ±秒<input id="compare-align-span" type="number" min="0.001" step="any" value="${a.range || 30}"></label><label class="compare-field">評価区間<select id="compare-align-scope"><option value="all">全区間</option><option value="visible"${a.scope === 'visible' ? ' selected' : ''}>選択／表示区間</option></select></label></div><button id="compare-align-run" class="btn-primary compare-wide"${!eligible.length ? ' disabled' : ''}>自動合わせをプレビュー</button><p class="compare-muted">現在のシフト ${fmt(sf.offset)} s。プレビューでは保存済みの時間を変更しません。</p><div id="compare-align-preview" class="compare-preview"></div><div id="compare-align-info" role="status"></div><div class="compare-two"><button id="compare-align-apply" class="btn-primary" disabled>この時間差を適用</button><button id="compare-align-cancel" class="btn-secondary">キャンセル</button></div><details class="compare-manual"><summary>2点指定・数値で合わせる</summary><p class="compare-muted">プレビュー上で基準の特徴点→比較の特徴点をクリックします。数値入力でも指定できます。</p><button id="compare-align-pick" class="btn-secondary">波形の2点を指定</button><div class="compare-two"><label class="compare-field">基準の時刻 s<input id="compare-anchor-main" type="number" step="any"></label><label class="compare-field">比較の元時刻 s<input id="compare-anchor-sub" type="number" step="any"></label></div><button id="compare-align-manual" class="btn-secondary">2点からプレビュー</button></details><button id="compare-align-results" class="btn-secondary compare-wide">次へ：比較結果 →</button>`;
+            $('compare-panel-content').innerHTML = `<div class="compare-step"><span>03</span><h2>波形を見ながら時間合わせ</h2></div>${subSelector()}<label class="compare-field">基準にするチャンネル<select id="compare-align-channel">${eligible.map(c => `<option${c.name === defaultChannel ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><div class="compare-two"><label class="compare-field">探索幅 ±秒<input id="compare-align-span" type="number" min="0.001" step="any" value="${a.range || 30}"></label><label class="compare-field">評価区間<select id="compare-align-scope"><option value="all">全区間</option><option value="visible"${a.scope === 'visible' ? ' selected' : ''}>現在の解析対象</option></select></label></div><button id="compare-align-run" class="btn-primary compare-wide"${!eligible.length ? ' disabled' : ''}>自動合わせをプレビュー</button><p class="compare-muted">現在のシフト ${fmt(sf.offset)} s。プレビューでは保存済みの時間を変更しません。</p><div id="compare-align-preview" class="compare-preview"></div><div id="compare-align-info" role="status"></div><div class="compare-two"><button id="compare-align-apply" class="btn-primary" disabled>この時間差を適用</button><button id="compare-align-cancel" class="btn-secondary">キャンセル</button></div><details class="compare-manual"><summary>2点指定・数値で合わせる</summary><p class="compare-muted">プレビュー上で基準の特徴点→比較の特徴点をクリックします。数値入力でも指定できます。</p><button id="compare-align-pick" class="btn-secondary">波形の2点を指定</button><div class="compare-two"><label class="compare-field">基準の時刻 s<input id="compare-anchor-main" type="number" step="any"></label><label class="compare-field">比較の元時刻 s<input id="compare-anchor-sub" type="number" step="any"></label></div><button id="compare-align-manual" class="btn-secondary">2点からプレビュー</button></details><button id="compare-align-results" class="btn-secondary compare-wide">次へ：比較結果 →</button>`;
             $('compare-align-run').onclick = () => run(autoPreview);
             const draft = draftFor(alignDrafts);
             for (const [id, value] of Object.entries(draft)) {
@@ -239,7 +276,7 @@
                 if (!preview || preview.id !== currentSub() || !s.files[preview.id] || preview.main !== api.main()) return;
                 const p = preview; generation++; preview = null; sf.offset = p.offset;
                 setting().align = { ...setting().align, [sf.name]: { channel: p.name, range: p.span, scope: p.scope, offset: p.offset, method: p.method } };
-                rawTime = false; $('compare-raw').checked = false; await api.offsetChanged(); api.renderFiles(); change();
+                rawTime = false; $('compare-raw').checked = false; persistAnalysis(); syncAnalysisContext(); await api.offsetChanged(); api.renderFiles(); change();
                 api.success(`比較側を ${fmt(p.offset)} 秒に設定しました`); renderPanel();
             });
             $('compare-align-cancel').onclick = () => { generation++; busy = false; preview = null; pick = null; renderPanel(); };
@@ -318,7 +355,7 @@
         }
         function effectiveOffset(f) { return rawTime ? 0 : f.offset || 0; }
         function renderResults() {
-            $('compare-panel-content').innerHTML = `<div class="compare-step"><span>04</span><h2>違いを見つける</h2></div><p class="compare-muted">選択区間、なければ表示区間を元データで比較します。アナログ値は基準時刻に線形補間。状態信号は直前値を保持します。</p><div class="compare-two"><button id="compare-calculate" class="btn-primary">比較を更新</button><select id="compare-sort" aria-label="比較結果の並べ替え"><option value="name">チャンネル順</option><option value="tolerance">許容差の超過度順</option></select></div><p id="compare-results-status" role="status"></p><div id="compare-result-summary" role="status" aria-live="polite" hidden></div><div id="compare-results-list"></div><details open><summary>カーソル位置の値</summary><p class="compare-muted">波形上のカーソルに追従します。</p><div id="compare-cursor-table"></div></details>`;
+            $('compare-panel-content').innerHTML = `<div class="compare-step"><span>04</span><h2>違いを見つける</h2></div><p class="compare-muted">上部の解析対象で指定した区間を元データで比較します。アナログ値は基準時刻に線形補間。状態信号は直前値を保持します。</p><div class="compare-two"><button id="compare-calculate" class="btn-primary">比較を更新</button><select id="compare-sort" aria-label="比較結果の並べ替え"><option value="name">チャンネル順</option><option value="tolerance">許容差の超過度順</option></select></div><p id="compare-results-status" role="status"></p><div id="compare-result-summary" role="status" aria-live="polite" hidden></div><div id="compare-results-list"></div><details open><summary>カーソル位置の値</summary><p class="compare-muted">波形上のカーソルに追従します。</p><div id="compare-cursor-table"></div></details>`;
             $('compare-calculate').onclick = () => run(computeResults);
             $('compare-sort').value = resultSort;
             $('compare-sort').onchange = e => { resultSort = e.target.value; showRows(); };
@@ -434,7 +471,7 @@
         function template(name) {
             const settings = JSON.parse(JSON.stringify(api.collect()));
             delete settings.fileInfos; delete settings.fileColors; delete settings.timeUnitOverrides;
-            settings.comparison = { ...C.cleanSettings(settings.comparison), labels: {}, matches: {}, notes: [], align: {} };
+            settings.comparison = { ...C.cleanSettings(settings.comparison), labels: {}, matches: {}, notes: [], align: {}, analysis: root.CSVAnalysis.clean() };
             return { format: 'CSV Comparison Template', version: 1, name, settings, slots: api.subIds().map(id => { const f = s.files[id]; const align = setting().align[f.name]; return { matches: setting().matches[f.name] || {}, align: align ? { channel: align.channel, range: align.range, scope: align.scope } : null }; }) };
         }
         async function applyTemplate(t) {
@@ -457,7 +494,7 @@
         function download(name, text, type = 'application/json') { const url = URL.createObjectURL(new Blob([text], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
         function renderNotes() {
             const notes = setting().notes, templates = loadTemplates();
-            $('compare-panel-content').innerHTML = `<h2>発見を残す</h2><p class="compare-muted">選択／表示区間、比較条件、数値と画像を一緒に保存します。</p><textarea id="compare-note-text" rows="3" maxlength="2000" placeholder="例：加速開始から応答が遅れる" aria-label="比較メモ"></textarea><button id="compare-note-add" class="btn-primary compare-wide">この区間をメモに保存</button><div id="compare-notes-list">${notes.map((n, i) => `<article class="compare-note"><button data-note-jump="${i}" class="compare-result-title">${fmt(n.t0)}–${fmt(n.t1)} s ↗</button><p>${esc(n.text)}</p><small>${esc(n.channels.join(' / '))}</small><button data-note-remove="${i}" class="btn-secondary">削除</button></article>`).join('')}</div><button id="compare-report" class="btn-secondary compare-wide">メモ付きHTMLレポート</button><hr><h2>次の試験に再利用</h2><label class="compare-field">テンプレート名<input id="compare-template-name" maxlength="100" placeholder="例：加速応答の比較"></label><div class="compare-two"><button id="compare-template-save" class="btn-primary">保存</button><button id="compare-template-export" class="btn-secondary">JSON書き出し</button></div><label class="compare-field">保存済みテンプレート<select id="compare-template-select"><option value="">選択してください</option>${templates.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('')}</select></label><div class="compare-two"><button id="compare-template-apply" class="btn-secondary">新しいログに適用</button><button id="compare-template-delete" class="btn-secondary">削除</button></div><label class="compare-template-import">JSONを読み込む<input id="compare-template-import" type="file" accept=".json"></label><p class="compare-muted">配置・式・対応・許容差・時間合わせの条件を再利用。前回の時間差は適用しません。</p>`;
+            $('compare-panel-content').innerHTML = `<h2>発見を残す</h2><p class="compare-muted">上部の解析対象、比較条件、数値と画像を一緒に保存します。</p><textarea id="compare-note-text" rows="3" maxlength="2000" placeholder="例：加速開始から応答が遅れる" aria-label="比較メモ"></textarea><button id="compare-note-add" class="btn-primary compare-wide">この区間をメモに保存</button><div id="compare-notes-list">${notes.map((n, i) => `<article class="compare-note"><button data-note-jump="${i}" class="compare-result-title">${fmt(n.t0)}–${fmt(n.t1)} s ↗</button><p>${esc(n.text)}</p><small>${esc(n.channels.join(' / '))}</small><button data-note-remove="${i}" class="btn-secondary">削除</button></article>`).join('')}</div><button id="compare-report" class="btn-secondary compare-wide">メモ付きHTMLレポート</button><hr><h2>次の試験に再利用</h2><label class="compare-field">テンプレート名<input id="compare-template-name" maxlength="100" placeholder="例：加速応答の比較"></label><div class="compare-two"><button id="compare-template-save" class="btn-primary">保存</button><button id="compare-template-export" class="btn-secondary">JSON書き出し</button></div><label class="compare-field">保存済みテンプレート<select id="compare-template-select"><option value="">選択してください</option>${templates.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('')}</select></label><div class="compare-two"><button id="compare-template-apply" class="btn-secondary">新しいログに適用</button><button id="compare-template-delete" class="btn-secondary">削除</button></div><label class="compare-template-import">JSONを読み込む<input id="compare-template-import" type="file" accept=".json"></label><p class="compare-muted">配置・式・対応・許容差・時間合わせの条件を再利用。前回の時間差は適用しません。</p>`;
             $('compare-note-text').value = noteDraft;
             $('compare-template-name').value = templateNameDraft;
             $('compare-note-add').disabled = noteBusy;
@@ -470,7 +507,7 @@
                 noteBusy = true; $('compare-note-add').disabled = true; $('compare-note-add').textContent = 'メモを保存中…';
                 try {
                 const noteMain = api.main();
-                if (selection) { zoom(selection); await new Promise(requestAnimationFrame); }
+                if (range) { showAnalysisRange(); await new Promise(requestAnimationFrame); }
                 const signature = comparisonSignature(), noteRange = [...range], noteChannels = [...s.selectedNames];
                 const context = JSON.parse(JSON.stringify(api.collect())); delete context.comparison;
                 const noteContext = JSON.parse(JSON.stringify({ settings: context, matches: setting().matches, rawTime, align: setting().align, tolerances: setting().tolerances }));
@@ -600,7 +637,8 @@
             if (raf !== null) return;
             raf = requestAnimationFrame(() => {
                 raf = null;
-                if (selection && selectionMain !== api.main()) { selection = null; action.classList.add('hidden'); }
+                if (selection && api.main() && !selectionMain && setting().analysis.mainName === api.main().name) selectionMain = api.main();
+                if (selection && api.main() && selectionMain !== api.main()) { selection = null; persistAnalysis(); action.classList.add('hidden'); }
                 const key = comparisonSignature(false);
                 if (key !== structure) { generation++; busy = false; preview = null; pick = null; invalidateResults(); structure = key; renderPanel(); }
                 $('compare-status').textContent = `${Object.keys(s.files).length} ファイル · ${s.selectedNames.size} チャンネル`;
@@ -611,6 +649,7 @@
                 $('arrange-mode-btn').disabled = setting().view !== 'overlay' || !s.selectedNames.size;
                 if (s.measure.tA !== null && s.measure.tB !== null) { const r = [s.measure.tA, s.measure.tB].sort((a, b) => a - b); if (!selection || r[0] !== selection[0] || r[1] !== selection[1]) selectRange(r); }
                 drawOverview();
+                syncAnalysisContext();
             });
         }
         function bindChart() {
@@ -618,17 +657,26 @@
                 const visible = api.visibleRange();
                 const changed = !lastVisibleRange || !visible || visible.some((value, i) => value !== lastVisibleRange[i]);
                 lastVisibleRange = visible;
-                if (changed && !selection && !resultNavigation) intervalChanged();
+                if (changed && setting().analysis.scope === 'visible' && !resultNavigation) intervalChanged();
                 schedule();
             });
             s.chart.on('updateAxisPointer', e => { const x = e.axesInfo?.find(a => a.axisDim === 'x'); if (x) cursor(Number(x.value)); });
         }
         renderPanel(); applyLayout();
-        return { schedule, bindChart, label, effectiveOffset, transformGroups, filterColumn, decorateChannel, reportHTML, exceedanceHighlights,
+        return { schedule, bindChart, label, effectiveOffset, transformGroups, filterColumn, decorateChannel, reportHTML, exceedanceHighlights, analysisContext, syncAnalysisContext,
+            showAnalysisRange,
+            focusTime: t => {
+                const visible = api.visibleRange(), full = fullRange();
+                if (!Number.isFinite(t) || !full || (visible && t >= visible[0] && t <= visible[1])) return;
+                const width = visible && visible[1] > visible[0] ? visible[1] - visible[0] : Math.max((full[1] - full[0]) / 10, 1);
+                let lo = Math.max(full[0], t - width / 2), hi = Math.min(full[1], lo + width);
+                lo = Math.max(full[0], hi - width);
+                if (hi > lo) zoom([lo, hi], true);
+            },
             selectionRange: () => selection,
             selectRange, cancelRangeMode, openAlign: id => { selectedSub = id; setPane('align'); },
             brush: r => { if (!intervalMode) return false; cancelRangeMode(); selectRange(r); return true; },
-            changedSettings: () => { generation++; preview = null; invalidateResults(); mapDrafts.clear(); alignDrafts.clear(); structure = ''; schedule(); },
-            clear: () => { generation++; selection = null; invalidateResults(); preview = null; cancelRangeMode(); mapDrafts.clear(); alignDrafts.clear(); action.classList.add('hidden'); overviewKey = ''; schedule(); } };
+            changedSettings: () => { restoreAnalysis(); generation++; preview = null; invalidateResults(); mapDrafts.clear(); alignDrafts.clear(); structure = ''; schedule(); },
+            clear: () => { generation++; selection = null; rawTime = false; setting().analysis = root.CSVAnalysis.clean(); $('compare-raw').checked = false; invalidateResults(); preview = null; cancelRangeMode(); mapDrafts.clear(); alignDrafts.clear(); action.classList.add('hidden'); overviewKey = ''; syncAnalysisContext(); schedule(); } };
     };
 })(window);

@@ -131,4 +131,27 @@ testLegacyCycleIdConsistency();
 testInputNotMutated();
 testSidebarCollapsedMigration();
 
+// v6 workspaces retain their channel/offset choices while adopting optional v7 tools.
+const v6 = { _version: 6, fileInfos: [{name:'ﾛｸﾞ.csv',role:'sub',offset:-2}], selectedNames:['Speed'], comparison:{view:'stack'} };
+const v7 = CSVSettings.migrateSettings(v6);
+assert.equal(v7.ok,true);
+assert.equal(v7.settings._version,7);
+assert.deepEqual(v7.settings.fileInfos,v6.fileInfos);
+assert.deepEqual(v7.settings.selectedNames,['Speed']);
+assert.deepEqual(v7.settings.comparison,{view:'stack'});
+const brokenTools = CSVSettings.migrateSettings({_version:7,inspection:[],importSettings:'bad'});
+assert.equal(brokenTools.settings.inspection,undefined);
+assert.equal(brokenTools.settings.importSettings,undefined);
+assert.equal(v6._version,6);
+const rowConfig = CSVSettings.migrateSettings({_version:6,nameRowIdx:'2',unitRowIdx:'4'}).settings;
+assert.equal(rowConfig.importSettings.nameMode,'manual');
+assert.equal(rowConfig.importSettings.unitMode,'manual');
+const P = require('../parser-utils.js');
+const migratedLayout = P.resolveImportLayout([
+    ['metadata','value'], ['Tick','Pressure'], ['Calibration','run A'], ['s','kPa'], ['0','10'], ['1','20'],
+], {...rowConfig.importSettings,nameRow:Number(rowConfig.nameRowIdx)-1,unitRow:Number(rowConfig.unitRowIdx)-1});
+assert.equal(migratedLayout.unitRow,3);
+assert.equal(migratedLayout.dataStart,4);
+assert.equal(CSVSettings.migrateSettings({_version:6,nameRowIdx:'1',unitRowIdx:'2'}).settings.importSettings.unitMode,'auto');
+
 console.log('settings-utils tests passed');

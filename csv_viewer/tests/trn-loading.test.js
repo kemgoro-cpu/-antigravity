@@ -98,5 +98,33 @@ const header = 'Time  Actual Speed  Engine RPM\ns     km/h          rpm\n';
     assert.equal(csv.file.colData.f_c1[1], -0.5);
     assert.ok(Number.isNaN(csv.file.colData.f_c1[2]));
     assert.equal(csv.file.colData.f_c2[2], 500);
-    console.log('trn-loading tests passed (signed speed, blanks, exponents, rejection, lazy loading, CSV)');
+
+    // Diagnostics use exactly the retained time rows and keep legacy parseFloat
+    // values unchanged. Empty cells/literal NaN are different from invalid text.
+    const quality = await load('Time,Actual Speed,Engine RPM\ns,km/h,rpm\n0,0,500\nbad,ignore,500\n1, ,500\n2,NaN,500\n3,garbage,500\n4,Infinity,500\n5,12tail,500\n6,1e309,500\n7,,', 'csv');
+    assert.deepEqual(quality.errors, []);
+    assert.deepEqual(Array.from(quality.file.sourceRowNumbers), [3, 5, 6, 7, 8, 9, 10, 11]);
+    assert.deepEqual(JSON.parse(JSON.stringify(quality.file.importDiagnostics.invalidTimeDetails)), [{ sourceRow: 4, raw: 'bad' }]);
+    assert.equal(quality.file.columnDiagnostics.f_c1.missingCount, 3);
+    assert.equal(quality.file.columnDiagnostics.f_c1.invalidValueCount, 3);
+    assert.deepEqual(JSON.parse(JSON.stringify(quality.file.columnDiagnostics.f_c1.invalidValueRows)), [
+        { index: 3, sourceRow: 7, raw: 'garbage' },
+        { index: 4, sourceRow: 8, raw: 'Infinity' },
+        { index: 6, sourceRow: 10, raw: '1e309' },
+    ]);
+    assert.equal(quality.file.colData.f_c1[5], 12, 'CSV numeric prefix behavior is preserved');
+    assert.equal(quality.file.colData.f_c1[4], Infinity, 'diagnosis does not rewrite data');
+    assert.equal(quality.file.columnDiagnostics.f_c2.missingCount, 1);
+    assert.equal(quality.file.columnDiagnostics.f_c2.invalidValueCount, 0);
+    const bounded = await load('Time,Actual Speed,Engine RPM\ns,km/h,rpm\n' + Array.from({ length: 1002 }, (_, i) => `${i},${'x'.repeat(100)},500`).join('\n'), 'csv');
+    assert.equal(bounded.file.columnDiagnostics.f_c1.invalidValueCount, 1002);
+    assert.equal(bounded.file.columnDiagnostics.f_c1.invalidValueRows.length, 1000);
+    assert.equal(bounded.file.columnDiagnostics.f_c1.invalidValueRows[0].raw.length, 80);
+    assert.equal(bounded.file.columnDiagnostics.f_c1.invalidValueRows[999].sourceRow, 1002);
+    const invalidTimes = await load('Time,Actual Speed,Engine RPM\ns,km/h,rpm\n0,0,500\n,1,500\n' + Array.from({ length: 1001 }, () => `${'x'.repeat(100)},1,500`).join('\n'), 'csv');
+    assert.equal(invalidTimes.file.importDiagnostics.invalidTimeCount, 1002);
+    assert.equal(invalidTimes.file.importDiagnostics.invalidTimeDetails.length, 1000);
+    assert.deepEqual(JSON.parse(JSON.stringify(invalidTimes.file.importDiagnostics.invalidTimeDetails[0])), { sourceRow: 4, raw: '' });
+    assert.equal(invalidTimes.file.importDiagnostics.invalidTimeDetails[1].raw.length, 80);
+    console.log('trn-loading tests passed (TRN, CSV, lazy loading, bounded source-row diagnostics)');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -19,6 +19,38 @@ assert.equal(C.pointAt([[0, 1], [1, 3]], .5, true), 1);
 assert.equal(C.pointAt([[0, 1], [1, null]], .5), NaN);
 assert.equal(C.pointAt([[0, 1], [1, 3]], 2), NaN);
 assert.deepEqual(C.pointStats([[0, 1], [1, null], [2, 3], [3, Infinity]], 0, 3), { n: 2, min: 1, max: 3, mean: 2, rms: Math.sqrt(5), sigma: 1 });
+// A clock reset must not silently omit later source rows from the shared scope.
+const resetPoints = [[0, 0], [10, 100], [1, 10], [2, 20]];
+const originalResetPoints = JSON.stringify(resetPoints);
+assert.deepEqual(C.pointStats(resetPoints, 0, 2), { n: 3, min: 0, max: 20, mean: 10, rms: Math.sqrt(500 / 3), sigma: Math.sqrt(200 / 3) });
+assert.equal(C.pointStats(resetPoints, 2.1, 2.9), null);
+assert.deepEqual(C.pointStats([[0, 1], [0, 3], [Infinity, 100], [NaN, 100], [1, 5]], 0, 0),
+    { n: 2, min: 1, max: 3, mean: 2, rms: Math.sqrt(5), sigma: 1 });
+assert.equal(JSON.stringify(resetPoints), originalResetPoints, 'Statistics preserve source row order and values');
+assert.equal(C.pointAt(resetPoints, 1), NaN, 'Ambiguous clocks cannot be interpolated');
+assert.equal(C.validateTimeOrder(new Float64Array([0, .25, 1])).ok, true);
+assert.equal(C.validateTimeOrder([1]).ok, true);
+assert.equal(C.validateTimeOrder([]).kind, 'empty');
+for (const [times, kind] of [[[0, 10, 1, 2], 'reversed'], [[0, 1, 1, 2], 'duplicate'], [[0, Infinity, 2], 'nonfinite']]) {
+    const source = { t: Float64Array.from(times), v: Float32Array.from(times.map((_, i) => i)) };
+    const before = Array.from(source.t);
+    assert.equal(C.validateTimeOrder(source.t).kind, kind);
+    assert.equal(C.valueAt(source.t, source.v, 0), NaN);
+    for (const [left, right, expected] of [[source, a, '基準'], [a, source, '比較']]) {
+        const invalid = C.compare(left, right, 0, [0, 10], false, 1, true);
+        assert.match(invalid.reason, new RegExp(expected));
+        assert.match(invalid.reason, /未評価/);
+        assert.equal(invalid.n, 0); assert.equal(invalid.max, null); assert.equal(invalid.mean, null);
+        assert.deepEqual(invalid.points, []); assert.deepEqual(invalid.exceedanceIntervals, []);
+        const score = C.alignmentScore(left, right, 0, [0, 10]);
+        assert.equal(score.rms, Infinity); assert.equal(score.n, 0); assert.match(score.reason, /未評価/);
+    }
+    assert.deepEqual(Array.from(source.t), before, 'Validation must not reorder or modify timestamps');
+}
+const scaledTimes = new Float64Array([0, 1, 2]);
+assert.equal(C.validateTimeOrder(scaledTimes).ok, true);
+scaledTimes.forEach((value, i) => { scaledTimes[i] = value * .001; });
+assert.equal(C.valueAt(scaledTimes, [0, 2, 4], .0015), 3, 'Manual positive time scaling keeps valid interpolation');
 let r = C.compare(a, b, 2, [0, 3], false, 1, true);
 assert.equal(r.max, 0); assert.equal(r.n, 4); assert.equal(r.mean, 0); assert.equal(r.rms, 0);
 assert.deepEqual(r.points, [[0, 0], [1, 0], [2, 0], [3, 0]]);
@@ -71,8 +103,8 @@ assert.equal(C.alignmentScore(a, b, 2, [0, 3]).rms, 0);
 assert.equal(C.alignmentScore(a, b, 100, [0, 3]).rms, Infinity);
 assert.equal(C.sameUnit(' km/h ', 'km/h'), true); assert.equal(C.sameUnit('m/s', 'km/h'), false);
 const old = { _version: 5, selectedNames: ['車速'] }; const migrated = Settings.migrateSettings(old);
-assert.equal(migrated.settings._version, 6); assert.deepEqual(migrated.settings.comparison, {}); assert.equal(old.comparison, undefined);
-assert.equal(Settings.migrateSettings({ _version: 7 }).ok, false);
+assert.equal(migrated.settings._version, 7); assert.deepEqual(migrated.settings.comparison, {}); assert.equal(old.comparison, undefined);
+assert.equal(Settings.migrateSettings({ _version: Settings.SETTINGS_VERSION + 1 }).ok, false);
 const cleaned = C.cleanSettings({ view: 'broken', labels: { 'ﾃｽﾄ.csv': '試験前' }, tolerances: { speed: -1, rpm: 2 }, notes: [{ text: 'bad', t0: 5, t1: 1 }], matches: { sub: { speed: '', rpm: 'Engine_RPM' } } });
 assert.equal(cleaned.view, 'overlay'); assert.equal(cleaned.labels['ﾃｽﾄ.csv'], '試験前'); assert.deepEqual(cleaned.tolerances, { rpm: 2 }); assert.deepEqual(cleaned.notes, []); assert.equal(cleaned.matches.sub.speed, '');
 const untrusted = C.cleanSettings(JSON.parse('{"labels":{"__proto__":"safe"},"matches":{"__proto__":{"x":"y"}}}'));

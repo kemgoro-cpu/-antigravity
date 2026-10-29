@@ -162,7 +162,7 @@ function writeSamples() {
         assert.deepEqual(errors, []);
         const browserErrors = await page.evaluate(() => window.__manualBrowserErrors);
         assert.deepEqual(browserErrors, []);
-        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ revision: '2026-10-29', generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png', 'navigator-panel.png', 'tolerance-nav.png'], errors, browserErrors }, null, 2) + '\n');
+        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ revision: '2026-10-30', generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png', 'navigator-panel.png', 'tolerance-nav.png'], errors, browserErrors }, null, 2) + '\n');
         console.log(JSON.stringify({ images, facts, screenshots: shots.length }, null, 2));
     } catch (error) {
         const out = path.join(root, 'tests/fixtures/generated/manual-capture');

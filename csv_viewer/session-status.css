@@ -1,0 +1,10 @@
+.file-session-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 5px 0 2px; font-size: 11px; line-height: 1.5; }
+.file-session-badge { display: inline-block; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; color: var(--text-secondary); }
+.file-session-badge[data-status="saved"] { color: var(--accent-soft); }
+.file-session-badge[data-status="failed"], .file-session-badge[data-status="skipped"], .file-session-badge[data-status="unavailable"] { color: var(--text-primary); border-style: dashed; }
+.file-session-time { color: var(--text-secondary); font-size: 10px; }
+.file-session-detail { flex-basis: 100%; color: var(--text-secondary); overflow-wrap: anywhere; }
+.file-session-retry, .session-cleanup-retry { background: var(--bg-main); color: var(--text-primary); border: 1px solid var(--border-color, currentColor); border-radius: 4px; padding: 2px 6px; cursor: pointer; font: inherit; }
+.file-session-retry:focus-visible, .session-cleanup-retry:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+.session-cleanup-notice { list-style: none; padding: 8px; margin: 5px 0; border: 1px dashed var(--text-secondary); border-radius: 5px; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.session-cleanup-notice button { margin-left: 6px; }
