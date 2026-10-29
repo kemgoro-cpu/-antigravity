@@ -1,0 +1,33 @@
+{
+  "updatedAt": "2026-10-29",
+  "packages": [
+    {
+      "Name": "echarts",
+      "Version": "6.1.0",
+      "Source": "https://registry.npmjs.org/echarts/-/echarts-6.1.0.tgz",
+      "Integrity": "sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==",
+      "files": [
+        {
+          "path": "lib/echarts.min.js",
+          "sha256": "b66b25aeb4df84e33199dc21694014d336d222cbd9deb0e5a7c14bd6aa0d0fd0"
+        },
+        {
+          "path": "lib/echarts-theme-v5.js",
+          "sha256": "47cff55c8f8756667eba135cb61694798b63284ae32dece7388d742768e597b5"
+        }
+      ]
+    },
+    {
+      "Name": "papaparse",
+      "Version": "5.7.0",
+      "Source": "https://registry.npmjs.org/papaparse/-/papaparse-5.7.0.tgz",
+      "Integrity": "sha512-qBGxg/7Q3Kl9Wfhrz2Z74UnvnHTXLNG6jmKJFeBvP2+y4lV7So+7SR62+Zd47JvdrCkX+nDcnr0ObPzek/+6RA==",
+      "files": [
+        {
+          "path": "lib/papaparse.min.js",
+          "sha256": "4d5d2d6e3282b66aafaa5e6de8ca3ae06f8d3440111ae99c6a30f6c00cfac33e"
+        }
+      ]
+    }
+  ]
+}

@@ -243,6 +243,7 @@
         return {
             gridIndex: p.gridIndex,
             type: 'value',
+            nameMoveOverlap: false,
             axisLabel: {
                 show: p.isLast,
                 color: p.theme.dim, fontSize: p.fontSize,
@@ -277,6 +278,7 @@
         return {
             gridIndex: p.gridIndex,
             type: 'value',
+            nameMoveOverlap: false,
             position,
             offset,
             name: yLabel,

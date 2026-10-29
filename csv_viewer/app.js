@@ -1419,7 +1419,7 @@ const dom = {
 // ─────────────────────────────────────────────────────────────
 
 function initChart() {
-    state.chart = echarts.init(dom.chartEl, null, {
+    state.chart = echarts.init(dom.chartEl, 'v5', {
         backgroundColor: 'transparent',
         renderer: 'canvas',
     });
@@ -5867,6 +5867,8 @@ function renderChart() {
             left: layout.left, right: layout.right,
             top: pct(topPxI), height: pct(gridH),
             containLabel: false,
+            // This viewer allocates axis margins itself; keep that layout in v6.
+            outerBoundsMode: 'none',
         });
 
         xAxes.push(CSVChartOptions.buildXAxisOption({
@@ -8024,7 +8026,7 @@ async function showXYPlotModal() {
     if ([...xSel.options].some(o => o.value === defX)) xSel.value = defX;
     if ([...ySel.options].some(o => o.value === defY)) ySel.value = defY;
 
-    const chart = echarts.init(modal.querySelector('#xy-chart'), null, { renderer: 'canvas' });
+    const chart = echarts.init(modal.querySelector('#xy-chart'), 'v5', { renderer: 'canvas' });
     // モーダルがどの経路で閉じても（Esc・オーバーレイクリック含む）チャートを破棄する
     const obs = new MutationObserver(() => {
         if (!document.body.contains(overlay)) {
@@ -8080,6 +8082,7 @@ async function showXYPlotModal() {
         }
 
         const axisStyle = {
+            nameMoveOverlap: false,
             nameTextStyle: { color: T.dim },
             axisLabel: { color: T.dim, formatter: CSVChartOptions.formatYAxisValue },
             axisLine: { lineStyle: { color: T.axis } },
@@ -8090,7 +8093,7 @@ async function showXYPlotModal() {
             animation: false,
             backgroundColor: 'transparent',
             legend: { show: series.length > 1, textStyle: { color: T.dim }, top: 0 },
-            grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44 },
+            grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44, outerBoundsMode: 'none' },
             tooltip: {
                 trigger: 'item',
                 formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,

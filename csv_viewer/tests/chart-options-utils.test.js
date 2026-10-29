@@ -170,6 +170,7 @@ function testXAxisOption() {
     const last = CO.buildXAxisOption({ gridIndex: 2, isLast: true, min: 0, max: 1180, fontSize: 10, theme: THEME });
     assert.equal(last.gridIndex, 2);
     assert.equal(last.type, 'value');
+    assert.equal(last.nameMoveOverlap, false);
     assert.equal(last.axisLabel.show, true);
     assert.equal(last.axisTick.show, true);
     assert.equal(last.min, 0);
@@ -190,6 +191,7 @@ function testYAxisOption() {
         nameTruncateMaxWidth: 162, theme: THEME,
     });
     assert.equal(y.name, 'Speed / Target  (km/h)');
+    assert.equal(y.nameMoveOverlap, false);
     assert.equal(y.min, 10);
     assert.equal(y.max, 50);
     assert.equal(y.scale, false);

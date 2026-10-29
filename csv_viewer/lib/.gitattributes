@@ -1,0 +1,4 @@
+# Preserve upstream bytes recorded in vendor-manifest.json on every platform.
+echarts.min.js -text
+echarts-theme-v5.js -text
+papaparse.min.js -text

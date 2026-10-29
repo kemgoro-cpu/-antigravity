@@ -302,9 +302,9 @@
             $('compare-align-info').innerHTML = `<strong>比較側を ${fmt(offset)} sへ移動</strong><p>平均二乗誤差の平方根（RMSE）<br>${fmt(before.rms)} → ${fmt(after.rms)} ${esc(a.col.unit || '')}</p><p class="compare-muted">${fmt(inputs.range[0])}–${fmt(inputs.range[1])} s · 有効な重なり ${fmt(after.coverage * 100)}%<br>周期的な波形では別周期に合う場合があります。特徴点も確認してください。</p>${!valid ? '<p class="compare-warning">有効な重なりが不足しています。</p>' : ''}`;
             if (previewChart) { previewChart.dispatchAction({ type: 'hideTip' }); previewChart.dispose(); }
             $('compare-align-preview').classList.add('has-preview');
-            previewChart = root.echarts.init($('compare-align-preview'));
+            previewChart = root.echarts.init($('compare-align-preview'), 'v5');
             const points = (sig, off) => { const out = [], step = Math.max(1, Math.ceil(sig.t.length / 1600)); for (let i = 0; i < sig.t.length; i += step) out.push([sig.t[i] + off, Number.isFinite(sig.v[i]) ? sig.v[i] : null]); return out; };
-            previewChart.setOption({ animation: false, grid: { left: 48, right: 15, top: 34, bottom: 32 }, legend: { textStyle: { color: api.textColor() }, data: ['基準', '現在', '候補'] }, tooltip: { trigger: 'axis' }, xAxis: { type: 'value', min: inputs.range[0], max: inputs.range[1] }, yAxis: { type: 'value', scale: true }, series: [
+            previewChart.setOption({ animation: false, grid: { left: 48, right: 15, top: 34, bottom: 32, outerBoundsMode: 'none' }, legend: { textStyle: { color: api.textColor() }, data: ['基準', '現在', '候補'] }, tooltip: { trigger: 'axis' }, xAxis: { type: 'value', min: inputs.range[0], max: inputs.range[1], nameMoveOverlap: false }, yAxis: { type: 'value', scale: true, nameMoveOverlap: false }, series: [
                 { name: '基準', type: 'line', showSymbol: false, data: points(a, 0), lineStyle: { color: '#16b8a6', width: 2 }, itemStyle: { color: '#16b8a6' } },
                 { name: '現在', type: 'line', showSymbol: false, data: points(b, sf.offset), lineStyle: { color: '#94a3b8', width: 1, type: 'dashed' }, itemStyle: { color: '#94a3b8' } },
                 { name: '候補', type: 'line', showSymbol: false, data: points(b, offset), lineStyle: { color: '#f59e0b', width: 2, type: 'dashed' }, itemStyle: { color: '#f59e0b' } },

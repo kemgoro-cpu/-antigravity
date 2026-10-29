@@ -348,7 +348,9 @@ EChartsはCSS変数を解釈しないため、app.js 起動時に `cssVar()`（`
 
 | ライブラリ | バージョン | 用途 |
 |---|---|---|
-| ECharts | 5.5.0 | チャート描画 |
-| PapaParse | 5.4.1 | CSV パース |
+| ECharts | 6.1.0 | チャート描画 |
+| PapaParse | 5.7.0 | CSV パース |
 | Inter / Roboto Mono | 不明（同梱ファイルにバージョン記録なし） | UI フォント |
 | Boxicons | 不明（同梱ファイルにバージョン記録なし） | アイコン |
+
+JavaScript dependency versions, sources, integrity hashes and licenses: [lib/VENDOR-NOTICES.md](lib/VENDOR-NOTICES.md).
