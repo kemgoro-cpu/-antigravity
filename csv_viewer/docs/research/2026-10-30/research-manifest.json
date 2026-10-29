@@ -1,5 +1,18 @@
 {
   "date": "2026-10-30",
+  "upgradeAudit": {
+    "date": "2026-10-30",
+    "revision": "24a3fe0c69837dc9e11c3b7ba719e0fe5f053f88",
+    "counts": {
+      "replace": 8,
+      "extend": 22,
+      "internal": 6,
+      "optional": 13,
+      "defer": 6
+    },
+    "inPlaceCount": 36,
+    "status": "proposal"
+  },
   "progressUpdated": "2026-10-30",
   "implementationCommit": "3f01bbb9386f1cc9551f1bbafff281bab0c3fc95",
   "statusCounts": {

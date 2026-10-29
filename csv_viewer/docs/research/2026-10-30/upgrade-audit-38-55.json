@@ -1,0 +1,498 @@
+[
+  {
+    "rank": 38,
+    "originalRank": 36,
+    "title": "通知の履歴と重要度の整理",
+    "mode": "replace",
+    "target": "既存showToast/showErrorを共通通知管理へ置換し、ファイルの保存状態表示と連携する。履歴は折り畳み詳細に置く。",
+    "retire": "同種の成功通知を繰り返し積む表示を集約し、消える通知だけに原因確認を頼る導線を減らす。エラー通知能力やファイル別再試行は削除しない。",
+    "preserve": "エラー本文・詳細・発生時刻、読み上げ、閉じる操作、保存失敗の常設表示と再試行。元データや計算結果には影響させない。",
+    "rationale": "通知APIは既に一元化され、表示上限と_errorLogもある。別の通知画面を並設するより、この基盤の集約・履歴・関連箇所への移動を改良する方が自然。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 40
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 81
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 9014
+      }
+    ]
+  },
+  {
+    "rank": 39,
+    "originalRank": 37,
+    "title": "日時の時間軸とタイムゾーン",
+    "mode": "optional",
+    "target": "日時ログの実需要がある場合だけ、既存読込プレビューの時間列設定と既存X軸表示を拡張する。専用日時ビューアは作らない。",
+    "retire": "なし。経過秒・s/ms読込を日時方式へ置き換えない。将来対応時も時間列設定の入口を共用する。",
+    "preserve": "数値Timeと元日時文字列、タイムゾーンの出典、時間合わせ、既存s/ms設定・解析結果・ショートカット。日付解釈で元値を上書きしない。",
+    "rationale": "現状は数値時間の列選択・単位確認・共通解析範囲が中心。絶対日時は時差や夏時間など新しい意味を持ち、単なる画面の置換では済まない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/import-preview.js",
+        "line": 97
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2198
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 46
+      }
+    ]
+  },
+  {
+    "rank": 40,
+    "originalRank": 38,
+    "title": "更新された同じログを再読み込み",
+    "mode": "extend",
+    "target": "既存ファイル行の操作へ明示的な『更新ファイルに差し替え』を組み込み、現在の読込プレビュー・取込設定・保存状態を再利用する。",
+    "retire": "同一ログの更新時に『基準を削除→追加→再配置』する手順を不要にする。実際にログを外す削除操作は残す。独立した更新画面は増やさない。",
+    "preserve": "確認済みのファイル対応、役割・相対シフト・曲線順序・取込設定・元ログ。差し替えが成功するまで旧ログを維持し、結果は未更新として再計算する。",
+    "rationale": "現在の基準削除は表示・軸・イベント・履歴をリセットするため、更新用途には過剰。同名だけで自動差し替えず、明示操作と内容差分確認で既存読込を改善できる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2948
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 1905
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2308
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 4097
+      }
+    ]
+  },
+  {
+    "rank": 41,
+    "originalRank": 39,
+    "title": "複数回の実測からばらつき帯を作る",
+    "mode": "optional",
+    "target": "反復試験の需要がある場合、既存『重ね合わせ』表示の集約オプションにする。比較結果と共通の対象区間・時間合わせを使う。",
+    "retire": "なし。個別実測線・基準対比較・上下比較を集約帯へ置き換えない。集約専用の独立ワークスペースは作らない。",
+    "preserve": "帯の根拠となる全試験、原サンプル、シフト・補間条件・単位・欠損、従来の各試験別指標。帯から個別線へ戻れる能力。",
+    "rationale": "重ね合わせは異常な一回を識別でき、帯は集団を要約するため役割が異なる。対応点数・試験数の違いを隠して既存線を消すと調査能力を失う。",
+    "evidence": [
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 43
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 364
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 581
+      }
+    ]
+  },
+  {
+    "rank": 42,
+    "originalRank": 40,
+    "title": "Excelから表を貼り付けて読み込む",
+    "mode": "extend",
+    "target": "既存読込プレビューに入力元『ファイル／貼り付け』を設け、貼付テキストを同じCSV/TSV読込経路へ渡す。",
+    "retire": "Excel専用インポータ・専用表画面は作らない。小表のためだけにCSVファイルへ一度保存する手順を減らすが、ファイル選択とドラッグ読込は残す。",
+    "preserve": "貼り付け原文、列順、Time/TargetSpeed、単位行なし対応、文字・数値の区別、読込前確認、既存取込設定。画像コピーのCtrl+Shift+Cや入力欄の通常貼付を奪わない。",
+    "rationale": "既存プレビューは時間列・名前行・単位行・区切りを設定できるため、入力元の拡張で足りる。常設の新しい解析画面は不要。",
+    "evidence": [
+      {
+        "path": "csv_viewer/import-preview.js",
+        "line": 81
+      },
+      {
+        "path": "csv_viewer/import-preview.js",
+        "line": 133
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 1905
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 7162
+      }
+    ]
+  },
+  {
+    "rank": 43,
+    "originalRank": 42,
+    "title": "分割された連番ログを連結して見る",
+    "mode": "optional",
+    "target": "同一試験の分割保存が確認された場合のみ、既存複数ファイル読込の『比較／同一試験の分割』選択として仮想連結する。",
+    "retire": "なし。現在の複数ファイル比較を連結方式へ置換しない。連結専用アプリや複製した元CSVは作らない。",
+    "preserve": "各元ファイルと元レコード番号、境界・重複・欠損・時刻リセット、現在のSub順序とs1/s2参照、比較モードの意味。無断ソート・時刻修正をしない。",
+    "rationale": "現行のSubは別試験として比較・補間・式参照される。連結は一試験として扱う別の意味なので、自動判定で既存Subを潰すと計算対象が変わる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2298
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2311
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 3407
+      },
+      {
+        "path": "csv_viewer/compare-utils.js",
+        "line": 71
+      }
+    ]
+  },
+  {
+    "rank": 44,
+    "originalRank": 43,
+    "title": "対数軸・換算軸を明示的に選択",
+    "mode": "extend",
+    "target": "既存チャンネル・Y軸設定内に表示スケール選択を加える。換算軸は既存の複数軸設定と単位表示を共用する。",
+    "retire": "独立した対数チャート画面・換算専用表示画面は作らない。現在のY範囲入力や複数軸への配置操作は残す。",
+    "preserve": "既定の線形軸、元の数値と統計、Y範囲・軸ID・代表信号・保存設定。ゼロ/負値を黙って除外せず、表示換算と実値換算を区別する。",
+    "rationale": "既に軸の代表信号・単位・左右配置・範囲のモデルがある。そこへ表示属性を足す方が、同じ信号を別画面や重複計算列で管理するより一貫する。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 1578
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 5347
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6103
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8635
+      }
+    ]
+  },
+  {
+    "rank": 45,
+    "originalRank": 45,
+    "title": "テンプレートの共通パラメーター",
+    "mode": "extend",
+    "target": "既存比較テンプレートの適用手順にパラメーター入力と展開後プレビューを組み込み、固定テンプレートもそのまま使えるようにする。",
+    "retire": "条件違いだけのテンプレート複製と手作業の信号置換を減らす。お気に入り・設定プリセット・設定JSONを一つの形式へ潰さない。",
+    "preserve": "既存version 1テンプレート、明示対応・式・許容差、不足信号の警告、適用先メモと表示名の保持、前回シフトを新試験へ引き継がない動作。",
+    "rationale": "比較テンプレートは次の試験に条件を転用し、ファイル固有情報や前回の時間差を意図して除外している。単なる全設定スナップショット化は安全な再利用の意味を壊す。",
+    "evidence": [
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 471
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 477
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 483
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8392
+      }
+    ]
+  },
+  {
+    "rank": 46,
+    "originalRank": 46,
+    "title": "区間ループ再生と固定幅の追従窓",
+    "mode": "optional",
+    "target": "説明・反復観察の需要がある場合、既存ナビゲーターの小さな再生操作で、選択した再生区間内で表示窓と生データ表カーソルを動かす。解析対象の区間は固定する。",
+    "retire": "再生専用タイムラインや第二の時刻選択器は作らない。手動ズーム、2点計測、表の行選択は残す。",
+    "preserve": "原時刻・実際の時間間隔、選択区間、元時刻/時間合わせ後の基準、再生停止時の位置、既存キー操作と入力欄。再生で解析区間や値を変えない。",
+    "rationale": "全体ナビゲーターと表↔波形の時刻同期が既にあるため、それを動かす任意操作で十分。自動追従を常時有効にすると静止解析を妨げる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 54
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 251
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 345
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6201
+      }
+    ]
+  },
+  {
+    "rank": 47,
+    "originalRank": 47,
+    "title": "計算の依存関係と更新状態を見えるようにする",
+    "mode": "internal",
+    "target": "既存式解析・参照抽出・再計算処理へ依存関係と世代管理を組み込み、結果の未更新表示を共通化する。必要な説明だけ既存計算行の詳細に出す。",
+    "retire": "新しい常設ノード編集画面は設けず、手作業で再計算漏れを追う作業を減らす。既存Custom RAM式エディタと編集・削除・Undoは残す。",
+    "preserve": "従来の式と数値、積分の実時刻、s1/s2参照順、内蔵モード目標列と通常Custom RAMの区別、既存保存設定。更新途中の値を更新済みと扱わない。",
+    "rationale": "参照名は既に抽出され、Custom RAM全体の再計算とDrive Indexの条件署名もある。依存管理を内部に置くのが先で、図を増やすこと自体は正確さを改善しない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 3395
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 3616
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 4097
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 4117
+      }
+    ]
+  },
+  {
+    "rank": 48,
+    "originalRank": 48,
+    "title": "MDF/MAT/HDF5/Parquetなどの入力拡張",
+    "mode": "optional",
+    "target": "具体的な必要形式・実データ・変換負担が確認されたものだけ、既存読込プレビューへ渡す入力アダプターとして追加する。先に既存変換手段との連携を検討。",
+    "retire": "形式ごとの専用ビューア・独立設定画面は作らない。CSV/TRNの軽量な直接読込と読込設定は残す。",
+    "preserve": "オフラインfile://起動、既存TRNの列・数値解釈、原時刻・元値・単位・信号名、出典、取込設定、必要列だけ読む仕組み。",
+    "rationale": "現在の入口は対応拡張子を明確に絞り、以後は共通の列・時刻モデルで処理する。全形式対応を先に作るより、必要形式だけ同じ経路へ接続する方が保守範囲を限定できる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 1905
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2052
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2397
+      },
+      {
+        "path": "csv_viewer/README.md",
+        "line": 7
+      }
+    ]
+  },
+  {
+    "rank": 49,
+    "originalRank": 49,
+    "title": "FFT・スペクトログラム",
+    "mode": "optional",
+    "target": "振動・周期現象の実需要が確認された場合に限り、既存『解析ツール』の選択区間解析として追加する。通常画面には常設しない。",
+    "retire": "なし。時系列波形・XY・2点計測・Drive Indexの代わりにはしない。FFT専用ワークスペースは現段階では不要。",
+    "preserve": "原波形と選択区間、サンプリング周期・非等間隔/欠落情報、原振幅単位、既存計算値。再標本化や窓の影響を隠さず、元データは変更しない。",
+    "rationale": "周波数解析は時間領域の車両評価を代替しない専門機能。現在の時刻品質診断と共通区間を利用できるが、適用条件が満たせないログへ既定で適用すべきではない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 30
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 46
+      },
+      {
+        "path": "csv_viewer/data-quality-utils.js",
+        "line": 25
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8260
+      }
+    ]
+  },
+  {
+    "rank": 50,
+    "originalRank": 50,
+    "title": "動画・位置情報を波形と同期",
+    "mode": "defer",
+    "target": "今回は見送り。実車動画/GPSと同期精度の要求が具体化した時点で、既存共通時刻への任意の補助表示として再検討する。",
+    "retire": "なし。既存数値波形から安全に置換できる入口・能力はない。",
+    "preserve": "数値波形・表・原時刻・シフト・解析結果、file://単体配布とオフライン利用。同期のために元TimeやTargetSpeedを変更しない。",
+    "rationale": "現在の取込・表示モデルは数値列と時刻であり、動画や地図は新しい資産・座標・同期誤差管理を必要とする。UIを減らす改良として扱う根拠がない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 1905
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2308
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 46
+      },
+      {
+        "path": "csv_viewer/README.md",
+        "line": 3
+      }
+    ]
+  },
+  {
+    "rank": 51,
+    "originalRank": 51,
+    "title": "ローカルSQL・列指向エンジン",
+    "mode": "defer",
+    "target": "今回は見送り。横断集計で現方式の限界を測定した場合だけ内部エンジン候補として比較し、SQL入力画面の追加を前提にしない。",
+    "retire": "なし。既存CSV/TRNパーサー、必要列読込、数値演算を一括で入れ替えない。高速化が実証された限定処理のみ将来の置換対象。",
+    "preserve": "file://とオフライン配布、元レコード順、Time/TargetSpeed、欠損・型・精度・補間規則、既存式・設定・出力と同じ数値。",
+    "rationale": "既に時刻だけのストリーム読込・列の遅延読込・描画間引きがある。エンジン変更だけで速度やメモリが改善する保証はなく、現在の操作能力を減らす案でもない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2229
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2397
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6153
+      },
+      {
+        "path": "csv_viewer/README.md",
+        "line": 7
+      }
+    ]
+  },
+  {
+    "rank": 52,
+    "originalRank": 52,
+    "title": "計測中のライブ表示",
+    "mode": "defer",
+    "target": "今回は見送り。保存済みログの更新は40位の明示差し替えで改善し、計測接続・ライブ取得は別の要件として扱う。",
+    "retire": "なし。保存ログ解析をライブ画面に置換しない。常設の接続・録画・ストリーム管理UIを増やさない。",
+    "preserve": "取得済みファイルの再現性、停止状態での解析、オフライン起動、自動復元、原データ保管。表示の停止と取得/記録の停止を混同しない。",
+    "rationale": "File/Blobを読み込む現在の処理と、継続取得・接続障害・記録保証は別物。同じログの最新版を見る要望だけなら、ライブ基盤の追加は過剰。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2052
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 9034
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 9050
+      },
+      {
+        "path": "csv_viewer/README.md",
+        "line": 7
+      }
+    ]
+  },
+  {
+    "rank": 53,
+    "originalRank": 53,
+    "title": "異常候補・類似波形の自動提案",
+    "mode": "optional",
+    "target": "正解を確認できるログと誤検出の評価が用意できた場合、既存イベント検出・区間一覧の『候補を探す』として追加する。",
+    "retire": "独立したAI解析画面は作らない。明示しきい値・論理式によるイベント検出、手動区間登録を残す。",
+    "preserve": "候補の元区間・根拠・パラメーター、未評価/欠損と正常の区別、既存イベント式・ジャンプ・メモ。自動候補を正常/異常の確定判定に置換しない。",
+    "rationale": "既存イベント一覧は検出条件と区間を結び付ける導線を持つ。提案機能をそこで扱えば画面増殖を避けられるが、検証データなしに既存の説明可能な条件を廃止できない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6935
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6959
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 57
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 216
+      }
+    ]
+  },
+  {
+    "rank": 54,
+    "originalRank": 54,
+    "title": "拡張機能・解析プラグイン",
+    "mode": "defer",
+    "target": "今回は見送り。まず既存Custom RAMのレシピ・単位・依存管理を改善し、それで表現できない専門解析が複数確認されてから拡張APIを検討する。",
+    "retire": "なし。Custom RAMをプラグイン管理へ置き換えない。インストール・互換性管理・権限管理の独立画面は今は作らない。",
+    "preserve": "保存済み式、ASTによる演算、補完、関数群、ファイル間参照、元ログ非改変、単体オフライン配布。既存式の実行に追加導入を必須にしない。",
+    "rationale": "現在も式エンジンによるユーザー拡張と内部モジュール分割がある。外部コードの互換性・配布・隔離は別の保守負担であり、現在の画面を整理する解決策ではない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 3395
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 3442
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 5155
+      },
+      {
+        "path": "csv_viewer/README.md",
+        "line": 135
+      }
+    ]
+  },
+  {
+    "rank": 55,
+    "originalRank": 55,
+    "title": "オンラインの共同レビュー",
+    "mode": "defer",
+    "target": "今回は見送り。既存メモ・HTMLレポート・設定JSONによる受け渡しを改善し、同時編集や権限管理が必要な場合だけ別構成として検討する。",
+    "retire": "なし。ローカル完結、自動復元、HTML出力をクラウド保存へ置換しない。アカウント・共有管理画面を現行利用の必須入口にしない。",
+    "preserve": "元ログを外部送信しない既定動作、サーバー不要の起動、条件付きメモ、自己完結HTML、設定JSONの再利用。共有対象に原ログを含めるかを明示する。",
+    "rationale": "現行の強みは端末内処理とオフライン配布。共同レビューは権限・履歴・運用を伴い、同じ能力の整理や置換として扱えない。まず既存出力の使い勝手を改善する。",
+    "evidence": [
+      {
+        "path": "csv_viewer/README.md",
+        "line": 3
+      },
+      {
+        "path": "csv_viewer/README.md",
+        "line": 7
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 7652
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 495
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8013
+      }
+    ]
+  }
+]

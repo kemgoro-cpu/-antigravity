@@ -1,0 +1,610 @@
+[
+  {
+    "rank": 1,
+    "originalRank": 1,
+    "title": "読み込み前プレビューと単位行なし対応",
+    "mode": "replace",
+    "target": "ファイル欄の単一の「ファイルを開く」入口と、そこから開く共通の読み込み設定編集。確認モードは入口の近くで明示する。",
+    "retire": "「ファイルを選択」「設定を確認してファイルを開く」の並列2ボタンを、1つの入口＋事前確認モードへ統合。常設の詳細設定とプレビュー内の同項目を別々に保守する構造を共通化する。読み込み機能や確認機能自体は削除しない。",
+    "preserve": "通常の即時読込、ドロップ、複数ファイル、ファイル別の訂正、全ファイルへの適用、キャンセル、CSV/TRN・文字コード・先頭末尾の保持。既定設定と今回だけの訂正を区別し、既存プリセットとの互換も残す。",
+    "rationale": "既に完了した機能の入口整理として扱う。現行は2つのfile inputに加え、同じ名前行・単位行・時間列・区切り・文字コードを常設欄と確認画面で編集する。装置別設定は既存プリセットにimportSettings等が含まれるため、別のプロファイル管理画面を追加する必要はない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/index.html",
+        "line": 35
+      },
+      {
+        "path": "csv_viewer/index.html",
+        "line": 39
+      },
+      {
+        "path": "csv_viewer/index.html",
+        "line": 51
+      },
+      {
+        "path": "csv_viewer/import-preview.js",
+        "line": 93
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 1915
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8047
+      }
+    ]
+  },
+  {
+    "rank": 2,
+    "originalRank": 2,
+    "title": "すべての解析で対象区間・時間基準を統一",
+    "mode": "internal",
+    "target": "既存の上部「解析対象」と「元の時刻で確認」、CSVAnalysis.resolve/getAnalysisContextを、対象区間・時刻基準の共通の参照元として維持する。",
+    "retire": "今後の統計・XY・CSV・メモ等に個別の区間選択欄や時刻基準を新設しない。各機能が独自に表示範囲や保存済みシフトを解釈する内部処理を共通APIへ寄せる。表示ズームや選択操作そのものは削除しない。",
+    "preserve": "表示範囲／選択区間／全体、元時刻／時間合わせ後の区別、元配列不変、実サンプルによる計算。Drive Indexの走行モード評価区間と、自動時間合わせの探索区間は目的が異なるため、共通区間へ無条件に置換しない。",
+    "rationale": "共通解析は実装済み。新しい設定画面を足す案ではなく、既存バーと参照APIの一貫性を保つ改善へ整理する。自動合わせも「全区間／現在の解析対象」を明示しているため、専門処理の評価条件まで一律に削ると能力が落ちる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 43
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 46
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 169
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6805
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 295
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 4541
+      }
+    ]
+  },
+  {
+    "rank": 3,
+    "originalRank": 3,
+    "title": "波形と同期する生データ表",
+    "mode": "extend",
+    "target": "既存の下部「元データ・品質診断」ドックの元データタブ。",
+    "retire": "別ウィンドウの表や常設の第二データグリッドは追加しない。未完了の「波形クリック後に対象行を見える位置へスクロール」を現在の表内で完成させる。大量行の仮想スクロール新設は、採用済み100行ページングで代替する。",
+    "preserve": "実サンプルの値、計算値の明示、元レコード番号、元秒時刻と補正後時刻、共通解析区間、双方向の点選択、同名ログを保存IDで復元する契約。ホバーや2点計測は用途が異なるため残す。",
+    "rationale": "表本体とページ切替は既に存在する。selectSampleは対象ページと選択行を更新するが行の自動スクロールを行わないため、partialを維持してこの不足だけを既存UIで埋める。ドックを増やす必要はない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 6
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 16
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 129
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 145
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 234
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 49
+      }
+    ]
+  },
+  {
+    "rank": 4,
+    "originalRank": 4,
+    "title": "データ品質の診断パネル",
+    "mode": "replace",
+    "target": "既存データ確認ドックの品質診断タブ。元データと品質診断への入口を1つの「データ確認」にまとめ、開いた後に既存タブで切り替える。",
+    "retire": "解析バーに並ぶ「元データ」「品質診断」の2つの起動ボタンを1つへ統合する案。タブや診断機能は残す。将来の品質専用サイドバー／別ダッシュボードは追加しない。",
+    "preserve": "時刻診断はファイル全体、値の欠損は選択列・共通区間、変換不能の全体件数と保持明細の区間絞り込みという範囲の違い。原レコード番号、候補への移動、明細上限、一定値の要確認扱い、元データ非変更。読み込みを妨げるエラーは即時通知も残す。",
+    "rationale": "品質診断は実装済みで、元データと同一パネルの2タブである。それでも上部には起動ボタンが2つあるため、機能を失わず入口だけ減らせる。読み込み前の先頭確認と読み込み後の品質診断は対象範囲が異なるので同一結果として混同しない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 16
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 20
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 174
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 181
+      },
+      {
+        "path": "csv_viewer/data-quality-utils.js",
+        "line": 19
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 1910
+      }
+    ]
+  },
+  {
+    "rank": 5,
+    "originalRank": 5,
+    "title": "復元・保存状態の常設表示",
+    "mode": "extend",
+    "target": "各ファイル行に実装済みの保存状態・最終成功時刻・再試行欄。",
+    "retire": "保存状態専用の新ページや通知センターを追加しない。保存可否をコンソールや一時通知だけで知らせる運用を、既存のファイル行を確認先とする運用に置き換える。通知そのものを一律廃止しない。",
+    "preserve": "復元可能／今回のみ／失敗等の区別、前回の保存成功時刻、失敗理由と再試行、削除失敗時の警告、入力途中の時間オフセットとフォーカス。",
+    "rationale": "既に完了しており、renderSessionStatusは状態行だけを更新する。ファイル操作の直近に状態があるので別画面を増やす価値は小さい。将来の復元問題も同じ欄へ集約する。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 3131
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8998
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 9005
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 9012
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 9023
+      }
+    ]
+  },
+  {
+    "rank": 6,
+    "originalRank": 6,
+    "title": "単位検証と明示的な単位変換",
+    "mode": "extend",
+    "target": "Drive Indexの既存単位警告と、既存Custom RAMの名前・単位・計算式編集。比較側で必要な換算も同じ派生チャンネル作成操作へつなぐ。",
+    "retire": "別の単位変換専用画面や、元値を書き換える変換モードは追加しない。手書きの「元信号 * 3.6」等を、既存Custom RAMに候補を事前入力して確認する操作へ置換する。汎用数式の手入力は残す。",
+    "preserve": "元チャンネルと元数値、変換式・変換後単位・係数の確認、入力単位不明時の未評価、燃料だけ不適合の場合の評価範囲、結果未更新表示。密度など追加条件が必要な換算は自動で決めない。",
+    "rationale": "現状は単位検証と手動Custom RAMによる回避があり、確認付き換算候補UIは未実装なのでpartialを維持する。既存の式評価・単位表示・設定保存を再利用すれば、独立した変換管理を避けられる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 4547
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 4549
+      },
+      {
+        "path": "csv_viewer/index.html",
+        "line": 97
+      },
+      {
+        "path": "csv_viewer/unit-validation-utils.js",
+        "line": 1
+      },
+      {
+        "path": "csv_viewer/unit-validation-utils.js",
+        "line": 47
+      }
+    ]
+  },
+  {
+    "rank": 7,
+    "originalRank": 7,
+    "title": "多状態のタイムラインと滞在時間",
+    "mode": "extend",
+    "target": "チャンネル行のBit表示設定を、必要なチャンネルだけ開く「数値／2状態／多状態」設定へ拡張。集計は既存統計・比較結果の中に置く。",
+    "retire": "新しい状態専用ダッシュボードや、Bitと別の常設タイムライン操作列を増やさない。Bit設定の入口を一般化するが、2状態モード自体は削除しない。",
+    "preserve": "既存Bitの自動検出・手動解除、段の低い表示、直前値保持による状態比較、実時刻の継続時間。未知値・欠損を既知状態へ丸めず、既存設定を2状態として移行する。",
+    "rationale": "Bitバッジと状態不一致時間の計算が既にある。状態名・色・遷移数をその枠組みに追加すれば機能追加による操作箇所の増加を抑えられる。現在の3値以上の状態管理は未実装のまま扱う。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 5289
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 5296
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6005
+      },
+      {
+        "path": "csv_viewer/compare-utils.js",
+        "line": 108
+      },
+      {
+        "path": "csv_viewer/compare-utils.js",
+        "line": 146
+      }
+    ]
+  },
+  {
+    "rank": 8,
+    "originalRank": 8,
+    "title": "比較テンプレートによる複数試験の一括評価",
+    "mode": "optional",
+    "target": "比較パネル「メモ・保存」にある比較テンプレートの「新しいログに適用」から、必要時だけ開く複数試験の実行キュー。",
+    "retire": "常設の一括処理タブや別のバッチ用テンプレート編集画面は追加しない。対応・許容差・式の設定元を既存テンプレートと共有し、設定の二重管理を避ける。単発比較の簡単な適用操作は残す。",
+    "preserve": "試験ごとの不足列・単位・品質・失敗の表示、時間差の再確認、途中キャンセル、個別結果への復帰。既存テンプレートが前回の時間差を引き継がない仕様を維持し、バッチで勝手に確定しない。",
+    "rationale": "比較テンプレートは設定とファイルスロットを既に保存するが一括実行はない。反復試験の多い利用者向けのオンデマンド操作に限定し、通常のビューアをジョブ管理画面に変えない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 471
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 475
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 486
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 490
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 497
+      }
+    ]
+  },
+  {
+    "rank": 9,
+    "originalRank": 9,
+    "title": "基準・比較・差分を選べるCSV出力",
+    "mode": "replace",
+    "target": "エクスポートメニューにある単一のCSV保存項目を「CSV出力」に更新し、対象と時間軸をその中で選ぶ。",
+    "retire": "「基準CSV」「比較CSV」「差分CSV」を別々のメニューボタンとして追加しない。現在の基準限定の入口を置換する。計算チャンネルとして差分を作る既存機能は、再計算・派生式にも使えるため削除しない。",
+    "preserve": "既存の基準ファイル＋選択列を既定の出力に残す。共通解析区間、元時刻基準時の時間合わせ依存計算除外、欠損表現、列順・単位・エスケープを維持する。各ファイルの原時刻表と補間済み比較表を明確に区別する。",
+    "rationale": "現状のCSVは基準のみで、差分表示や比較側を含まない。既存出力の上位互換にするほうが入口も説明も少なく、差分表示・計算差分・CSV差分の混同も出力時に解消できる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/index.html",
+        "line": 281
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 7563
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 7570
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 7585
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 7600
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 37
+      }
+    ]
+  },
+  {
+    "rank": 10,
+    "originalRank": 10,
+    "title": "イベント条件に継続時間・ヒステリシス",
+    "mode": "extend",
+    "target": "既存イベント検出フォームと結果一覧の詳細条件。順位14の選択式条件作成と同じ条件モデル・編集場所を使う。",
+    "retire": "継続時間検出やヒステリシス検出を別のツールにしない。単純な連続true抽出を拡張した共通検出処理へ寄せる。現在の式入力や単純条件による検出は残す。",
+    "preserve": "既存条件式、AND/OR、検出区間へのジャンプ、元時刻との対応、区間上限と打切り表示。継続時間はサンプル数でなく実時刻で計算し、欠損や長い欠測を正常・連続成立と暗黙にみなさない。",
+    "rationale": "現在は1つの条件式を評価し、連続して真の区間を抽出する実装である。開始条件・解除条件・最短継続・短い途切れの統合を同じイベントの詳細設定にまとめれば、似た検出ボタンの増殖を避けられる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/index.html",
+        "line": 110
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6900
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6935
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6952
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6894
+      }
+    ]
+  },
+  {
+    "rank": 11,
+    "originalRank": 11,
+    "title": "複数の解析ページと固定参照チャンネル",
+    "mode": "defer",
+    "target": "まず既存のお気に入りチャンネルセットと配置保存の役割を整理する。複数ページの常設タブは現段階では追加しない。",
+    "retire": "新しいページ管理列、ページごとの時刻同期設定、固定参照段を同時に追加する案は見送る。既存機能は削除しない。再検討時も表示専用スナップショットを既存保存UIに置き、設定全体のプリセットをそのままページ切替に流用しない。",
+    "preserve": "現在のチャンネルセット、チャートの結合・順序・Y軸配置、同一ログを再読込せず表示を変更する能力。将来ページ化する場合もログや数値配列は共有し、別ページ操作で解析条件を無断変更しない。",
+    "rationale": "既存プリセットは配置だけでなく読込設定・比較設定・Custom RAMも含み、適用はapplySettings全体へ渡る。これをタブ化するとページ移動で解析条件まで変わり得る。まず保存対象を明確にするほうを優先し、複数ページの必要性を別途確認する。",
+    "evidence": [
+      {
+        "path": "csv_viewer/index.html",
+        "line": 131
+      },
+      {
+        "path": "csv_viewer/index.html",
+        "line": 138
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8046
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8049
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8050
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8149
+      }
+    ]
+  },
+  {
+    "rank": 12,
+    "originalRank": 12,
+    "title": "チャンネルの階層・タグ・説明辞書",
+    "mode": "extend",
+    "target": "既存チャンネル検索・絞り込み欄と「検索用の別名」編集を、説明・タグ・任意の分類を扱うチャンネル情報へ拡張する。",
+    "retire": "独立した辞書ブラウザや別のチャンネル一覧を作らない。検索別名の専用小画面はチャンネル情報編集へ統合し、階層表示は現在の一覧の表示方式として切替可能にする。",
+    "preserve": "名前・単位・別名検索、表示中／共通／未対応／お気に入りの絞り込み、平坦な一覧とキーボード操作。説明用別名とファイル間のチャンネル対応は別の意味なので、表示名変更だけで数値の対応先を変えない。",
+    "rationale": "現行検索は既に名前・単位・検索別名・対応別名を横断する。メタデータを同じ検索対象に追加すれば探索能力を上げられる。意味辞書のために常設ペインを増やす必要はない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/index.html",
+        "line": 128
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 60
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 144
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 554
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 2586
+      }
+    ]
+  },
+  {
+    "rank": 13,
+    "originalRank": 13,
+    "title": "XY・分布・時系列の連動選択",
+    "mode": "optional",
+    "target": "既存XYプロットの必要時だけ有効にする点選択と、既存波形・元データドックの強調表示。まずこの組合せに限定し、分布図の新設とは分離する。",
+    "retire": "連動選択のための専用ダッシュボードや常時表示するブラシ設定は作らない。XYの同じ画面に操作を置き、元データ表を再利用する。既存の単一区間選択は置換せず残す。",
+    "preserve": "点ごとの元ファイル・サンプル番号・時刻、補正後時刻、間引き前の選択判定。離れた時刻集合を単一の最小～最大区間に丸めない。点集合の強調と解析対象への適用は分け、除外数を明示する。",
+    "rationale": "現行XYは既存モーダルだが描画点は[x,y]のみで間引きがあり、共通解析は1つの区間である。逆引き用の出典保持と複数区間モデルが前提となるため、単にブラシボタンを追加する小改修とは扱わず専門的な探索操作として提供する。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8273
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8337
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8341
+      },
+      {
+        "path": "csv_viewer/analysis-utils.js",
+        "line": 6
+      },
+      {
+        "path": "csv_viewer/data-inspector.js",
+        "line": 251
+      }
+    ]
+  },
+  {
+    "rank": 14,
+    "originalRank": 44,
+    "title": "条件を選択式で作り解析全体へ適用",
+    "mode": "replace",
+    "target": "既存イベント条件の入力場所を「条件作成」の共通入口に更新し、選択式編集と式入力を切替可能にする。適用状態は既存の解析対象バーに表示する。",
+    "retire": "イベント用条件とXY・表・統計用条件をそれぞれ別画面で編集する構造を新設しない。条件作成の入口を統合するが、イベント検出の実行・一覧・ジャンプは残す。式に変換できない高度な既存式を無理に選択式へ変換しない。",
+    "preserve": "元の式と数値評価、既存AND/OR、明示的な適用／解除、対象区間・時間基準、条件に一致した件数と除外数。条件を作っただけで解析全体へ適用しない。欠損の扱いと複数の離れた区間を保持する。",
+    "rationale": "現行はイベント式の編集と評価があり、共通解析バーもある。新しいグローバルフィルタ画面を足すより、順位10と共通の条件モデルへ上位互換で移すほうが設定の二重化を避けられる。検出と解析フィルタは作用が異なるので、適用先は明示的に選ぶ。",
+    "evidence": [
+      {
+        "path": "csv_viewer/index.html",
+        "line": 113
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6947
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6951
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 46
+      },
+      {
+        "path": "csv_viewer/analysis-utils.js",
+        "line": 6
+      }
+    ]
+  },
+  {
+    "rank": 15,
+    "originalRank": 14,
+    "title": "解析プロジェクトを1ファイルで持ち運ぶ",
+    "mode": "optional",
+    "target": "既存エクスポートメニュー内の保存・再開操作として、必要時だけプロジェクトパッケージを選べるようにする。",
+    "retire": "新しいプロジェクト管理常設画面や第二の復元一覧は作らない。設定JSON・比較テンプレート・持ち運び用プロジェクトの入口と説明は同じ保存場所に寄せるが、各形式と軽量な書出し能力は削除しない。",
+    "preserve": "設定のみ／次の試験用テンプレート／元ログを含む再開用パッケージという目的の違い、既存JSON互換、ログ照合、容量・内容の事前確認。自動復元は端末内の復元として残し、HTMLレポートを編集可能なプロジェクトと誤認させない。",
+    "rationale": "設定JSONの出入力、比較テンプレート、端末内の自動復元が既に別目的で存在する。1ファイル化は持ち運びが必要な場合の選択肢に留め、通常操作を新しいプロジェクト概念で必須化しない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/index.html",
+        "line": 268
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8521
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8540
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 471
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 497
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 8999
+      }
+    ]
+  },
+  {
+    "rank": 16,
+    "originalRank": 15,
+    "title": "割合・非対称・区間別の許容差",
+    "mode": "extend",
+    "target": "比較結果カードの既存「許容差」入力と比較テンプレートの許容差設定。",
+    "retire": "割合判定・上下限判定・モード別判定を独立した評価画面にしない。従来の固定絶対差欄を基本表示として残し、詳細設定で方式を切り替える。現在の超過ナビ・結果カードを再利用する。",
+    "preserve": "固定絶対差の既定動作と既存テンプレートの数値形式、基準−比較の符号、欠損・比較不可・許容差未設定の区別、超過点と区間へのジャンプ。割合の分母・ゼロ近傍の絶対差・区間境界を明示する。",
+    "rationale": "許容差入力、再計算、超過区間ナビが既に揃っている。許容差のデータ型と評価器を拡張して同じ結果へ返すほうが、新しい判定ツールを追加するより確認先が少ない。",
+    "evidence": [
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 404
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 420
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 427
+      },
+      {
+        "path": "csv_viewer/compare-utils.js",
+        "line": 21
+      },
+      {
+        "path": "csv_viewer/compare-utils.js",
+        "line": 124
+      }
+    ]
+  },
+  {
+    "rank": 17,
+    "originalRank": 16,
+    "title": "繰り返しイベントを同じ起点で重ねる",
+    "mode": "optional",
+    "target": "既存イベント検出結果の選択から開く「イベントを重ねて比較」。同じ比較表示・統計の部品を再利用する。",
+    "retire": "常設のイベント解析ページや独立したイベント検出器を追加しない。順位10・14の検出結果を共通入力にし、繰返し応答が必要な時だけ重ね表示へ切り替える。通常のファイル間比較は残す。",
+    "preserve": "各イベントの元ファイル・元時刻・切り出し区間・原データ、0秒の定義、元の波形へ戻る操作、欠測・切り出し端不足の表示。平均・ばらつき用の再サンプリング条件と個別波形を区別し、ファイルの保存済み時間シフトを書き換えない。",
+    "rationale": "既存イベントは区間一覧として保持され、比較ワークスペースには重ね表示がある。切り出したイベントをその表示へ供給する形なら、検出・表示・保存を新しい一式として増やさずに済む。新しい専門解析なのでpendingのまま扱う。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6952
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6953
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 6960
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 43
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 676
+      }
+    ]
+  },
+  {
+    "rank": 18,
+    "originalRank": 17,
+    "title": "自動時間合わせの曖昧さを可視化",
+    "mode": "extend",
+    "target": "比較パネル「時間合わせ」の既存候補プレビューに、一致度曲線・上位候補・複数信号の検証を折りたたみ詳細として追加する。",
+    "retire": "新しい自動合わせ専用画面を作らない。ファイル行の「自動」は既に同じパネルへ遷移するので、独立機能の重複と誤認して削除しない。必要なら「時間合わせを開く」という入口の意味を明確にする。手動数値入力と2点指定は残す。",
+    "preserve": "保存済みシフトと候補の分離、適用／取消、探索幅・評価範囲、RMSEと重なり率、無変化信号の除外、周期波形への注意、未評価理由。曖昧な候補を自動確定しない。Drive Indexのモード走行への自動整合とは区別する。",
+    "rationale": "現行探索は各シフトのスコアを計算するが最良候補だけを保持し、RMSEと重なり率を同じ画面に表示する。候補履歴の保持と可視化をここへ追加すれば、現行の確認手順を強化できる。",
+    "evidence": [
+      {
+        "path": "csv_viewer/app.js",
+        "line": 3098
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 5557
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 267
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 318
+      },
+      {
+        "path": "csv_viewer/compare-workspace.js",
+        "line": 339
+      },
+      {
+        "path": "csv_viewer/app.js",
+        "line": 4545
+      }
+    ]
+  }
+]

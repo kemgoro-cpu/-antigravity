@@ -4,6 +4,7 @@ const { pathToFileURL } = require('node:url');
 const path = require('node:path');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
+const upgrade = require('./upgrade-review.cjs');
 (async()=>{
  const browser=await chromium.launch({headless:true,channel:'msedge'});
  const records=[];
@@ -20,6 +21,28 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('.candidate:visible').count(),51);
   assert.equal(await page.locator('.candidate-check:checked').count(),4);
   assert.equal(await page.locator('.candidate-check').evaluateAll(boxes=>boxes.filter(box=>box.indeterminate).length),2);
+  const exported=JSON.parse(fs.readFileSync(path.join(__dirname,'recommendations.json'),'utf8'));
+  const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'research-manifest.json'),'utf8'));
+  assert.equal(exported.filter(item=>item.upgrade).length,55);
+  assert.deepEqual(manifest.upgradeAudit.counts,upgrade.counts);
+  assert.equal(await page.locator('.upgrade-detail').count(),55);
+  assert.equal(await page.locator('.upgrade-bundle').count(),6);
+  for(const [mode,count] of Object.entries(upgrade.counts)){
+   await page.locator(`[data-upgrade-view="${mode}"]`).click();
+   assert.equal(await page.locator('.candidate:visible').count(),count);
+   assert.equal(await page.locator('#status').inputValue(),'');
+   assert.equal(await page.locator('.candidate:visible').evaluateAll((cards,mode)=>cards.every(card=>card.dataset.upgrade===mode),mode),true);
+  }
+  await page.locator('[data-upgrade-view="in-place"]').click();
+  assert.equal(await page.locator('.candidate:visible').count(),upgrade.inPlaceCount);
+  await page.locator('#status').selectOption('complete');
+  assert.equal(await page.locator('.candidate:visible').count(),4);
+  await page.locator('#upgrade').selectOption('defer');
+  assert.equal(await page.locator('.candidate:visible').count(),0);
+  assert.equal(await page.locator('#empty-result').isVisible(),true);
+  await page.locator('#reset').click();
+  await page.locator('#q').fill('静的ショートカット一覧');
+  assert.deepEqual(await page.locator('.candidate:visible').evaluateAll(cards=>cards.map(card=>card.id)),['idea-29']);
   await page.locator('[data-status-view="complete"]').click();
   assert.deepEqual(await page.locator('.candidate:visible').evaluateAll(cards=>cards.map(card=>card.id)),['idea-1','idea-2','idea-4','idea-5']);
   await page.locator('#status').selectOption('partial');
@@ -46,7 +69,7 @@ const assert = require('node:assert/strict');
   assert.ok(await page.locator('.candidate:visible').count()<55);
   await page.locator('#reset').click();
   await page.locator('#expand').click();
-  assert.equal(await page.locator('.candidate details[open]').count(),55);
+  assert.equal(await page.locator('.candidate details[open]').count(),110);
   await page.locator('#status').selectOption('remaining');
   for(const width of [1440,900,390]){
    await page.setViewportSize({width,height:1080});
@@ -57,13 +80,21 @@ const assert = require('node:assert/strict');
    await page.screenshot({path:path.join(__dirname,`screenshots/report-${width}.png`)});
   }
   await page.setViewportSize({width:1440,height:1080});
+  await page.locator('#upgrade-review').evaluate(el=>el.scrollIntoView({block:'start'}));
+  await page.screenshot({path:path.join(__dirname,'screenshots/report-upgrade.png')});
+  await page.locator('.upgrade-subheading').evaluate(el=>el.scrollIntoView({block:'start'}));
+  await page.screenshot({path:path.join(__dirname,'screenshots/report-upgrade-plan.png')});
   await page.locator('#ranking').evaluate(el=>el.scrollIntoView({block:'start'}));
   await page.screenshot({path:path.join(__dirname,'screenshots/report-ranking.png')});
   assert.deepEqual(errors,[]);
   assert.deepEqual(network,[]);
   await page.goto(pathToFileURL(path.join(__dirname,'report.html')).href+'#idea-1');
   assert.equal(await page.locator('#idea-1').isVisible(),true,'direct links reveal a completed card');
-  const result={products:37,proposals:55,implementationStatus:{complete:4,partial:2,pending:49,remaining:51},defaultView:'remaining',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
+  await page.locator('#upgrade').selectOption('defer');
+  await page.evaluate(()=>location.hash='idea-2');
+  await page.waitForFunction(()=>!document.getElementById('idea-2').hidden);
+  assert.equal(await page.locator('#upgrade').inputValue(),'');
+  const result={products:37,proposals:55,implementationStatus:{complete:4,partial:2,pending:49,remaining:51},upgradeAudit:{counts:upgrade.counts,inPlaceCount:upgrade.inPlaceCount,coverage:55,filters:'passed'},defaultView:'remaining',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
   fs.writeFileSync(path.join(__dirname,'report-validation.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));
  }finally{await browser.close();}

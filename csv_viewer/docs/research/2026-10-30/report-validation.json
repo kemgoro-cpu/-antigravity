@@ -7,6 +7,18 @@
     "pending": 49,
     "remaining": 51
   },
+  "upgradeAudit": {
+    "counts": {
+      "replace": 8,
+      "extend": 22,
+      "internal": 6,
+      "optional": 13,
+      "defer": 6
+    },
+    "inPlaceCount": 36,
+    "coverage": 55,
+    "filters": "passed"
+  },
   "defaultView": "remaining",
   "filters": "passed",
   "images": "loaded",
