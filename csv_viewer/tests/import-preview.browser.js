@@ -41,7 +41,10 @@ const root = path.resolve(__dirname, '..');
         ];
         const first = await open();
         try {
-            await first.page.locator('#file-input').setInputFiles(files[0]);
+            assert.equal(await first.page.locator('#import-preview-open, #import-preview-files').count(), 0, 'the duplicate import entry is removed');
+            const chooser = first.page.waitForEvent('filechooser');
+            await first.page.locator('#browse-files-btn').click();
+            await (await chooser).setFiles(files[0]);
             await settled(first.page, 1);
             await first.page.locator('#file-input').setInputFiles(files.slice(1));
             await settled(first.page, files.length);
@@ -71,7 +74,8 @@ const root = path.resolve(__dirname, '..');
         try {
             const custom = write('装置A.csv', 'memo;Time metadata\nPressure;Tick\nkPa;ms\n10;0\n20;500\n30;1000\n');
             const other = write('装置B.csv', 'Value,Elapsed\n5,0\n6,1\n7,2\n');
-            await second.page.locator('#import-preview-files').setInputFiles([custom, other]);
+            await second.page.locator('#import-review-before-load').check();
+            await second.page.locator('#file-input').setInputFiles([custom, other]);
             await second.page.locator('.import-preview-modal').waitFor();
             assert.equal(await second.page.evaluate(() => Object.keys(window.__csvViewerDebug.state.files).length), 0, 'preview must not load files');
             await second.page.locator('#ip-delimiter').selectOption(';');
@@ -100,6 +104,7 @@ const root = path.resolve(__dirname, '..');
             assert.equal(result.find(file => file.name === '装置A.csv').opts.unitRow, 2);
             assert.equal(result.find(file => file.name === '装置B.csv').opts.unitMode, 'none');
             await second.page.waitForTimeout(800); await second.page.reload(); await settled(second.page, 2);
+            assert.equal(await second.page.locator('#import-review-before-load').isChecked(), true, 'review preference survives restore');
             result = await second.page.evaluate(() => Object.values(window.__csvViewerDebug.state.files).map(file => ({ name: file.name, time: [...file.timeData], opts: file.importOptions })));
             assert.deepEqual(result.find(file => file.name === '装置A.csv').time, [0, 0.5, 1], 'per-file manual settings survive session restore');
             assert.equal(result.find(file => file.name === '装置B.csv').opts.unitMode, 'none');
@@ -107,11 +112,16 @@ const root = path.resolve(__dirname, '..');
 
         const third = await open();
         try {
-            await third.page.locator('#import-preview-files').setInputFiles(files[0]);
+            await third.page.locator('#import-review-before-load').check();
+            await third.page.locator('#file-input').setInputFiles(files[0]);
             await third.page.locator('.import-preview-modal').waitFor();
             await third.page.keyboard.press('Escape');
             assert.equal(await third.page.evaluate(() => Object.keys(window.__csvViewerDebug.state.files).length), 0);
             assert.equal(await third.page.evaluate(() => window.__csvViewerDebug.state.parseJobs.size), 0);
+            await third.page.locator('#import-review-before-load').uncheck();
+            await third.page.locator('#file-input').setInputFiles(files[0]);
+            await settled(third.page, 1);
+            assert.equal(await third.page.locator('.import-preview-modal').count(), 0, 'same entry supports immediate import after cancelling review');
         } finally { await third.context.close(); }
         assert.deepEqual(errors, []);
         console.log('Import preview browser passed (unit rows, SJIS, TRN, manual per-file overrides, restore, cancel, 390px). Evidence:', output);

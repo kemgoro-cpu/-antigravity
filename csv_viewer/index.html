@@ -32,13 +32,12 @@
                         <i class='bx bx-cloud-upload' aria-hidden="true"></i>
                         <p>ここにファイルをドラッグ&ドロップ</p>
                         <p class="small">CSV / TRN</p>
-                        <button id="browse-files-btn" class="btn-primary">ファイルを選択</button>
+                        <button id="browse-files-btn" class="btn-primary" aria-describedby="import-mode-hint">開く</button>
                         <input type="file" id="file-input" multiple accept=".csv,.trn" class="hidden">
                     </div>
                     <div class="import-review-entry">
-                        <button id="import-preview-open" class="btn-secondary">設定を確認してファイルを開く</button>
-                        <input type="file" id="import-preview-files" multiple accept=".csv,.trn" class="hidden">
-                        <label><input type="checkbox" id="import-review-before-load">通常の選択・ドロップでも設定を確認</label>
+                        <label><input type="checkbox" id="import-review-before-load" aria-describedby="import-mode-hint">読込前に設定を確認</label>
+                        <p id="import-mode-hint" class="import-setting-hint" role="status">既定の設定ですぐに読み込みます。</p>
                     </div>
                     <div id="parse-status-list" class="parse-status-list"></div>
                     <ul id="file-list" class="file-list"></ul>
@@ -320,7 +319,7 @@
                         <h2 id="workspace-empty-title">データを開いて、波形を見よう</h2>
                         <p id="workspace-empty-description">ファイルを選択するか、この画面にドロップしてください。</p>
                         <div class="empty-actions">
-                            <button id="overlay-browse-btn" class="btn-primary"><i class="bx bx-folder-open" aria-hidden="true"></i> ファイルを選択</button>
+                            <button id="overlay-browse-btn" class="btn-primary" aria-describedby="import-mode-hint"><i class="bx bx-folder-open" aria-hidden="true"></i> 開く</button>
                             <button id="workspace-select-channels" class="btn-primary hidden">チャンネルを選ぶ</button>
                         </div>
                         <p id="workspace-empty-detail" class="empty-detail">データは端末内で処理され、外部へ送信されません。</p>

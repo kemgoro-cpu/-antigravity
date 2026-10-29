@@ -24,6 +24,9 @@
     function syncControls() {
         if ($('name-row-idx')) $('name-row-idx').disabled = val('import-name-mode', 'auto') !== 'manual';
         if ($('unit-row-idx')) $('unit-row-idx').disabled = val('import-unit-mode', 'auto') !== 'manual';
+        if ($('import-mode-hint')) $('import-mode-hint').textContent = $('import-review-before-load')?.checked
+            ? '開く・ドロップの後に、設定と先頭データを確認します。'
+            : '既定の設定ですぐに読み込みます。';
     }
     function applySettings(settings = {}) {
         const options = normalize(settings);
@@ -40,11 +43,6 @@
             'import-review-before-load', 'name-row-idx', 'unit-row-idx']) {
             $(id)?.addEventListener('change', () => { syncControls(); api.onChange(); });
         }
-        $('import-preview-open')?.addEventListener('click', () => $('import-preview-files').click());
-        $('import-preview-files')?.addEventListener('change', event => {
-            if (event.target.files.length) api.handleFiles(event.target.files, { review: true });
-            event.target.value = '';
-        });
         syncControls();
     }
 

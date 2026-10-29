@@ -30,11 +30,13 @@ const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('
         await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
         await page.waitForFunction(() => !!window.__csvViewerDebug);
         if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.locator('#theme-toggle-btn').click();
-        await page.locator('#import-preview-files').setInputFiles(samples);
+        await page.locator('#import-review-before-load').check();
+        await page.locator('#file-input').setInputFiles(samples);
         await page.waitForFunction(() => !document.querySelector('#ip-confirm')?.disabled);
         assert.equal(await page.evaluate(() => Object.keys(window.__csvViewerDebug.state.files).length), 0);
         await capture('import-preview-panel', '.import-preview-modal', '適用前の複数ファイル確認。まだファイルを読み込んでいない。');
         await page.locator('#ip-cancel').click();
+        await page.locator('#import-review-before-load').uncheck();
         // Load the Main first so the guide is independent of parser completion order.
         for (let i = 0; i < samples.length; i++) {
             await page.locator('#file-input').setInputFiles(samples[i]);
