@@ -2,6 +2,7 @@
 
 // This audit changes the proposed delivery method, not implementation progress.
 const proposals = require('./recommendations.cjs');
+const consolidation = require('./consolidation-status.json');
 const items = ['01-18', '19-37', '38-55'].flatMap(part => require(`./upgrade-audit-${part}.json`));
 const auditedRevision = '24a3fe0c69837dc9e11c3b7ba719e0fe5f053f88';
 const auditedDate = '2026-10-30';
@@ -32,10 +33,12 @@ const counts = items.reduce((acc, item) => (acc[item.mode]++, acc), Object.fromE
 const inPlaceCount = counts.replace + counts.extend + counts.internal;
 const e = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const ranks = values => values.map(rank => `<a href="#idea-${rank}">${rank}位</a>`).join('・');
+const consolidatedCount = consolidation.items.filter(item => item.status === 'complete').length;
+const delivery = `<div class="upgrade-delivery"><h3>今回依頼された3つの整理：${consolidatedCount} / 3 完了</h3><p>下のチェックは入口・パネルの整理の実装状況です。55案すべての機能が実装済みという意味ではありません。</p><ul class="task-checklist">${consolidation.items.map(item => `<li data-consolidation="${item.order}" data-status="${item.status}"><input type="checkbox" class="progress-check" disabled${item.status === 'complete' ? ' checked' : ''} aria-label="${e(item.title)}：${item.status === 'complete' ? '完了' : '未完了'}"><div><strong>${item.order}. ${e(item.title)}</strong><p>${e(item.detail)}</p></div></li>`).join('')}</ul><p class="muted">更新：${e(consolidation.updatedDate)} · 実装コミット ${e(consolidation.implementationCommit)}。元の保存形式、計測値、原データは維持します。</p></div>`;
 const detail = rank => {
  const item = byRank.get(rank);
  const refs = item.evidence.map(ref => `<a href="https://github.com/kemgoro-cpu/-antigravity/blob/${auditedRevision}/${e(ref.path)}#L${ref.line}" target="_blank" rel="noopener noreferrer">${e(ref.path.replace('csv_viewer/', ''))}:${ref.line}</a>`).join(' / ');
- return `<div class="upgrade-detail"><strong>導入方法の見直し（提案）</strong><span class="upgrade-tag mode-${item.mode}">${labels[item.mode]}</span><p><b>組み込む先：</b>${e(item.target)}</p><p><b>整理するUI・手順：</b>${e(item.retire)}</p><details class="upgrade-reasons"><summary>残す能力・判断理由・コード根拠</summary><dl><dt>残す能力</dt><dd>${e(item.preserve)}</dd><dt>判断理由</dt><dd>${e(item.rationale)}</dd><dt>コード根拠</dt><dd>${refs}</dd></dl></details></div>`;
+ return `<div class="upgrade-detail"><strong>導入方法（監査時の提案）</strong><span class="upgrade-tag mode-${item.mode}">${labels[item.mode]}</span><p><b>組み込む先：</b>${e(item.target)}</p><p><b>整理するUI・手順：</b>${e(item.retire)}</p><details class="upgrade-reasons"><summary>残す能力・判断理由・コード根拠</summary><dl><dt>残す能力</dt><dd>${e(item.preserve)}</dd><dt>監査時の判断</dt><dd>${e(item.rationale)}</dd><dt>コード根拠</dt><dd>${refs}</dd></dl></details></div>`;
 };
 
 const bundles = [
@@ -47,7 +50,7 @@ const bundles = [
  {
   order: 2, title: '元データ・品質・統計を同じ調査パネルへ', related: [3, 4, 21, 23, 26],
   change: '現在の「元データ」「品質」と独立した統計パネルを、「調べる」の中の3タブへ整理。浮動統計パネルを置き換える。選択行が見える位置へスクロールする3位の残りも先に補完する。',
-  keep: 'F5から統計を開く操作、2点カーソルのA/B/Δ、元サンプルと補間値の区別。XYは既存の大きな画面を拡張し、小さなパネルへ無理に詰め込まない。'
+  keep: '区間操作バーから統計を開く操作、2点カーソルのA/B/Δ、元サンプルと補間値の区別。XYは既存の大きな画面を拡張し、小さなパネルへ無理に詰め込まない。'
  },
  {
   order: 3, title: '保存・再利用・出力を目的で選べるように', related: [9, 15, 20, 30, 36, 37, 45],
@@ -72,15 +75,16 @@ const bundles = [
 ];
 
 const summary = `<section id="upgrade-review" class="upgrade-summary">
- <div class="eyebrow">2026-10-30 · 既存機能との照合 · 整理方針は未実施</div>
+ <div class="eyebrow">2026-10-30 · 既存機能との照合 · 依頼された整理 ${consolidatedCount} / 3 完了</div>
  <h2>機能追加の前に、既存画面をアップグレードする</h2>
  <p class="lead">55案中${inPlaceCount}案は、既存の操作・画面・内部処理に組み込む方針です。</p>
- <p>今回、全55案を実装コードと照合し直しました。別の入口や画面を足す前に、現在の操作を置き換えられるかで判断しています。<strong>以下は整理の提案で、アプリの機能削除・統合はまだ行っていません。</strong>元の順位と完了チェックは維持します。</p>
+ <p>全55案を実装コードと照合し、別の入口や画面を足す前に現在の操作を置き換えられるかで判断しました。依頼された3つの整理は下のチェックへ反映しています。<strong>55案の導入方針と、そのすべての実装完了は別です。</strong>元の順位は維持します。</p>
+ ${delivery}
  <div class="upgrade-counts">${Object.keys(labels).map(mode => `<button data-upgrade-view="${mode}" class="mode-${mode}"><b>${counts[mode]}案</b><span>${labels[mode]}</span><small>${descriptions[mode]}</small></button>`).join('')}</div>
  <p class="muted">「置換・統合」は旧UIや手順を整理する案。「既存画面の拡張」は選択肢が増えるため、必要時だけ開く配置にします。件数は55案の分類で、削除できるボタン数や実装済み件数ではありません。</p>
  <button class="primary-action" data-upgrade-view="in-place">既存機能に組み込む${inPlaceCount}案を見る</button>
- <h3 class="upgrade-subheading">画面を増やさない改修順（提案）</h3>
- <p>当初順位は課題の価値順として残し、改修は以下のまとまりで進めると重複を減らせます。専門用途の案はこの順番だけを理由に着手しません。</p>
+ <h3 class="upgrade-subheading">画面を増やさない改修順（監査時の提案）</h3>
+ <p>以下は監査時の広い改修案です。今回の3つの整理に含まれない貼り付け・ファイル差し替え・時間重み統計・比較CSV等は引き続き未実装です。専門用途の案はこの順番だけを理由に着手しません。</p>
  <div class="upgrade-bundles">${bundles.map(bundle => `<article class="upgrade-bundle"><h4><span>${bundle.order}</span>${bundle.title}</h4><p>${e(bundle.change)}</p><p class="preserve"><b>残すもの：</b>${e(bundle.keep)}</p><p class="muted">関連：${ranks(bundle.related)}</p></article>`).join('')}</div>
  <details class="upgrade-boundaries"><summary>まとめても区別を消してはいけないもの</summary><ul>
  <li><b>表示範囲と解析区間：</b>拡大表示だけ変えて解析区間を固定する用途があるため、同じ区間へ強制しない。上側の範囲スライダーを戻さず、下側ナビゲーターを主操作のまま使う。</li>
@@ -97,4 +101,4 @@ const summary = `<section id="upgrade-review" class="upgrade-summary">
 const filter = `<label>導入方法（提案）<br><select id="upgrade"><option value="">すべて</option><option value="in-place">既存機能に組み込む</option>${Object.entries(labels).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}</select></label>`;
 const styles = `.upgrade-summary{background:#fff;border:2px solid #85b5ac;border-radius:10px;padding:26px;margin:26px 0}.upgrade-summary h2{margin:8px 0 12px}.upgrade-counts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:22px 0 12px}.upgrade-counts button{text-align:left;padding:14px 12px;min-width:0}.upgrade-counts b{font-size:28px;display:block}.upgrade-counts span{display:block;font-size:14px;font-weight:700}.upgrade-counts small{display:block;font-size:12px;line-height:1.6;margin-top:8px}.mode-replace{background:#e9f5ee;color:#205a43}.mode-extend{background:#eaf3fa;color:#235773}.mode-internal{background:#edf2f1;color:#34564f}.mode-optional{background:#fff4e2;color:#78501a}.mode-defer{background:#f0eef3;color:#63556e}.upgrade-subheading{margin:28px 0 10px}.upgrade-bundles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.upgrade-bundle{border:1px solid var(--line);border-radius:7px;padding:18px}.upgrade-bundle h4{margin:0 0 10px;font-size:17px;line-height:1.5;display:flex;gap:10px;align-items:flex-start}.upgrade-bundle h4 span{background:#e5f2ef;color:#255c51;flex-shrink:0;width:25px;text-align:center;border-radius:4px}.upgrade-bundle p{font-size:14px}.upgrade-bundle .preserve{padding-top:10px;border-top:1px solid var(--line);color:#455665}.upgrade-boundaries{margin:22px 0;padding:16px;background:#f3f7f8;border-radius:6px}.upgrade-hold{background:#f4f1f5;border-left:4px solid #877392;padding:14px}.upgrade-detail{border-top:1px solid var(--line);padding:16px 0;margin:16px 0 0;font-size:14px}.upgrade-detail>strong{margin-right:10px}.upgrade-tag{display:inline-block;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:600}.upgrade-reasons{margin-top:12px}.upgrade-reasons dl{font-size:13px}.filters label:not(.search){flex:0 1 auto}.filters select{width:100%}.filters label.search{min-width:210px}.filters button{align-self:end}.candidate{scroll-margin-top:205px}@media(max-width:1000px){.upgrade-counts{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.upgrade-summary{padding:17px}.upgrade-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.upgrade-counts b{font-size:24px}.upgrade-bundles{grid-template-columns:1fr}.upgrade-bundle{padding:14px}.upgrade-boundaries{padding:12px}.upgrade-boundaries ul{padding-left:20px}.filters label.search{flex-basis:100%}.filters label:not(.search){flex:1 1 140px;min-width:0}.candidate{scroll-margin-top:12px}}@media print{.upgrade-summary button{display:none}.upgrade-summary{border:1px solid #aaa}.upgrade-bundles{display:block}.upgrade-bundle{break-inside:avoid;margin:10px 0}.upgrade-detail{break-inside:avoid}}`;
 
-module.exports = {items, byRank, labels, counts, inPlaceCount, auditedDate, auditedRevision, bundles, detail, summary, filter, styles};
+module.exports = {items, byRank, labels, counts, inPlaceCount, auditedDate, auditedRevision, bundles, detail, summary, filter, styles: styles + '.upgrade-delivery{background:#eff7f3;border:1px solid #a8c9bd;padding:18px;border-radius:7px;margin:20px 0}.upgrade-delivery li{padding:9px 0}.upgrade-delivery li p{font-size:14px;margin:4px 0 0}', consolidation};

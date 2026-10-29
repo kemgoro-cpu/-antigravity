@@ -2,11 +2,25 @@
   "products": 37,
   "proposals": 55,
   "implementationStatus": {
-    "complete": 4,
-    "partial": 2,
+    "complete": 5,
+    "partial": 1,
     "pending": 49,
-    "remaining": 51
+    "remaining": 50
   },
+  "consolidation": [
+    {
+      "order": 1,
+      "status": "complete"
+    },
+    {
+      "order": 2,
+      "status": "complete"
+    },
+    {
+      "order": 3,
+      "status": "complete"
+    }
+  ],
   "upgradeAudit": {
     "counts": {
       "replace": 8,
