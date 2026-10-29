@@ -115,4 +115,53 @@ testToNumber();
 testTimeUnitHelpers();
 testChannelNameHelpers();
 
+function testTrnSignedNumericRows() {
+    const text = 'Time  Actual Speed  Engine RPM\ns     km/h          rpm\n0.0  0.5  500\n0.1 -0.5  500\n0.2  0.5  500';
+    const rows = CSVUtils.convertWhitespaceToTabs(text).split('\n').map(line => line.split('\t'));
+    assert.deepEqual(rows[0], ['Time', 'Actual Speed', 'Engine RPM']);
+    assert.deepEqual(rows.slice(2).map(row => row.map(CSVUtils.toTrnNumber)), [
+        [0, 0.5, 500], [0.1, -0.5, 500], [0.2, 0.5, 500],
+    ]);
+    rows.slice(2).forEach(row => assert.equal(CSVUtils.validateTrnRow(row, 3, 0), ''));
+}
+
+function testTrnExplicitEmptyCells() {
+    for (const [text, expected] of [
+        ['0.1\t\t500', ['0.1', '', '500']],
+        ['\t-0.5\t500', ['', '-0.5', '500']],
+        ['0.1\t-0.5\t', ['0.1', '-0.5', '']],
+        ['0.1||500', ['0.1', '', '500']],
+        ['0.1|-0.5|', ['0.1', '-0.5', '']],
+        ['| 0.1 | | 500 |', ['0.1', '', '500']],
+    ]) {
+        assert.deepEqual(CSVUtils.convertWhitespaceToTabs(text).split('\t'), expected);
+    }
+    assert.equal(CSVUtils.validateTrnRow(['0.1', '', '500'], 3, 0), '');
+    assert.ok(Number.isNaN(CSVUtils.toTrnNumber('')));
+    assert.ok(CSVUtils.validateTrnRow(['', '-0.5', '500'], 3, 0));
+}
+
+function testTrnStrictNumbersAndInvalidRows() {
+    assert.equal(CSVUtils.toTrnNumber('-1e-3'), -0.001);
+    assert.equal(CSVUtils.toTrnNumber('-1E+3'), -1000);
+    assert.equal(CSVUtils.toTrnNumber('-1.25D+02'), -125);
+    assert.equal(CSVUtils.toTrnNumber('-1.25D-02'), -0.0125);
+    assert.ok(Object.is(CSVUtils.toTrnNumber('-0'), -0));
+    assert.equal(CSVUtils.toTrnNumber('TRUE'), 1);
+    assert.equal(CSVUtils.toTrnNumber('FALSE'), 0);
+    for (const value of ['0.1 -0.5', '12.5rpm', 'Infinity', '1e999', '\u22120.5']) {
+        assert.ok(Number.isNaN(CSVUtils.toTrnNumber(value)), value);
+    }
+    for (const row of [['0.1', '-0.5'], ['0.1', '-0.5', '500', '999'], ['0.1', 'bad', '500']]) {
+        assert.ok(CSVUtils.validateTrnRow(row, 3, 0));
+    }
+    assert.deepEqual(CSVUtils.convertWhitespaceToTabs('0.1 bad 500').split('\t'), ['0.1', 'bad', '500']);
+    assert.equal(CSVUtils.validateTrnRow(['0.1', 'NaN', '500'], 3, 0), '');
+    // CSV keeps its established conversion path; TRN strictness is opt-in.
+    assert.equal(CSVUtils.toNumber('12.5rpm'), 12.5);
+}
+
+testTrnSignedNumericRows();
+testTrnExplicitEmptyCells();
+testTrnStrictNumbersAndInvalidRows();
 console.log('parser-utils tests passed');

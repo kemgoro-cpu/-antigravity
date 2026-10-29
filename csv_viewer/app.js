@@ -2000,6 +2000,8 @@ const {
     scoreAliasCandidate,
     isTimeHeader,
     toNumber,
+    toTrnNumber,
+    validateTrnRow,
 } = window.CSVUtils;
 
 async function detectFileEncoding(file) {
@@ -2165,6 +2167,8 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
 
     const headers = raw[nameRow];
     const units   = unitRow >= 0 ? raw[unitRow] : Array(headers.length).fill('');
+    const isTrn = isTrnFile(fileName);
+    const readNumber = isTrn ? toTrnNumber : toNumber;
 
     let timeIdx = headers.findIndex(h => isTimeHeader(h));
     if (timeIdx < 0) {
@@ -2209,6 +2213,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
     // Phase 2: Stream-parse to extract ONLY time data (no column values yet)
     const timeChunks = [];
     let rowIdx = 0;
+    let trnDataIssue = '';
 
     console.log(`[CSV Viewer] Phase 2: streaming time data for ${fileName} (dataStart=${dataStart}, timeIdx=${timeIdx})`);
     updateParseJob(parseJob, '時間データを読み込み中...', 0);
@@ -2232,13 +2237,26 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                 if (rowIdx <= dataStart) return; // skip header rows
                 const row = result.data;
                 if (!row) return;
-                const t = toNumber(row[timeIdx]);
+                if (isTrn) {
+                    const issue = validateTrnRow(row, headers.length, timeIdx);
+                    if (issue) {
+                        trnDataIssue = `空行を除く ${rowIdx} 行目: ${issue}`;
+                        parser.abort();
+                        return;
+                    }
+                }
+                const t = readNumber(row[timeIdx]);
                 if (!isNaN(t)) {
                     timeChunks.push(t * timeScaleInfo.scale);
                 }
             },
             complete: async function() {
                 if (parseJob?.cancelled) return;
+                if (trnDataIssue) {
+                    finishParseJob(parseJob);
+                    showError(`TRNデータを読み取れません: ${fileName}`, trnDataIssue);
+                    return;
+                }
                 try {
                     console.log(`[CSV Viewer] Time data loaded: ${timeChunks.length} points for ${fileName}`);
                     finishParseJob(parseJob);
@@ -2273,6 +2291,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                             timeScaleSource: timeScaleInfo.source,
                             timeScaleUnit: timeScaleInfo.unit,
                             delimiter, encoding, encodingMode,
+                            isTrn, columnCount: headers.length,
                         },
                     };
                     _restoreOrderById.delete(fileId);
@@ -2386,7 +2405,8 @@ function loadColumnsForFile(fileId, colNames) {
         console.log(`[CSV Viewer] Loading columns [${colNamesStr}] from ${f.name}`);
         const loadJob = createParseJob(f.name, `Loading columns: ${colNamesStr}`);
 
-        const { dataStart, timeIdx, delimiter: delim, encoding } = f.headerInfo;
+        const { dataStart, timeIdx, delimiter: delim, encoding, isTrn, columnCount } = f.headerInfo;
+        const readNumber = isTrn ? toTrnNumber : toNumber;
 
         return new Promise(resolve => {
             try {
@@ -2394,6 +2414,7 @@ function loadColumnsForFile(fileId, colNames) {
                 for (const col of stillNeeded) tempArrs[col.id] = [];
 
                 let rowIdx = 0;
+                let trnDataIssue = '';
 
                 Papa.parse(f.file, {
                     delimiter: delim,
@@ -2414,14 +2435,28 @@ function loadColumnsForFile(fileId, colNames) {
                         if (rowIdx <= dataStart) return;
                         const row = result.data;
                         if (!row) return;
-                        const t = toNumber(row[timeIdx]);
+                        if (isTrn) {
+                            const issue = validateTrnRow(row, columnCount, timeIdx);
+                            if (issue) {
+                                trnDataIssue = `空行を除く ${rowIdx} 行目: ${issue}`;
+                                parser.abort();
+                                return;
+                            }
+                        }
+                        const t = readNumber(row[timeIdx]);
                         if (isNaN(t)) return;
                         for (const col of stillNeeded) {
-                            tempArrs[col.id].push(toNumber(row[col.idx]));
+                            tempArrs[col.id].push(readNumber(row[col.idx]));
                         }
                     },
                     complete: function() {
                         if (loadJob.cancelled) return;
+                        if (trnDataIssue) {
+                            finishParseJob(loadJob);
+                            showError(`TRNデータを読み取れません: ${f.name}`, trnDataIssue);
+                            resolve();
+                            return;
+                        }
                         try {
                             finishParseJob(loadJob);
                             for (const col of stillNeeded) {

@@ -1,16 +1,56 @@
 (function (root) {
     'use strict';
 
+    const TRN_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eEdD][+-]?\d+)?$/;
+
     function convertWhitespaceToTabs(text) {
-        // 区切りとして扱うのは「パイプ」「タブ」「連続2個以上の空白」。
-        // 単一スペースは区切りにしない（Vehicle Speed のようなスペース入り
-        // チャンネル名が2列に分割されて以降の全行がずれるのを防ぐ）。
-        // .trnの実フォーマットは列間が4個以上の空白なので、この規則で
-        // 既存サンプルのパース結果は変わらない。
-        return text.split('\n')
-            .map(line => line.replace(/\|/g, '\t').trim().replace(/\s{2,}|\t/g, '\t'))
-            .join('\n');
+        return text.split('\n').map(rawLine => {
+            let line = rawLine.replace(/\r$/, '');
+            // Remove a legacy pipe frame, while retaining internal empty cells.
+            const framed = /^ *\|/.test(line);
+            if (framed) line = line.replace(/^ *\|/, '').replace(/\| *$/, '');
+            if (line.includes('|')) return line.split('|').map(cell => cell.trim()).join('\t');
+            // A bare trailing delimiter and every tab-delimited empty cell count.
+            if (line.includes('\t')) return line.split('\t').map(cell => cell.trim()).join('\t');
+
+            line = line.trim();
+            if (!line) return '';
+            const first = line.split(/ +/, 1)[0];
+            const dataRow = TRN_NUMBER.test(first) || /^(?:TRUE|FALSE|NAN)$/i.test(first);
+            // Numeric rows may have only one space before a negative number.
+            // Headers retain single spaces in names such as "Actual Speed".
+            return line.split(dataRow ? / +/ : / {2,}/).map(cell => cell.trim()).join('\t');
+        }).join('\n');
     }
+
+    function toTrnNumber(value) {
+        if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+        if (typeof value !== 'string') return NaN;
+        const text = value.trim();
+        if (/^TRUE$/i.test(text)) return 1;
+        if (/^FALSE$/i.test(text)) return 0;
+        // Match the whole cell: parseFloat("0.1 -0.5") must not admit a row.
+        if (!TRN_NUMBER.test(text)) return NaN;
+        const number = Number(text.replace(/[dD]/, 'e'));
+        return Number.isFinite(number) ? number : NaN;
+    }
+
+    function validateTrnRow(row, expectedColumns, timeIdx) {
+        if (!Array.isArray(row) || row.length !== expectedColumns) {
+            return `列数が一致しません（期待 ${expectedColumns} 列、実際 ${row?.length ?? 0} 列）。区切り文字と空欄を確認してください。`;
+        }
+        if (!Number.isInteger(timeIdx) || timeIdx < 0 || timeIdx >= row.length || !Number.isFinite(toTrnNumber(row[timeIdx]))) {
+            return `時刻列（${timeIdx + 1} 列目）が空欄または不正な数値です。`;
+        }
+        for (let i = 0; i < row.length; i++) {
+            const cell = row[i];
+            // Explicit blanks and literal NaN are missing samples, not shifts.
+            if (typeof cell === 'string' && /^(?:NaN)?$/i.test(cell.trim())) continue;
+            if (!Number.isFinite(toTrnNumber(cell))) return `${i + 1} 列目を数値として読み取れません。`;
+        }
+        return '';
+    }
+
 
     function decodeBytes(bytes, encoding, fatal = false) {
         try {
@@ -218,6 +258,8 @@
         scoreAliasCandidate,
         scoreDecodedText,
         toNumber,
+        toTrnNumber,
+        validateTrnRow,
     };
 
     if (typeof module !== 'undefined' && module.exports) {
