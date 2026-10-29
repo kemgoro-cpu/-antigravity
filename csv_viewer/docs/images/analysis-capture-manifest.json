@@ -1,15 +1,15 @@
 {
   "revision": "2026-10-30",
-  "generatedAt": "2026-10-29T16:48:52.749Z",
+  "generatedAt": "2026-10-29T17:44:17.191Z",
   "source": "Real application screenshots, isolated Edge, synthetic bundled logs, no image editing.",
   "sampleHashes": [
     "8b9d170a15f3dd257ce75b488b97fe9721b7540da7e34576a2bd5a45428438e8",
     "a5ca99a4870b962f71cd4b2b147bee508c2a1a2d6f606b3cdcc2c9342afde5f4"
   ],
   "sourceHashes": {
-    "app.js": "0390e6ce13a9692ff7ae2cd7863d22a447d5be314c8f5b86d0df989c493cdac4",
+    "app.js": "79b850968cf32a245f2ed62df2618bb6a1184799250fddc726e1e68e81f1c6a1",
     "index.html": "46ce43f86c2eac59d98d2986f80f74d81fb26d2d4f6de411fe9f6531637c8e36",
-    "data-inspector.js": "c187f0537723ca23274ac7050913ca813b8a5f46d26fbf096ba9201080da3557",
+    "data-inspector.js": "b5c282988cd174bada351c798e6803dd70833a6734682bd5a9e7f908823a3956",
     "data-quality-utils.js": "3dd866f365276bb16a64ef4935980de1f4a76f3eb01f31fb6372dc13c2d7cf3a",
     "import-preview.js": "1cbd71a9c94e4b01446fbd8c852d26ed9c42347d4873027fd8606ff198e41730",
     "session-status.js": "db6fcbe4e485283f97fc3dafd6898a5443f587d64b7a96a84df02e02f98936a4"
