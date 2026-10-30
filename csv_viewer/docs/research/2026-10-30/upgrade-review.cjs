@@ -34,7 +34,7 @@ const inPlaceCount = counts.replace + counts.extend + counts.internal;
 const e = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const ranks = values => values.map(rank => `<a href="#idea-${rank}">${rank}位</a>`).join('・');
 const consolidatedCount = consolidation.items.filter(item => item.status === 'complete').length;
-const delivery = `<div class="upgrade-delivery"><h3>今回依頼された3つの整理：${consolidatedCount} / 3 完了</h3><p>下のチェックは入口・パネルの整理の実装状況です。55案すべての機能が実装済みという意味ではありません。</p><ul class="task-checklist">${consolidation.items.map(item => `<li data-consolidation="${item.order}" data-status="${item.status}"><input type="checkbox" class="progress-check" disabled${item.status === 'complete' ? ' checked' : ''} aria-label="${e(item.title)}：${item.status === 'complete' ? '完了' : '未完了'}"><div><strong>${item.order}. ${e(item.title)}</strong><p>${e(item.detail)}</p></div></li>`).join('')}</ul><p class="muted">更新：${e(consolidation.updatedDate)} · 実装コミット ${e(consolidation.implementationCommit)}。元の保存形式、計測値、原データは維持します。</p></div>`;
+const delivery = `<div class="upgrade-delivery"><h3>2026-10-30に実施した3つの整理：${consolidatedCount} / 3 完了</h3><p>下のチェックは入口・パネルの整理の実装状況です。55案すべての機能が実装済みという意味ではありません。</p><ul class="task-checklist">${consolidation.items.map(item => `<li data-consolidation="${item.order}" data-status="${item.status}"><input type="checkbox" class="progress-check" disabled${item.status === 'complete' ? ' checked' : ''} aria-label="${e(item.title)}：${item.status === 'complete' ? '完了' : '未完了'}"><div><strong>${item.order}. ${e(item.title)}</strong><p>${e(item.detail)}</p></div></li>`).join('')}</ul><p class="muted">更新：${e(consolidation.updatedDate)} · 実装コミット ${e(consolidation.implementationCommit)}。元の保存形式、計測値、原データは維持します。</p></div>`;
 const detail = rank => {
  const item = byRank.get(rank);
  const refs = item.evidence.map(ref => `<a href="https://github.com/kemgoro-cpu/-antigravity/blob/${auditedRevision}/${e(ref.path)}#L${ref.line}" target="_blank" rel="noopener noreferrer">${e(ref.path.replace('csv_viewer/', ''))}:${ref.line}</a>`).join(' / ');
@@ -78,7 +78,7 @@ const summary = `<section id="upgrade-review" class="upgrade-summary">
  <div class="eyebrow">2026-10-30 · 既存機能との照合 · 依頼された整理 ${consolidatedCount} / 3 完了</div>
  <h2>機能追加の前に、既存画面をアップグレードする</h2>
  <p class="lead">55案中${inPlaceCount}案は、既存の操作・画面・内部処理に組み込む方針です。</p>
- <p>全55案を実装コードと照合し、別の入口や画面を足す前に現在の操作を置き換えられるかで判断しました。依頼された3つの整理は下のチェックへ反映しています。<strong>55案の導入方針と、そのすべての実装完了は別です。</strong>元の順位は維持します。</p>
+ <p>全55案を実装コードと照合し、別の入口や画面を足す前に現在の操作を置き換えられるかで判断しました。依頼された3つの整理は下のチェックへ反映しています。<strong>55案の導入方針と、そのすべての実装完了は別です。</strong>旧55案の番号は参照用として維持します。</p>
  ${delivery}
  <div class="upgrade-counts">${Object.keys(labels).map(mode => `<button data-upgrade-view="${mode}" class="mode-${mode}"><b>${counts[mode]}案</b><span>${labels[mode]}</span><small>${descriptions[mode]}</small></button>`).join('')}</div>
  <p class="muted">「置換・統合」は旧UIや手順を整理する案。「既存画面の拡張」は選択肢が増えるため、必要時だけ開く配置にします。件数は55案の分類で、削除できるボタン数や実装済み件数ではありません。</p>

@@ -1,6 +1,46 @@
 {
   "products": 37,
   "proposals": 55,
+  "enginePriorities": {
+    "updatedDate": "2026-10-31",
+    "count": 10,
+    "oldRanks": [
+      [
+        22
+      ],
+      [
+        14
+      ],
+      [
+        10
+      ],
+      [
+        6
+      ],
+      [
+        7
+      ],
+      [
+        24,
+        13
+      ],
+      [
+        17
+      ],
+      [
+        18
+      ],
+      [
+        35
+      ],
+      [
+        12
+      ]
+    ],
+    "status": "proposal",
+    "expansionAndPrint": "passed",
+    "uniqueAnchors": true
+  },
   "implementationStatus": {
     "complete": 5,
     "partial": 1,
@@ -33,7 +73,7 @@
     "coverage": 55,
     "filters": "passed"
   },
-  "defaultView": "remaining",
+  "defaultView": "engine-priorities, historical remaining list",
   "filters": "passed",
   "images": "loaded",
   "internalLinks": "valid",

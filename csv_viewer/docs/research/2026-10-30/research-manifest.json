@@ -1,5 +1,91 @@
 {
   "date": "2026-10-30",
+  "enginePriorities": {
+    "updatedDate": "2026-10-31",
+    "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
+    "status": "proposal",
+    "items": [
+      {
+        "rank": 1,
+        "oldRanks": [
+          22
+        ],
+        "title": "欠測・補間・計算の扱いを統一"
+      },
+      {
+        "rank": 2,
+        "oldRanks": [
+          14
+        ],
+        "title": "運転条件で絞り込み、全解析へ適用"
+      },
+      {
+        "rank": 3,
+        "oldRanks": [
+          10
+        ],
+        "title": "イベントに継続時間・解除条件を追加"
+      },
+      {
+        "rank": 4,
+        "oldRanks": [
+          6
+        ],
+        "title": "単位の確認・換算"
+      },
+      {
+        "rank": 5,
+        "oldRanks": [
+          7
+        ],
+        "title": "制御状態の帯表示"
+      },
+      {
+        "rank": 6,
+        "oldRanks": [
+          24,
+          13
+        ],
+        "title": "XYの色分けと元波形への移動"
+      },
+      {
+        "rank": 7,
+        "oldRanks": [
+          17
+        ],
+        "title": "繰り返しイベントを同じ起点で比較"
+      },
+      {
+        "rank": 8,
+        "oldRanks": [
+          18
+        ],
+        "title": "時間合わせの根拠・曖昧さを表示"
+      },
+      {
+        "rank": 9,
+        "oldRanks": [
+          35
+        ],
+        "title": "短いピークを残す表示"
+      },
+      {
+        "rank": 10,
+        "oldRanks": [
+          12
+        ],
+        "title": "信号の分類・説明を整理"
+      }
+    ],
+    "sourceUrls": [
+      "https://docs.etas.com/mda/docs/V8.8/EN/Content/Topics/4_AnalysisPreparation/MDA_TASK_UsingEventList.htm",
+      "https://docs.foxglove.dev/docs/visualization/panels/plot",
+      "https://manual.dewesoft.com/x/setupmodule/modules/general/storing/triggersetup",
+      "https://orangedatamining.com/widget-catalog/visualize/scatterplot/",
+      "https://www.asam.net/standards/detail/mdf/wiki/",
+      "https://www.vector.com/en/product/vsignalyzer/"
+    ]
+  },
   "consolidation": {
     "updatedDate": "2026-10-30",
     "implementationCommit": "1f969745c55d61acf986f2d0ac5e4e2d086f394a",

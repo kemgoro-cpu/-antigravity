@@ -5,6 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const upgrade = require('./upgrade-review.cjs');
+const engine = require('./engine-priorities.cjs');
 const progress = require('./implementation-status.json');
 const proposals = require('./recommendations.cjs');
 const statusOf = item => progress.items.find(p=>p.originalRank===item.originalRank)?.status || progress.defaultStatus;
@@ -21,6 +22,27 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   page.on('request',req=>{if(/^https?:/.test(req.url()))network.push(req.url());});
   await page.goto(pathToFileURL(path.join(__dirname,'report.html')).href);
   assert.equal(await page.locator('.candidate').count(),55);
+  assert.deepEqual(await page.locator('.engine-priority').evaluateAll(cards=>cards.map(card=>Number(card.dataset.engineRank))),[1,2,3,4,5,6,7,8,9,10]);
+  assert.deepEqual(await page.locator('.engine-priority').evaluateAll(cards=>cards.map(card=>card.dataset.oldRanks)),['22','14','10','6','7','24,13','17','18','35','12']);
+  assert.deepEqual(await page.locator('[id]').evaluateAll(elements=>{
+   const ids=elements.map(el=>el.id);return ids.filter((id,index)=>ids.indexOf(id)!==index);
+  }),[],'all current and historical anchors remain unique');
+  assert.equal(await page.locator('.engine-link').count(),11,'new rank 6 combines two historical proposals');
+  assert.match(await page.locator('#engine-1 .engine-current').innerText(),/空欄・NaN/);
+  assert.match(await page.locator('#engine-1 .engine-current').innerText(),/4秒の次が10秒/);
+  assert.match(await page.locator('#engine-4 .engine-plan-state').innerText(),/単位検証の基本部分は実装済み/);
+  assert.equal(await page.locator('.engine-gap-figure svg[role="img"][aria-label]').count(),3);
+  await page.locator('#engine-expand').click();
+  assert.equal(await page.locator('.engine-checks[open]').count(),10);
+  await page.locator('#engine-collapse').click();
+  assert.equal(await page.locator('.engine-checks[open]').count(),0);
+  await page.locator('#engine-4 summary').click();
+  const beforePrint=await page.locator('.engine-checks').evaluateAll(items=>items.map(el=>el.open));
+  await page.evaluate(()=>window.dispatchEvent(new Event('beforeprint')));
+  assert.equal(await page.locator('.engine-checks[open]').count(),10,'printing includes future verification and sources');
+  await page.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
+  assert.deepEqual(await page.locator('.engine-checks').evaluateAll(items=>items.map(el=>el.open)),beforePrint,'printing restores reader expansion state');
+  await page.locator('#engine-collapse').click();
   assert.equal(await page.locator('table.products tbody tr').count(),37);
   assert.equal(await page.locator('img').evaluateAll(imgs=>imgs.filter(i=>!i.complete||!i.naturalWidth).length),0);
   assert.deepEqual(await page.locator('a[href^="#"]').evaluateAll(as=>as.filter(a=>!document.getElementById(a.hash.slice(1))).map(a=>a.hash)),[]);
@@ -32,6 +54,9 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'research-manifest.json'),'utf8'));
   assert.equal(exported.filter(item=>item.upgrade).length,55);
   assert.deepEqual(manifest.upgradeAudit.counts,upgrade.counts);
+  assert.equal(manifest.enginePriorities.reviewedRevision,engine.reviewedRevision);
+  assert.equal(manifest.enginePriorities.items.length,10);
+  assert.equal(exported.filter(item=>item.enginePriority).length,11);
   assert.equal(await page.locator('.upgrade-detail').count(),55);
   assert.equal(await page.locator('.upgrade-bundle').count(),6);
   for(const [mode,count] of Object.entries(upgrade.counts)){
@@ -85,6 +110,10 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
    assert.ok(sizes.root<=width+1,JSON.stringify(sizes));
    records.push(sizes);
    await page.screenshot({path:path.join(__dirname,`screenshots/report-${width}.png`)});
+   for(const rank of [1,6]){
+    await page.locator('#engine-'+rank).evaluate(el=>el.scrollIntoView({block:'start'}));
+    if(width!==900) await page.screenshot({path:path.join(__dirname,`screenshots/report-engine-${rank}-${width}.png`)});
+   }
   }
   await page.setViewportSize({width:1440,height:1080});
   await page.locator('#upgrade-review').evaluate(el=>el.scrollIntoView({block:'start'}));
@@ -101,7 +130,11 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   await page.evaluate(()=>location.hash='idea-2');
   await page.waitForFunction(()=>!document.getElementById('idea-2').hidden);
   assert.equal(await page.locator('#upgrade').inputValue(),'');
-  const result={products:37,proposals:55,implementationStatus:{...statusCounts,remaining},consolidation:upgrade.consolidation.items.map(item=>({order:item.order,status:item.status})),upgradeAudit:{counts:upgrade.counts,inPlaceCount:upgrade.inPlaceCount,coverage:55,filters:'passed'},defaultView:'remaining',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
+  await page.locator('#status').selectOption('remaining');
+  await page.goto(pathToFileURL(path.join(__dirname,'report.html')).href+'#engine-6');
+  assert.equal(await page.locator('#engine-6').isVisible(),true);
+  assert.equal(await page.locator('#status').inputValue(),'remaining','new ranking links do not change historical filters');
+  const result={products:37,proposals:55,enginePriorities:{updatedDate:engine.reviewedDate,count:10,oldRanks:engine.items.map(item=>item.oldRanks),status:'proposal',expansionAndPrint:'passed',uniqueAnchors:true},implementationStatus:{...statusCounts,remaining},consolidation:upgrade.consolidation.items.map(item=>({order:item.order,status:item.status})),upgradeAudit:{counts:upgrade.counts,inPlaceCount:upgrade.inPlaceCount,coverage:55,filters:'passed'},defaultView:'engine-priorities, historical remaining list',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
   fs.writeFileSync(path.join(__dirname,'report-validation.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));
  }finally{await browser.close();}
