@@ -32,16 +32,31 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   assert.match(await page.locator('#engine-1 .engine-current').innerText(),/4秒の次が10秒/);
   assert.match(await page.locator('#engine-4 .engine-plan-state').innerText(),/単位検証の基本部分は実装済み/);
   assert.equal(await page.locator('.engine-gap-figure svg[role="img"][aria-label]').count(),3);
+  assert.equal(await page.locator('.engine-runtime-detail').count(),10);
+  assert.equal(await page.locator('.runtime-table tbody tr').count(),10);
+  assert.match(await page.locator('.runtime-assumption').innerText(),/実測値ではありません/);
+  assert.match(await page.locator('.runtime-overview').innerText(),/開発・検証の手間/);
+  const runtimeRanks=()=>page.locator('.runtime-table tbody tr').evaluateAll(rows=>rows.map(row=>Number(row.dataset.runtimeRank)));
+  await page.locator('#engine-load-sort').selectOption('load');
+  assert.deepEqual(await runtimeRanks(),[10,1,3,4,5,9,2,6,7,8]);
+  await page.locator('#engine-load-sort').selectOption('memory');
+  assert.deepEqual(await runtimeRanks(),[10,1,3,4,5,8,2,6,7,9]);
+  assert.deepEqual(await page.locator('.engine-priority').evaluateAll(cards=>cards.map(card=>Number(card.dataset.engineRank))),[1,2,3,4,5,6,7,8,9,10],'load sorting must not change editorial priorities');
+  await page.locator('#engine-load-sort').selectOption('rank');
+  assert.deepEqual(await runtimeRanks(),[1,2,3,4,5,6,7,8,9,10]);
   await page.locator('#engine-expand').click();
   assert.equal(await page.locator('.engine-checks[open]').count(),10);
+  assert.equal(await page.locator('.runtime-measure-plan').evaluate(el=>el.open),true);
   await page.locator('#engine-collapse').click();
   assert.equal(await page.locator('.engine-checks[open]').count(),0);
   await page.locator('#engine-4 summary').click();
   const beforePrint=await page.locator('.engine-checks').evaluateAll(items=>items.map(el=>el.open));
   await page.evaluate(()=>window.dispatchEvent(new Event('beforeprint')));
   assert.equal(await page.locator('.engine-checks[open]').count(),10,'printing includes future verification and sources');
+  assert.equal(await page.locator('.runtime-measure-plan').evaluate(el=>el.open),true);
   await page.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
   assert.deepEqual(await page.locator('.engine-checks').evaluateAll(items=>items.map(el=>el.open)),beforePrint,'printing restores reader expansion state');
+  assert.equal(await page.locator('.runtime-measure-plan').evaluate(el=>el.open),false);
   await page.locator('#engine-collapse').click();
   assert.equal(await page.locator('table.products tbody tr').count(),37);
   assert.equal(await page.locator('img').evaluateAll(imgs=>imgs.filter(i=>!i.complete||!i.naturalWidth).length),0);
@@ -56,6 +71,8 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   assert.deepEqual(manifest.upgradeAudit.counts,upgrade.counts);
   assert.equal(manifest.enginePriorities.reviewedRevision,engine.reviewedRevision);
   assert.equal(manifest.enginePriorities.items.length,10);
+  assert.equal(manifest.enginePriorities.runtimeAssessment.measured,false);
+  assert.equal(manifest.enginePriorities.items.every(item=>item.runtime.compute&&item.runtime.interaction&&item.runtime.memory),true);
   assert.equal(exported.filter(item=>item.enginePriority).length,11);
   assert.equal(await page.locator('.upgrade-detail').count(),55);
   assert.equal(await page.locator('.upgrade-bundle').count(),6);
@@ -114,6 +131,17 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
     await page.locator('#engine-'+rank).evaluate(el=>el.scrollIntoView({block:'start'}));
     if(width!==900) await page.screenshot({path:path.join(__dirname,`screenshots/report-engine-${rank}-${width}.png`)});
    }
+   await page.locator('#engine-load').evaluate(el=>el.scrollIntoView({block:'start'}));
+   if(width!==900) await page.screenshot({path:path.join(__dirname,`screenshots/report-load-${width}.png`)});
+   const table=page.locator('.runtime-table-wrap');
+   if(width===390){
+    assert.ok(await table.evaluate(el=>el.scrollWidth>el.clientWidth),'comparison scrolls inside its container on narrow screens');
+    await table.evaluate(el=>el.scrollLeft=el.scrollWidth);
+    assert.ok(await table.evaluate(el=>el.scrollLeft>0));
+    await table.evaluate(el=>el.scrollLeft=0);
+    await page.locator('#engine-load-2').screenshot({path:path.join(__dirname,'screenshots/report-load-detail-390.png')});
+   }
+   if(width===1440) await table.screenshot({path:path.join(__dirname,'screenshots/report-load-table-1440.png')});
   }
   await page.setViewportSize({width:1440,height:1080});
   await page.locator('#upgrade-review').evaluate(el=>el.scrollIntoView({block:'start'}));
@@ -134,7 +162,7 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   await page.goto(pathToFileURL(path.join(__dirname,'report.html')).href+'#engine-6');
   assert.equal(await page.locator('#engine-6').isVisible(),true);
   assert.equal(await page.locator('#status').inputValue(),'remaining','new ranking links do not change historical filters');
-  const result={products:37,proposals:55,enginePriorities:{updatedDate:engine.reviewedDate,count:10,oldRanks:engine.items.map(item=>item.oldRanks),status:'proposal',expansionAndPrint:'passed',uniqueAnchors:true},implementationStatus:{...statusCounts,remaining},consolidation:upgrade.consolidation.items.map(item=>({order:item.order,status:item.status})),upgradeAudit:{counts:upgrade.counts,inPlaceCount:upgrade.inPlaceCount,coverage:55,filters:'passed'},defaultView:'engine-priorities, historical remaining list',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
+  const result={products:37,proposals:55,enginePriorities:{updatedDate:engine.reviewedDate,count:10,oldRanks:engine.items.map(item=>item.oldRanks),status:'proposal',runtimeAssessment:{...engine.runtimeAssessment,sorting:'passed',narrowTableScroll:'passed'},expansionAndPrint:'passed',uniqueAnchors:true},implementationStatus:{...statusCounts,remaining},consolidation:upgrade.consolidation.items.map(item=>({order:item.order,status:item.status})),upgradeAudit:{counts:upgrade.counts,inPlaceCount:upgrade.inPlaceCount,coverage:55,filters:'passed'},defaultView:'engine-priorities, historical remaining list',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
   fs.writeFileSync(path.join(__dirname,'report-validation.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));
  }finally{await browser.close();}

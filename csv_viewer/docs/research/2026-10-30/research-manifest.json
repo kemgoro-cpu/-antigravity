@@ -4,41 +4,78 @@
     "updatedDate": "2026-10-31",
     "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
     "status": "proposal",
+    "runtimeAssessment": {
+      "updatedDate": "2026-10-31",
+      "basis": "qualitative code review",
+      "measured": false,
+      "scope": "incremental runtime load",
+      "rankingChanged": false
+    },
     "items": [
       {
         "rank": 1,
         "oldRanks": [
           22
         ],
-        "title": "欠測・補間・計算の扱いを統一"
+        "title": "欠測・補間・計算の扱いを統一",
+        "runtime": {
+          "overall": "小〜中",
+          "compute": "小〜中",
+          "interaction": "小",
+          "memory": "小〜中"
+        }
       },
       {
         "rank": 2,
         "oldRanks": [
           14
         ],
-        "title": "運転条件で絞り込み、全解析へ適用"
+        "title": "運転条件で絞り込み、全解析へ適用",
+        "runtime": {
+          "overall": "中〜大",
+          "compute": "中〜大",
+          "interaction": "中",
+          "memory": "中"
+        }
       },
       {
         "rank": 3,
         "oldRanks": [
           10
         ],
-        "title": "イベントに継続時間・解除条件を追加"
+        "title": "イベントに継続時間・解除条件を追加",
+        "runtime": {
+          "overall": "小〜中",
+          "compute": "小〜中",
+          "interaction": "小",
+          "memory": "小〜中"
+        }
       },
       {
         "rank": 4,
         "oldRanks": [
           6
         ],
-        "title": "単位の確認・換算"
+        "title": "単位の確認・換算",
+        "runtime": {
+          "overall": "小〜中",
+          "compute": "小",
+          "interaction": "小",
+          "memory": "小〜中"
+        }
       },
       {
         "rank": 5,
         "oldRanks": [
           7
         ],
-        "title": "制御状態の帯表示"
+        "title": "制御状態の帯表示",
+        "runtime": {
+          "overall": "中",
+          "compute": "小〜中",
+          "interaction": "小〜中",
+          "memory": "小〜中"
+        }
       },
       {
         "rank": 6,
@@ -46,35 +83,65 @@
           24,
           13
         ],
-        "title": "XYの色分けと元波形への移動"
+        "title": "XYの色分けと元波形への移動",
+        "runtime": {
+          "overall": "中〜大",
+          "compute": "中",
+          "interaction": "中〜大",
+          "memory": "中"
+        }
       },
       {
         "rank": 7,
         "oldRanks": [
           17
         ],
-        "title": "繰り返しイベントを同じ起点で比較"
+        "title": "繰り返しイベントを同じ起点で比較",
+        "runtime": {
+          "overall": "中〜大",
+          "compute": "中〜大",
+          "interaction": "中",
+          "memory": "中"
+        }
       },
       {
         "rank": 8,
         "oldRanks": [
           18
         ],
-        "title": "時間合わせの根拠・曖昧さを表示"
+        "title": "時間合わせの根拠・曖昧さを表示",
+        "runtime": {
+          "overall": "中〜大",
+          "compute": "大",
+          "interaction": "小〜中",
+          "memory": "小〜中"
+        }
       },
       {
         "rank": 9,
         "oldRanks": [
           35
         ],
-        "title": "短いピークを残す表示"
+        "title": "短いピークを残す表示",
+        "runtime": {
+          "overall": "中",
+          "compute": "中",
+          "interaction": "小",
+          "memory": "中"
+        }
       },
       {
         "rank": 10,
         "oldRanks": [
           12
         ],
-        "title": "信号の分類・説明を整理"
+        "title": "信号の分類・説明を整理",
+        "runtime": {
+          "overall": "小",
+          "compute": "小",
+          "interaction": "小",
+          "memory": "小"
+        }
       }
     ],
     "sourceUrls": [
