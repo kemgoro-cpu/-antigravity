@@ -3126,7 +3126,7 @@ function updateUI() {
     if (dom.diffBtn) dom.diffBtn.disabled = !hasSub;
     if (!hasSub && state.shiftMode) exitShiftMode();
 
-    const canArrange = state.chartGroups.length > 1;
+    const canArrange = canArrangeCharts();
     if (dom.arrangeBtn) dom.arrangeBtn.disabled = !canArrange;
     if (!canArrange && state.arrangeMode) exitArrangeMode();
 
@@ -6149,7 +6149,9 @@ function renderChart() {
 
     if (n === 0) {
         state.chart.clear();
+        state.gridRegions = [];
         removeArrangeOverlay();
+        if (state.arrangeMode) exitArrangeMode(false);
         dom.overlay.classList.remove('hidden');
         dom.resetBtn.disabled = true;
         dom.exportPng.disabled = true;
@@ -6460,6 +6462,7 @@ function renderChart() {
         const region = {
             name: group.mergedNames[0],
             groupId,
+            sourceGroupId: group.sourceGroupId ?? groupId,
             top:    _regionTop,
             height: h,
             axisAreaWidth: groupLayouts[i].left,
@@ -6478,46 +6481,85 @@ function removeArrangeOverlay() {
     document.getElementById('chart-arrange-overlay')?.remove();
 }
 
+// Stacked views expand one stored group into several file rows. Keep those rows
+// together, including their internal gaps, and retain the original identity.
+function getArrangeRegions() {
+    const sourceIds = new Set(state.chartGroups.map(group => group.id));
+    const regions = new Map();
+    for (const row of state.gridRegions) {
+        const sourceGroupId = row.sourceGroupId ?? row.groupId;
+        if (!sourceIds.has(sourceGroupId)) continue;
+        const region = regions.get(sourceGroupId);
+        if (region) {
+            region.height = row.top + row.height - region.top;
+            region.rows++;
+        } else {
+            regions.set(sourceGroupId, { sourceGroupId, top: row.top, height: row.height, label: row.label, rows: 1 });
+        }
+    }
+    return [...regions.values()];
+}
+
+function canArrangeCharts() {
+    return (state.comparison.view === 'overlay' || state.comparison.view === 'stack') && getArrangeRegions().length > 1;
+}
+
 function updateArrangeOverlay() {
     removeArrangeOverlay();
-    if (state.comparison.view !== 'overlay') return;
-    if (!state.arrangeMode || state.gridRegions.length < 2) return;
+    const canArrange = canArrangeCharts();
+    if (dom.arrangeBtn) dom.arrangeBtn.disabled = !canArrange;
+    if (!canArrange) {
+        if (state.arrangeMode) exitArrangeMode();
+        return;
+    }
+    if (!state.arrangeMode) return;
 
     const overlay = document.createElement('div');
     overlay.id = 'chart-arrange-overlay';
     overlay.className = 'chart-arrange-overlay';
-    let dragIndex = -1;
-    let dropIndex = -1;
+    let draggedGroupId = null;
 
-    state.gridRegions.forEach((region, index) => {
+    getArrangeRegions().forEach(region => {
         const panel = document.createElement('div');
         panel.className = 'chart-arrange-panel';
+        panel.dataset.sourceGroupId = region.sourceGroupId;
+        panel.dataset.rowCount = String(region.rows);
         panel.draggable = true;
         panel.style.top = `${region.top}px`;
         panel.style.height = `${region.height}px`;
-        panel.innerHTML = `<div class="chart-arrange-handle"><i class='bx bx-menu'></i><span>${esc(region.label)}</span></div>`;
+        const label = region.label + (region.rows > 1 ? `（${region.rows}段）` : '');
+        panel.innerHTML = `<div class="chart-arrange-handle"><i class='bx bx-menu'></i><span>${esc(label)}</span></div>`;
         panel.addEventListener('dragstart', e => {
-            dragIndex = index;
+            draggedGroupId = region.sourceGroupId;
             panel.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', String(index));
+            e.dataTransfer.setData('text/plain', draggedGroupId);
         });
         panel.addEventListener('dragend', () => {
+            draggedGroupId = null;
             panel.classList.remove('dragging');
             overlay.querySelectorAll('.drop-before,.drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
         });
         panel.addEventListener('dragover', e => {
+            if (draggedGroupId === null) return;
             e.preventDefault();
             const rect = panel.getBoundingClientRect();
             const after = e.clientY > rect.top + rect.height / 2;
-            dropIndex = index + (after ? 1 : 0);
             overlay.querySelectorAll('.drop-before,.drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
             panel.classList.add(after ? 'drop-after' : 'drop-before');
         });
         panel.addEventListener('drop', e => {
+            if (draggedGroupId === null || !overlay.isConnected || !state.arrangeMode || !canArrangeCharts()) return;
             e.preventDefault();
-            if (dragIndex >= 0 && dropIndex >= 0) {
-                moveChartGroup(dragIndex, dropIndex);
+            // Resolve IDs at drop time; visible row indexes may omit groups or
+            // include several rows for the same source group.
+            const from = state.chartGroups.findIndex(group => group.id === draggedGroupId);
+            const target = state.chartGroups.findIndex(group => group.id === region.sourceGroupId);
+            draggedGroupId = null;
+            if (from >= 0 && target >= 0 && from !== target) {
+                const rect = panel.getBoundingClientRect();
+                const after = e.clientY > rect.top + rect.height / 2;
+                moveChartGroup(from, target + (after ? 1 : 0));
                 renderChart();
                 saveSettings();
             }
@@ -7509,24 +7551,26 @@ function toggleArrangeMode() {
 }
 
 function enterArrangeMode() {
-    if (state.chartGroups.length < 2) return;
+    if (!canArrangeCharts()) return;
     if (state.brushMode) exitBoxZoom();
     if (state.shiftMode) exitShiftMode();
     if (state.measureMode) exitMeasureMode();
     state.arrangeMode = true;
     dom.arrangeBtn.classList.add('btn-active');
     dom.arrangeBtn.innerHTML = `<i class='bx bx-x'></i> <span class="btn-label">並べ替え終了</span>`;
-    dom.hintEl.textContent = 'チャートパネルを上下にドラッグして並べ替え';
+    dom.hintEl.textContent = state.comparison.view === 'stack'
+        ? '同じチャートの各ファイルの段をまとめて上下にドラッグ'
+        : 'チャートパネルを上下にドラッグして並べ替え';
     renderChart();
 }
 
-function exitArrangeMode() {
+function exitArrangeMode(redraw = true) {
     state.arrangeMode = false;
     dom.arrangeBtn.classList.remove('btn-active');
     dom.arrangeBtn.innerHTML = `<i class='bx bx-sort-alt-2'></i> <span class="btn-label">並べ替え</span>`;
     dom.hintEl.textContent = '';
     removeArrangeOverlay();
-    renderChart();
+    if (redraw) renderChart();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -9265,6 +9309,7 @@ comparisonWorkspace = CSVWorkspace({
     startBrush: enterBoxZoom,
     exitBrush: exitBoxZoom,
     exitArrange: exitArrangeMode,
+    canArrange: canArrangeCharts,
     clearMeasure: () => exitMeasureMode(),
     stats: () => dataInspector?.setOpen('stats'),
     analysisChanged: () => { updateStatsPanel(); dataInspector?.schedule(); },

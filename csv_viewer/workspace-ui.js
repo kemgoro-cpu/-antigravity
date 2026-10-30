@@ -151,9 +151,12 @@
 
         // Native details stay usable by keyboard, and action focus returns to their trigger.
         const tools = document.querySelector('.compare-tools');
-        tools.addEventListener('click', e => { if (e.target.closest('button') && !$('app-modal-overlay')) tools.querySelector('summary').focus(); });
+        // Focus the visible trigger before an action can open a modal, so the
+        // modal restores focus here rather than to a button in closed details.
+        tools.addEventListener('click', e => { if (e.target.closest('button') && !$('app-modal-overlay')) tools.querySelector('summary').focus(); }, true);
         tools.addEventListener('keydown', e => {
-            if (e.key === 'Escape') { tools.open = false; tools.querySelector('summary').focus(); e.preventDefault(); e.stopPropagation(); }
+            // Once closed, let Escape reach the active chart mode's handler.
+            if (e.key === 'Escape' && tools.open) { tools.open = false; tools.querySelector('summary').focus(); e.preventDefault(); e.stopPropagation(); }
         });
 
         function sync() {

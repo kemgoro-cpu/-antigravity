@@ -578,7 +578,7 @@
                 const group = active.groups.get(id);
                 if (setting().view === 'stack') {
                     const files = [...new Set(group.series.map(x => x.fileId))];
-                    for (const fid of files) { const key = `${id}::${fid}`; order.push(key); groups.set(key, { ...group, id: key, caption: label(s.files[fid]), series: group.series.filter(x => x.fileId === fid) }); }
+                    for (const fid of files) { const key = `${id}::${fid}`; order.push(key); groups.set(key, { ...group, id: key, sourceGroupId: id, caption: label(s.files[fid]), series: group.series.filter(x => x.fileId === fid) }); }
                 } else {
                     const series = [];
                     for (const name of group.mergedNames) {
@@ -638,7 +638,7 @@
                 $('compare-view-hint').textContent = setting().view === 'diff' ? '基準 − 比較 / 単位一致のみ / Y軸自動' : rawTime ? '元の時刻（時刻合わせを使う計算線は非表示）' : '時間軸はすべて連動';
                 main.classList.toggle('compare-view-diff', setting().view === 'diff');
                 document.querySelector('.sidebar').classList.toggle('compare-view-diff', setting().view === 'diff');
-                $('arrange-mode-btn').disabled = setting().view !== 'overlay' || !s.selectedNames.size;
+                $('arrange-mode-btn').disabled = !api.canArrange();
                 if (s.measure.tA !== null && s.measure.tB !== null) { const r = [s.measure.tA, s.measure.tB].sort((a, b) => a - b); if (!selection || r[0] !== selection[0] || r[1] !== selection[1]) selectRange(r); }
                 drawOverview();
                 syncAnalysisContext();
