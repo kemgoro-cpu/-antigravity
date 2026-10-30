@@ -125,6 +125,38 @@ function testTrnSignedNumericRows() {
     rows.slice(2).forEach(row => assert.equal(CSVUtils.validateTrnRow(row, 3, 0), ''));
 }
 
+function testAlignedTrnHeaders() {
+    const names = [' Time', 'Actual Speed', 'Engine RPM', 'Long_Channel_15', 'Next Sensor', 'Flag'];
+    const units = [' sec', 'km/h', 'rpm', 'No Unit', 'N-m', 'No Unit'];
+    // Exporter fields are 16 characters, including the last field's padding.
+    // The final padding character is omitted; no actual data is embedded here.
+    const fixed = cells => cells.map(cell => cell.padEnd(16)).join('').slice(0, -1);
+    const lines = ['| CASE #     1', '|' + fixed(names), '|' + fixed(units),
+        fixed([' 0.0', '0.5', '500', '-1.25D-02', '10', 'TRUE']),
+        fixed([' 0.1', '-0.5', '500', '2', '20', 'FALSE'])];
+    // A name exactly 15 characters long leaves only ONE separating space.
+    assert.equal(names[3].length, 15);
+    const rows = CSVUtils.convertWhitespaceToTabs(lines.join('\r\n')).split('\n').map(line => line.split('\t'));
+    assert.deepEqual(rows[1], names.map(name => name.trim()));
+    assert.deepEqual(rows[2], units.map(unit => unit.trim()));
+    assert.equal(rows[1].length, rows[3].length);
+    assert.equal(rows[1][4], 'Next Sensor');
+    assert.equal(CSVUtils.validateTrnRow(rows[4], 6, 0), '');
+    assert.equal(CSVUtils.toTrnNumber(rows[4][1]), -0.5);
+
+    for (const [index, change] of [
+        [2, line => line.slice(0, 17) + ' ' + line.slice(18)], // shifted units
+        [1, line => line.slice(0, 16) + 'X' + line.slice(17)], // word crosses boundary
+        [3, line => line.slice(0, 31) + '9' + line.slice(32)], // numeric token crosses a boundary
+    ]) {
+        const altered = lines.map((line, i) => i === index ? change(line) : line);
+        const converted = CSVUtils.convertWhitespaceToTabs(altered.join('\n')).split('\n');
+        assert.notEqual(converted[1].split('\t').length, 6, 'ambiguous alignment must use legacy parsing');
+    }
+}
+
+testAlignedTrnHeaders();
+
 function testTrnExplicitEmptyCells() {
     for (const [text, expected] of [
         ['0.1\t\t500', ['0.1', '', '500']],

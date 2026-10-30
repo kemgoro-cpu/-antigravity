@@ -76,6 +76,31 @@ const header = 'Time  Actual Speed  Engine RPM\ns     km/h          rpm\n';
     assert.ok(Math.abs(exponent.file.colData.f_c1[0] + 0.0125) < 1e-8);
     assert.equal(exponent.file.colData.f_c1[1], -125);
 
+    const names = [' Time', 'Actual Speed', 'Engine RPM', 'Long_Channel_15', 'Next Sensor', 'Flag'];
+    const units = [' sec', 'km/h', 'rpm', 'No Unit', 'N-m', 'No Unit'];
+    const fixed = cells => cells.map(cell => cell.padEnd(16)).join('').slice(0, -1);
+    const alignedHeader = '| CASE #     1\n|' + fixed(names) + '\n|' + fixed(units) + '\n';
+    const alignedData = [fixed([' 0.0', '0.5', '500', '-1.25D-02', '10', 'TRUE']),
+        fixed([' 0.1', '-0.5', '500', '2', '20', 'FALSE']),
+        fixed([' 0.2', '0.5', '500', '3', '30', 'TRUE'])];
+    const aligned = await load(alignedHeader + alignedData.join('\n'));
+    assert.deepEqual(aligned.errors, []);
+    assert.deepEqual(Array.from(aligned.file.timeData), [0, 0.1, 0.2]);
+    assert.deepEqual(Array.from(aligned.file.columns, col => col.name), names.slice(1));
+    assert.deepEqual(Array.from(aligned.file.columns, col => col.unit), units.slice(1));
+    assert.deepEqual(Array.from(aligned.file.colData.f_c1), [0.5, -0.5, 0.5]);
+    assert.deepEqual(Array.from(aligned.file.colData.f_c2), [500, 500, 500]);
+    await aligned.context.loadColumnsForFile('f', ['Long_Channel_15', 'Next Sensor', 'Flag']);
+    assert.ok(Math.abs(aligned.file.colData.f_c3[0] + 0.0125) < 1e-8);
+    assert.deepEqual(Array.from(aligned.file.colData.f_c4), [10, 20, 30]);
+    assert.deepEqual(Array.from(aligned.file.colData.f_c5), [1, 0, 1]);
+    for (const bad of ['0.3 -0.5 500 4 40', '0.3 -0.5 500 4 40 TRUE 999', '0.3 bad 500 4 40 TRUE',
+        fixed([' 0.3', '', '500', '4', '40', 'TRUE'])]) {
+        const invalid = await load(alignedHeader + alignedData.join('\n') + '\n' + bad);
+        assert.equal(invalid.file, undefined, 'aligned headers must not weaken numeric validation');
+        assert.equal(invalid.errors.length, 1);
+    }
+
     for (const bad of ['0.1 -0.5', '0.1 -0.5 500 999', '0.1 bad 500', '\t-0.5\t500']) {
         const invalid = await load(header + '0 0.5 500\n' + bad);
         assert.equal(invalid.file, undefined, bad);

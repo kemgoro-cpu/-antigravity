@@ -3,9 +3,41 @@
 
     const TRN_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eEdD][+-]?\d+)?$/;
 
+    function alignedTrnHeaders(lines) {
+        // Some exporters pad names/units to a fixed width. A long name can
+        // leave just one separating space, which is also valid inside a name.
+        // Recover boundaries only when units AND the first numeric row prove
+        // the same grid; never split every single space in a header.
+        for (let i = 0; i + 2 < Math.min(lines.length, 50); i++) {
+            if (!/^ *\|/.test(lines[i]) || !/^ *\|/.test(lines[i + 1])) continue;
+            const header = lines[i].replace(/^ *\|/, '');
+            const units = lines[i + 1].replace(/^ *\|/, '');
+            if (/[|\t]/.test(header + units) || header.length !== units.length) continue;
+            const starts = Array.from(units.matchAll(/\S.*?(?= {2,}|$)/g), match => match.index);
+            if (starts.length < 3) continue;
+            const width = starts[1];
+            if (width < 4 || starts[0] >= width || starts.some((start, j) => j > 0 && start !== j * width)) continue;
+            if (units.length <= (starts.length - 1) * width || units.length > starts.length * width) continue;
+            const cells = line => starts.map((_, j) => line.slice(j * width, (j + 1) * width).trim());
+            const names = cells(header), unitCells = cells(units);
+            if (!names.every(Boolean) || !isTimeHeader(names[0]) || !getTimeUnitScale(unitCells[0]).explicit) continue;
+            // A boundary through a word means the proposed grid is ambiguous.
+            if (starts.some((_, j) => j > 0 && /\S/.test(header[j * width - 1]) && /\S/.test(header[j * width]))) continue;
+            const firstData = lines.slice(i + 2).find(line => line.trim());
+            if (!firstData || firstData.length !== header.length || /[|\t]/.test(firstData)) continue;
+            const values = cells(firstData), tokens = firstData.trim().split(/ +/);
+            if (tokens.length !== starts.length || values.some((value, j) => value !== tokens[j]
+                || (!Number.isFinite(toTrnNumber(value)) && !/^NaN$/i.test(value)))) continue;
+            return new Map([[i, names], [i + 1, unitCells]]);
+        }
+        return new Map();
+    }
+
     function convertWhitespaceToTabs(text) {
-        return text.split('\n').map(rawLine => {
-            let line = rawLine.replace(/\r$/, '');
+        const lines = text.split('\n').map(line => line.replace(/\r$/, ''));
+        const alignedHeaders = alignedTrnHeaders(lines);
+        return lines.map((line, index) => {
+            if (alignedHeaders.has(index)) return alignedHeaders.get(index).join('\t');
             // Remove a legacy pipe frame, while retaining internal empty cells.
             const framed = /^ *\|/.test(line);
             if (framed) line = line.replace(/^ *\|/, '').replace(/\| *$/, '');
