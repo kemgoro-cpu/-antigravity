@@ -436,6 +436,136 @@
         return { rmsse, iwr, ascr, dr, er, eer, distanceKm, fuelL, fuelKmPerL, fuelLper100km };
     }
 
+    // Excel's speed filtering is calculation-only. Never change a source trace,
+    // a plotted channel, or the raw distance/fuel calculation above.
+    function excelProcessedSpeed(speedKmh) {
+        let values = Array.from(speedKmh, value => value / 3.6);
+        for (let pass = 0; pass < 2; pass++) {
+            const next = values.slice();
+            for (let i = 2; i < values.length - 2; i++) {
+                next[i] = 0.2 * (values[i - 2] + values[i - 1] + values[i] + values[i + 1] + values[i + 2]);
+            }
+            values = next;
+        }
+        // The supplied workbook's 2020 revision includes this tiny tolerance
+        // around 0.03 m/s so floating-point noise does not preserve a stop.
+        return values.map(value => value < 3.00000000000001e-2 ? 0 : value);
+    }
+
+    function excelWindowDiagnostics(time, values, start, end, field) {
+        const issues = [];
+        const issue = (code, message, severity = 'error') => issues.push({ code, field, message, severity });
+        if (!time || !values || time.length !== values.length || time.length < 2) {
+            issue('SOURCE_LENGTH', `${field}: 時間と速度の件数が一致する2点以上のデータが必要です。`);
+            return issues;
+        }
+        const steps = [];
+        for (let i = 0; i < time.length; i++) {
+            if (!Number.isFinite(time[i]) || (i > 0 && time[i] <= time[i - 1])) {
+                issue('TIME_ORDER', `${field}: 時間には有限値を昇順・重複なしで指定してください。`);
+                return issues;
+            }
+            if (i > 0) steps.push(time[i] - time[i - 1]);
+        }
+        const epsilon = 1e-9;
+        if (start < time[0] - epsilon || end > time[time.length - 1] + epsilon) {
+            issue('WINDOW_COVERAGE', `${field}: 評価区間を覆う速度データがありません。`);
+        }
+        // Include bracketing source points; a missing source sample must not
+        // disappear merely because the 10 Hz output grid does not hit it.
+        for (let i = 0; i < time.length; i++) {
+            const used = time[i] >= start - epsilon && time[i] <= end + epsilon
+                || (i + 1 < time.length && time[i] < start && time[i + 1] > start)
+                || (i > 0 && time[i] > end && time[i - 1] < end);
+            if (used && !Number.isFinite(values[i])) {
+                issue('MISSING_SPEED', `${field}: 評価区間の速度に空欄または有限でない値があります。`);
+                break;
+            }
+        }
+        if (steps.length >= 3) {
+            const sorted = steps.slice().sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            if (steps.some((step, i) => step > median * 10 + epsilon && time[i] < end && time[i + 1] > start)) {
+                issue('LARGE_GAP', `${field}: 通常の10倍を超える時間間隔を線形補間しています。`, 'warning');
+            }
+        }
+        return issues;
+    }
+
+    // Retain exact source values at an existing sample timestamp. This avoids
+    // an unnecessary interpolation round trip at the Excel zero threshold.
+    function excelValueAt(time, values, query) {
+        let lo = 0, hi = time.length - 1;
+        while (hi - lo > 1) {
+            const mid = (lo + hi) >> 1;
+            if (time[mid] <= query) lo = mid; else hi = mid;
+        }
+        if (Math.abs(time[lo] - query) <= 1e-9) return { time: time[lo], value: values[lo] };
+        if (Math.abs(time[hi] - query) <= 1e-9) return { time: time[hi], value: values[hi] };
+        return { time: query, value: interp1(time, values, query) };
+    }
+
+    function excelMetricsForWindow(time, target, actual, roadLoad, rawMetrics, issues) {
+        const N = Math.min(time.length, target.length, actual.length);
+        if (N < 2 && !issues.some(issue => issue.severity !== 'warning')) {
+            issues.push({ code: 'INSUFFICIENT_SAMPLES', field: '評価区間', message: '10Hzの評価点が2点以上になる区間を指定してください。', severity: 'error' });
+        }
+        const diagnostics = { ok: !issues.some(issue => issue.severity !== 'warning'), issues, samples: N };
+        const result = { distanceKm: null, fuelL: null, fuelKmPerL: null, fuelLper100km: null,
+            ...rawMetrics, rmsse: null, iwr: null, ascr: null, dr: null, er: null, eer: null,
+            indexDistanceKm: null, targetIndexDistanceKm: null, diagnostics };
+        if (!diagnostics.ok || N < 2) return result;
+        const u = excelProcessedSpeed(target), v = excelProcessedSpeed(actual);
+        const mass = roadLoad ? roadLoad.mass : 1;
+        function work(speed) {
+            const acceleration = new Array(N).fill(0);
+            for (let i = 1; i < N - 1; i++) {
+                acceleration[i] = (speed[i + 1] - speed[i - 1]) / (time[i + 1] - time[i - 1]);
+            }
+            let dist = 0, iw = 0, energy = 0, asc = 0;
+            for (let i = 0; i < N; i++) asc += Math.abs(acceleration[i]);
+            for (let i = 1; i < N; i++) {
+                const dd = speed[i] * (time[i] - time[i - 1]);
+                dist += dd;
+                const inertialForce = INERTIA_FACTOR * mass * acceleration[i];
+                const inertialWork = inertialForce * dd;
+                if (inertialWork >= 0) iw += inertialWork;
+                if (roadLoad) {
+                    const V = speed[i] * 3.6;
+                    const force = roadLoad.A + roadLoad.B * V + roadLoad.C * V * V + inertialForce;
+                    if (force >= 0) energy += force * dd;
+                }
+            }
+            return { dist, iw, energy, asc };
+        }
+        const driven = work(v), scheduled = work(u);
+        let sse = 0;
+        for (let i = 0; i < N; i++) {
+            const difference = v[i] * 3.6 - u[i] * 3.6;
+            sse += difference * difference;
+        }
+        result.rmsse = Math.sqrt(sse / N);
+        result.iwr = pctDiff(driven.iw, scheduled.iw);
+        result.ascr = pctDiff(driven.asc, scheduled.asc);
+        result.dr = pctDiff(driven.dist, scheduled.dist);
+        if (roadLoad && scheduled.energy > 0) {
+            result.er = pctDiff(driven.energy, scheduled.energy);
+            if (result.er != null && result.dr != null && 1 + result.er / 100 !== 0) {
+                result.eer = (1 - (1 + result.dr / 100) / (1 + result.er / 100)) * 100;
+            }
+        }
+        result.indexDistanceKm = driven.dist / 1000;
+        result.targetIndexDistanceKm = scheduled.dist / 1000;
+        const sixMetrics = ['rmsse', 'iwr', 'ascr', 'dr', 'er', 'eer'];
+        if ([...Object.values(driven), ...Object.values(scheduled),
+            ...sixMetrics.map(name => result[name]).filter(value => value != null)].some(value => !Number.isFinite(value))) {
+            diagnostics.ok = false;
+            diagnostics.issues.push({ code: 'NUMERIC_RANGE', field: '速度・係数', message: '計算可能な数値範囲を超えました。速度と係数を確認してください。', severity: 'error' });
+            for (const name of ['rmsse', 'iwr', 'ascr', 'dr', 'er', 'eer', 'indexDistanceKm', 'targetIndexDistanceKm']) result[name] = null;
+        }
+        return result;
+    }
+
     // 総時間が同点とみなす閾値（相対誤差の差）。浮動小数の誤差だけを吸収する極小値。
     const CYCLE_TIE_EPS = 1e-9;
     // 同点候補を最高車速で選び分けるときに「決め手あり」とみなす最小差[km/h]。
@@ -533,11 +663,16 @@
      *   fuelTime       : 燃料の時間軸[s]（省略時 actualTime→time）
      *   phases         : [{name,start,end}]（省略/空なら全体のみ）
      *   roadLoad       : {A,B,C,mass}（省略可。揃っていればER/EERを計算）
+     *   calculationMethod : 'excel' (default) or 'legacy'. Excel preprocessing
+     *     is performed independently in each window and never changes sources.
+     *     No WOT/GEAR exclusion mask is applied. Distance/fuel fields retain
+     *     their original raw-trace definition; indexDistanceKm is processed.
      * @returns {{ total, phases:[{name,...}] } | null}
      */
     function computeMetrics(opts) {
         const { time, target, actual, fuelRate, phases, roadLoad,
                 targetTime, actualTime, fuelTime } = opts || {};
+        const calculationMethod = opts?.calculationMethod === 'legacy' ? 'legacy' : 'excel';
         const tTime = targetTime || time;
         const aTime = actualTime || time;
         const fTime = fuelTime || actualTime || time;
@@ -545,10 +680,32 @@
         const rl = normalizeRoadLoad(roadLoad);
 
         function windowMetrics(start, end) {
+            const issues = calculationMethod === 'excel'
+                ? [...excelWindowDiagnostics(tTime, target, start, end, '目標速度'),
+                    ...excelWindowDiagnostics(aTime, actual, start, end, '実測速度')]
+                : [];
+            if (calculationMethod === 'excel' && (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)) {
+                issues.push({ code: 'WINDOW_RANGE', field: '評価区間', message: '開始・終了には有限値を昇順で指定してください。', severity: 'error' });
+            }
+            if (issues.some(issue => ['TIME_ORDER', 'SOURCE_LENGTH', 'WINDOW_RANGE'].includes(issue.code))) {
+                return excelMetricsForWindow([], [], [], rl,
+                    { distanceKm: null, fuelL: null, fuelKmPerL: null, fuelLper100km: null }, issues);
+            }
             const tg = resampleTrace(tTime, target, start, end, DRIVE_INDEX_SAMPLE_HZ);
             const ac = resampleTrace(aTime, actual, start, end, DRIVE_INDEX_SAMPLE_HZ);
             const fu = fuelRate ? resampleTrace(fTime, fuelRate, start, end, DRIVE_INDEX_SAMPLE_HZ).values : null;
-            return metricsForWindow(tg.values, ac.values, fu, rl, tg.dt);
+            const raw = metricsForWindow(tg.values, ac.values, fu, rl, tg.dt);
+            if (calculationMethod === 'legacy') return raw;
+            // Excel receives a window's own sample sequence; its result must
+            // not depend on whether that window starts on a global 0.1s tick.
+            // Keep the legacy/raw distance and fuel grid above unchanged.
+            const sampleCount = Math.floor((end - start) * DRIVE_INDEX_SAMPLE_HZ + 1e-9) + 1;
+            const excelTime = Array.from({ length: sampleCount }, (_, i) => start + i * DRIVE_INDEX_SAMPLE_DT);
+            const preciseTarget = excelTime.map(t => excelValueAt(tTime, target, t));
+            const exactTime = preciseTarget.map(sample => sample.time);
+            const targetValues = preciseTarget.map(sample => sample.value);
+            const actualValues = exactTime.map(t => excelValueAt(aTime, actual, t).value);
+            return excelMetricsForWindow(exactTime, targetValues, actualValues, rl, raw, issues);
         }
 
         // 全体窓は法規サイクル（目標トレース）の範囲。旧API（共通時間軸）では time と一致。
@@ -559,7 +716,7 @@
             start: p.start, end: p.end,
             ...(windowMetrics(p.start, p.end) || {}),
         }));
-        return { total, phases: phaseResults, hasRoadLoad: !!rl };
+        return { total, phases: phaseResults, hasRoadLoad: !!rl, calculationMethod };
     }
 
     const api = {

@@ -63,11 +63,15 @@
 
         // v3以前のドライビングインデックスのサイクルIDを現行IDへ読み替える。
         if (out.driveIndex && typeof out.driveIndex === 'object' && !Array.isArray(out.driveIndex)) {
+            out.driveIndex = { ...out.driveIndex,
+                calculationMethod: out.driveIndex.calculationMethod === 'legacy' ? 'legacy' : 'excel' };
             const legacyMap = getLegacyCycleIdMap();
             const cid = out.driveIndex.cycleId;
             if (cid != null && Object.prototype.hasOwnProperty.call(legacyMap, cid)) {
                 out.driveIndex = { ...out.driveIndex, cycleId: legacyMap[cid] };
             }
+        } else {
+            out.driveIndex = { calculationMethod: 'excel' };
         }
 
         out._version = SETTINGS_VERSION;

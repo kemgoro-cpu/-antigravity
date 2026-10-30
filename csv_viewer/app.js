@@ -1142,6 +1142,7 @@ const state = {
     sidebarCollapsed:  {},     // サイドバーの折りたたみ状態 { sectionId: boolean }
     // ドライビングインデックス（モード走行の走行品質指標＋燃費）
     driveIndex: {
+        calculationMethod: 'excel', // 提供Excelの通常6指標。従来方式も明示選択可能。
         // 使用チャンネル名（自動検出＋手動上書き）。
         // target=null は「選択モードの法規トレースを目標に使う」を意味する（CSV列名を入れると従来通りその列を目標にする）。
         channels:       { target: null, actual: null, fuel: null },
@@ -2390,21 +2391,76 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
  * Uses a per-file parse queue to prevent duplicate concurrent parses.
  */
 const _parseQueue = new Map(); // fileId → Promise (in-flight parse)
+// Drive Index reads original numeric text separately from display Float32 data.
+// Weak keys keep the cache outside saved state and release deleted files.
+const _driveIndexColumnCache = new WeakMap();
 
-function loadColumnsForFile(fileId, colNames) {
+function getDriveIndexColumnCache(file) {
+    const h = file.headerInfo;
+    const signature = JSON.stringify([h.dataStart, h.timeIdx, h.delimiter,
+        h.encoding, h.isTrn, h.columnCount,
+        file.columns.filter(col => !col.isCustom).map(col => [col.id, col.idx]).sort()]);
+    let cache = _driveIndexColumnCache.get(file);
+    if (!cache || cache.source !== file.file || cache.headerInfo !== h
+        || cache.timeData !== file.timeData || cache.sourceRows !== file.sourceRowNumbers
+        || cache.rows !== file.timeData.length || cache.signature !== signature) {
+        cache = { source: file.file, headerInfo: h, timeData: file.timeData,
+            sourceRows: file.sourceRowNumbers, rows: file.timeData.length,
+            signature, colData: {} };
+        _driveIndexColumnCache.set(file, cache);
+    }
+    return cache;
+}
+
+async function loadDriveIndexColumns(fileId, colNames) {
+    const file = state.files[fileId];
+    if (!file) throw new Error('Driving Indexの対象ファイルがありません。');
+    const columns = [...new Set(colNames)].map(name => file.columns.find(col => col.name === name));
+    if (columns.some(col => !col)) throw new Error('Driving Indexの対象チャンネルがありません。');
+    const original = columns.filter(col => !col.isCustom);
+    const cache = getDriveIndexColumnCache(file);
+    if (original.length) {
+        if (!file.file) throw new Error('Driving Index用の元ファイルを再読み込みできません。');
+        await loadColumnsForFile(fileId, original.map(col => col.name), { precision: 'float64', cacheEntry: cache });
+    }
+    if (state.files[fileId] !== file || getDriveIndexColumnCache(file) !== cache) {
+        throw new Error('Driving Indexの計算中に入力ファイルまたは読み込み条件が変わりました。');
+    }
+    const colData = {};
+    for (const col of columns) {
+        const values = col.isCustom ? file.colData[col.id] : cache.colData[col.id];
+        if (!values || values.length !== file.timeData.length) {
+            throw new Error(`Driving Index用データを読み込めません: ${col.name}`);
+        }
+        colData[col.id] = values;
+    }
+    const computedColumns = columns.filter(col => col.isCustom).map(col => col.name);
+    return { colData, computedColumns,
+        precision: computedColumns.length ? (original.length ? 'mixed' : 'computed') : 'float64' };
+}
+
+function loadColumnsForFile(fileId, colNames, options = {}) {
     const f = state.files[fileId];
     if (!f || !f.file) return Promise.resolve();
+    const precise = options.precision === 'float64';
+    const cache = precise ? options.cacheEntry : null;
+    if (precise && (!cache || getDriveIndexColumnCache(f) !== cache)) {
+        return Promise.reject(new Error('Driving Index用の読み込み条件が変わりました。'));
+    }
+    const dataStore = precise ? cache.colData : f.colData;
+    const current = () => state.files[fileId] === f && (!precise || getDriveIndexColumnCache(f) === cache);
 
     // Determine which columns need loading (not yet in colData and not being loaded)
     // Custom RAMカラム（isCustom）はファイルパースではなく式で計算するためスキップ
     const colsToLoad = [];
     for (const name of colNames) {
         const col = f.columns.find(c => c.name === name);
-        if (col && !col.isCustom && !f.colData[col.id]) colsToLoad.push(col);
+        if (col && !col.isCustom && !dataStore[col.id]) colsToLoad.push(col);
     }
     if (colsToLoad.length === 0) {
         // If there's an in-flight parse for this file, wait for it (may be loading our columns)
-        return _parseQueue.get(fileId) || Promise.resolve();
+        const pending = _parseQueue.get(fileId) || Promise.resolve();
+        return precise ? pending : pending.catch(() => {});
     }
 
     // If there's already a parse in progress for this file, chain after it
@@ -2412,8 +2468,9 @@ function loadColumnsForFile(fileId, colNames) {
     const prev = (_parseQueue.get(fileId) || Promise.resolve()).catch(() => {});
     const queueJob = prev.then(async () => {
         // Re-check which columns still need loading (previous parse may have loaded some)
-        const stillNeeded = colsToLoad.filter(col => !f.colData[col.id]);
+        const stillNeeded = colsToLoad.filter(col => !dataStore[col.id]);
         if (stillNeeded.length === 0) return;
+        if (precise && !current()) throw new Error('Driving Indexの入力が読み込み待ちの間に変わりました。');
 
         // Verify File object is still readable before parsing
         // （TRNファイルは変換済み文字列なのでチェック不要）
@@ -2425,6 +2482,7 @@ function loadColumnsForFile(fileId, colNames) {
                     `ファイルの再読み込みに失敗しました: ${f.name}`,
                     `ファイルに再アクセスできません。ブラウザのセキュリティポリシー、またはファイルが移動・削除された可能性があります。\n${e.message}`
                 );
+                if (precise) throw e;
                 return;
             }
         }
@@ -2436,7 +2494,7 @@ function loadColumnsForFile(fileId, colNames) {
         const { dataStart, timeIdx, delimiter: delim, encoding, isTrn, columnCount } = f.headerInfo;
         const readNumber = isTrn ? toTrnNumber : toNumber;
 
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             try {
                 const tempArrs = {};
                 const columnDiagnostics = {};
@@ -2459,7 +2517,8 @@ function loadColumnsForFile(fileId, colNames) {
                             parser.abort();
                             finishParseJob(loadJob);
                             showWarning(`カラム読み込みをキャンセルしました: ${f.name}`);
-                            resolve();
+                            if (precise) reject(new Error('Driving Index用データの読み込みをキャンセルしました。'));
+                            else resolve();
                             return;
                         }
                         rowIdx++;
@@ -2477,6 +2536,12 @@ function loadColumnsForFile(fileId, colNames) {
                         }
                         const t = readNumber(row[timeIdx]);
                         if (!Number.isFinite(t)) return;
+                        if (precise && f.sourceRowNumbers
+                            && f.sourceRowNumbers[tempArrs[stillNeeded[0].id].length] !== rowIdx) {
+                            trnDataIssue = 'Driving Index用データの行対応が元の時間データと一致しません。';
+                            parser.abort();
+                            return;
+                        }
                         for (const col of stillNeeded) {
                             const cell = row[col.idx];
                             const value = readNumber(cell);
@@ -2497,34 +2562,42 @@ function loadColumnsForFile(fileId, colNames) {
                         if (loadJob.cancelled) return;
                         if (trnDataIssue) {
                             finishParseJob(loadJob);
-                            showError(`TRNデータを読み取れません: ${f.name}`, trnDataIssue);
-                            resolve();
+                            showError(precise ? `Driving Index用データを読み取れません: ${f.name}` : `TRNデータを読み取れません: ${f.name}`, trnDataIssue);
+                            if (precise) reject(new Error(trnDataIssue));
+                            else resolve();
                             return;
                         }
                         try {
                             finishParseJob(loadJob);
+                            if (precise && (!current()
+                                || tempArrs[stillNeeded[0].id].length !== f.timeData.length)) {
+                                throw new Error('Driving Index用データの行数または入力条件が変わりました。');
+                            }
                             for (const col of stillNeeded) {
-                                f.colData[col.id] = new Float32Array(tempArrs[col.id]);
-                                (f.columnDiagnostics ||= {})[col.id] = columnDiagnostics[col.id];
+                                dataStore[col.id] = precise ? new Float64Array(tempArrs[col.id]) : new Float32Array(tempArrs[col.id]);
+                                if (!precise) (f.columnDiagnostics ||= {})[col.id] = columnDiagnostics[col.id];
                             }
                             console.log(`[CSV Viewer] Columns loaded: [${colNamesStr}] (${tempArrs[stillNeeded[0].id].length} rows)`);
                             // Bitチャンネル自動検出
-                            detectBitChannels(f);
+                            if (!precise) detectBitChannels(f);
                         } catch (e) {
                             showError(`チャンネルデータの保存に失敗しました: ${f.name}`, e.stack || e.message);
+                            if (precise) { reject(e); return; }
                         }
                         resolve();
                     },
                     error: function(err) {
                         finishParseJob(loadJob);
                         showError(`チャンネルのパースエラー: ${f.name}`, err.message || String(err));
-                        resolve();
+                        if (precise) reject(err);
+                        else resolve();
                     },
                 });
             } catch (e) {
                 finishParseJob(loadJob);
                 showError(`チャンネルの読み込みを開始できませんでした: ${f.name}`, e.stack || e.message);
-                resolve();
+                if (precise) reject(e);
+                else resolve();
             }
         });
     });
@@ -2532,14 +2605,18 @@ function loadColumnsForFile(fileId, colNames) {
     // Clean up queue entry when done
     // ジョブが失敗してもMapから必ず削除する（拒否済みPromiseが残ると以降の読み込みが永久に失敗するため）
     const cleanup = queueJob
-        .catch(e => showError(`チャンネルの読み込みに失敗しました: ${f.name}`, e.stack || e.message))
-        .then(() => {
+        .catch(e => {
+            showError(`チャンネルの読み込みに失敗しました: ${f.name}`, e.stack || e.message);
+            if (precise) throw e;
+        })
+        .finally(() => {
             if (_parseQueue.get(fileId) === cleanup) _parseQueue.delete(fileId);
         });
     _parseQueue.set(fileId, cleanup);
 
     return cleanup;
 }
+
 
 /**
  * Ensure all selected columns are loaded for all relevant files,
@@ -3904,10 +3981,27 @@ function cycleNameOf(id) {
  * その終了時刻が現在の実効モードの既定終了時刻と大きく食い違う（5%または5秒を超える差）場合は
  * 古い編集とみなして無視し、既定フェーズに戻す。
  */
+function driveCalculationMethod(value = state.driveIndex.calculationMethod) {
+    return value === 'legacy' ? 'legacy' : 'excel';
+}
+
+function getDriveIndexDefaultPhases(effectiveId, method = state.driveIndex.calculationMethod) {
+    const m = driveModeById(effectiveId);
+    if (m?.id === 'mdc' && driveCalculationMethod(method) === 'excel') {
+        // The supplied MDC workbook retains these WLTC phase boundaries.
+        // Use them only for Excel-compatible metrics, not mode alignment/traces.
+        return [
+            { name: 'Low', start: 0, end: 589 },
+            { name: 'Medium', start: 589, end: 1022 },
+            { name: 'High', start: 1022, end: 1477 },
+        ];
+    }
+    return (m?.phases || []).map(p => ({ ...p }));
+}
+
 function getEffectivePhases(effectiveId) {
     const di = state.driveIndex;
-    const m = driveModeById(effectiveId);
-    const defaults = (m && m.phases) ? m.phases : [];
+    const defaults = getDriveIndexDefaultPhases(effectiveId);
     if (di.phaseOverride && di.phaseOverride.length) {
         const expectedEnd = defaults.length ? defaults[defaults.length - 1].end : null;
         const overrideEnd = di.phaseOverride[di.phaseOverride.length - 1].end;
@@ -4094,6 +4188,7 @@ function driveInputId(value) {
 function getDriveIndexInputSignature() {
     const di = state.driveIndex;
     return JSON.stringify({
+        calculationMethod: driveCalculationMethod(di.calculationMethod),
         channels: di.channels, cycleId: di.cycleId, phases: di.phaseOverride,
         roadLoad: di.roadLoadByFile, autoAlign: di.autoAlign, align: di.alignByFile,
         formulas: (state.customRAMs || []).map(c => [c.name, c.expr, c.unit]),
@@ -4112,7 +4207,12 @@ function getDriveIndexInputSignature() {
 }
 
 function getDriveIndexResultState() {
-    return window.UnitValidation.resultState(state.driveIndex, getDriveIndexInputSignature());
+    const di = state.driveIndex;
+    const result = window.UnitValidation.resultState(di, getDriveIndexInputSignature());
+    if (result.status === 'current' && !(di.results || []).some(entry => entry.result && entry.result.total?.diagnostics?.ok !== false)) {
+        return { status: 'empty', reason: di.validationSummary || '入力データに問題があるため指標を計算できません。' };
+    }
+    return result;
 }
 
 function validateDriveFile(file, channels = state.driveIndex.channels) {
@@ -4134,6 +4234,8 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     const mainFile = getMainFile();
     if (!mainFile || !window.DriveIndex) return null;
     const di = state.driveIndex;
+
+    const calculationMethod = driveCalculationMethod(di.calculationMethod);
 
     // チャンネル解決: 保存名が現ファイルに存在すれば優先、無ければ自動検出で補完。
     // autoDetect=false（モーダルからの再計算）では補完せず、ユーザー指定（null＝なし含む）を尊重する。
@@ -4270,10 +4372,29 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         const need = [aCol.name];
         if (tCol) need.push(tCol.name);
         if (fCol && validation.fuelAllowed) need.push(fCol.name);
-        await loadColumnsForFile(fid, need);
+        let columnData = f.colData;
+        if (calculationMethod === 'excel') {
+            try {
+                const precise = await loadDriveIndexColumns(fid, need);
+                columnData = precise.colData;
+                entry.inputPrecision = precise.precision;
+                if (precise.computedColumns.length) {
+                    const note = `計算チャンネル「${precise.computedColumns.join('、')}」は既存の計算済み精度を使用します。`;
+                    entry.warning = entry.warning ? entry.warning + ' ' + note : note;
+                }
+            } catch (error) {
+                entry.result = null;
+                entry.reason = error.message || '計算用データを読み取れませんでした。';
+                results.push(entry);
+                continue;
+            }
+        } else {
+            await loadColumnsForFile(fid, need);
+            entry.inputPrecision = 'float32';
+        }
 
-        const actual = f.colData[aCol.id];
-        const fuel   = fCol && validation.fuelAllowed ? f.colData[fCol.id] : null;
+        const actual = columnData[aCol.id];
+        const fuel   = fCol && validation.fuelAllowed ? columnData[fCol.id] : null;
         if (!f.timeData || !actual) {
             entry.result = null;
             entry.reason = 'データなし';
@@ -4308,7 +4429,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             metricsOpts = {
                 targetTime: targetTimeM, target: modeTrace.speed,
                 actualTime: f.timeData, actual, fuelTime: f.timeData, fuelRate: fuel,
-                phases: phasesM, roadLoad,
+                phases: phasesM, roadLoad, calculationMethod,
             };
             alignInfo = {
                 start, end, auto: !isFinite(manStart) && di.autoAlign, autoStart, rmse: alignRmse,
@@ -4318,13 +4439,16 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         } else {
             // CSV列を目標にする従来モード（同一ファイル・同一時間軸。整合なし）
             metricsOpts = {
-                targetTime: f.timeData, target: f.colData[tCol.id],
+                targetTime: f.timeData, target: columnData[tCol.id],
                 actualTime: f.timeData, actual, fuelTime: f.timeData, fuelRate: fuel,
-                phases, roadLoad,
+                phases, roadLoad, calculationMethod,
             };
         }
 
         entry.result = window.DriveIndex.computeMetrics(metricsOpts);
+        if (entry.result?.total?.diagnostics?.ok === false) {
+            entry.reason = entry.result.total.diagnostics.issues.map(issue => issue.message).join(' ');
+        }
         entry.effectiveId  = effectiveId;
         entry.cycleName    = cycleNameOf(effectiveId);
         entry.detectedName = detName;
@@ -4339,9 +4463,9 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     if (di.computeVersion !== computation || getDriveIndexInputSignature() !== inputSignature) return null;
     di.results = results;
     di.resultSignature = inputSignature;
-    di.validationSummary = results.filter(r => !r.result).map(r => r.reason).join(' ');
+    di.validationSummary = results.filter(r => !r.result || r.result.total?.diagnostics?.ok === false).map(r => r.reason).filter(Boolean).join(' ');
     // メインの結果をボタン表示用に保持（後方互換）
-    const mainEntry = results.find(r => r.role === 'main' && r.result);
+    const mainEntry = results.find(r => r.role === 'main' && r.result && r.result.total?.diagnostics?.ok !== false);
     di.lastResult = mainEntry ? {
         ...mainEntry.result,
         effectiveId:  mainEntry.effectiveId,
@@ -4389,6 +4513,11 @@ function buildDriveIndexTable(result) {
     if (!result) {
         return `<p class="di-empty">計算するには「走行モード」と「実測車速」チャンネルを選び、「再計算」を押してください。</p>`;
     }
+    const excel = driveCalculationMethod(result.calculationMethod) === 'excel';
+    const methodNote = `<p class="di-note di-calculation-note">計算方式: ${excel ? 'Excel方式（通常指標）' : '従来方式'}${excel ? '。6指標は平滑化後の車速で評価します。距離・燃費は元波形の値です。' : ''}</p>`;
+    const issues = [{ name: 'モード全体', metrics: result.total }, ...(result.phases || []).map(metrics => ({ name: metrics.name, metrics }))]
+        .flatMap(({ name, metrics }) => (metrics?.diagnostics?.issues || []).map(issue => `${name}: ${issue.message}`));
+    const diagnosticNote = issues.length ? `<div class="di-diagnostics di-empty" role="status">${issues.map(message => `<div>${esc(message)}</div>`).join('')}</div>` : '';
     const rowHtml = (label, m, cls = '') => `<tr class="${cls}">
         <td class="di-row-label">${esc(label)}</td>
         <td>${diFmtNum(m.rmsse)}</td>
@@ -4404,13 +4533,48 @@ function buildDriveIndexTable(result) {
     </tr>`;
     const phaseRows = (result.phases || []).map(p => rowHtml(p.name, p)).join('');
     const totalRow  = rowHtml('モード全体 (Total)', result.total || {}, 'di-total-row');
-    return `<table class="di-table">
+    return `${methodNote}${diagnosticNote}<table class="di-table">
         <thead><tr>
             <th>区間</th><th>RMSSE<br>[km/h]</th><th>IWR</th><th>ASCR</th><th>DR</th>
-            <th>ER</th><th>EER</th><th>燃費<br>[km/L]</th><th>[L/100km]</th><th>距離<br>[km]</th><th>燃料<br>[L]</th>
+            <th>ER</th><th>EER</th><th>燃費<br>[km/L]</th><th>[L/100km]</th><th>距離（元波形）<br>[km]</th><th>燃料<br>[L]</th>
         </tr></thead>
         <tbody>${phaseRows}${totalRow}</tbody>
     </table>`;
+}
+
+/** Export only current results; retain method and unavailable-data reasons. */
+function buildDriveIndexReportHtml(di, resultState, formatNumber = diFmtNum) {
+    if (resultState.status === 'stale') {
+        return `<h2>Drive Index</h2><p>未更新：${esc(resultState.reason || '条件が変更されています。再計算してください。')}</p>`;
+    }
+    const allEntries = di.results || [];
+    const entries = resultState.status === 'current' ? allEntries.filter(entry => entry.result) : [];
+    if (!entries.length) {
+        return allEntries.length || di.validationSummary
+            ? `<h2>Drive Index</h2><p>未評価：${esc(resultState.reason || di.validationSummary || '計算できませんでした。')}</p>` : '';
+    }
+    const metrics = [
+        ['iwr', 'IWR [%]'], ['rmsse', 'RMSSE [km/h]'], ['ascr', 'ASCR [%]'], ['dr', 'DR [%]'],
+        ['er', 'ER [%]'], ['eer', 'EER [%]'], ['distanceKm', '距離（元波形）[km]'],
+        ['fuelL', '燃料 [L]'], ['fuelKmPerL', '燃費 [km/L]'], ['fuelLper100km', '燃費 [L/100km]'],
+    ];
+    const notes = entries.map(entry => {
+        const excel = driveCalculationMethod(entry.result.calculationMethod) === 'excel';
+        const method = excel ? 'Excel方式（通常指標）。6指標は平滑化後、距離・燃費は元波形で評価。' : '従来方式';
+        const issues = [{ name: 'モード全体', metrics: entry.result.total }, ...(entry.result.phases || []).map(p => ({ name: p.name, metrics: p }))]
+            .flatMap(({ name, metrics: window }) => (window?.diagnostics?.issues || []).map(issue => `${name}: ${issue.message}`));
+        return `<p>${esc(entry.fileName)}：計算方式: ${esc(method)}</p>`
+            + (entry.warning ? `<p>${esc(entry.fileName)}：${esc(entry.warning)}</p>` : '')
+            + issues.map(message => `<p>${esc(entry.fileName)}：${esc(message)}</p>`).join('');
+    }).join('');
+    const unavailable = allEntries.filter(entry => !entry.result).map(entry => `<p>${esc(entry.fileName)}：未評価：${esc(entry.reason || '計算できませんでした。')}</p>`).join('');
+    return `<h2>Drive Index（${esc(entries[0].cycleName || '')}）</h2>${notes}${unavailable}`
+        + `<table><thead><tr><th>指標</th>`
+        + entries.map(entry => `<th>${esc(entry.fileName)}（${esc(entry.role)}）</th>`).join('')
+        + `</tr></thead><tbody>`
+        + metrics.map(([key, label]) => `<tr><td>${esc(label)}</td>`
+            + entries.map(entry => `<td class="num">${formatNumber(entry.result.total?.[key])}</td>`).join('') + '</tr>').join('')
+        + '</tbody></table>';
 }
 
 /**
@@ -4457,10 +4621,10 @@ function buildDriveIndexAllTables(results, roadLoadByFile, alignByFile) {
         // ファイル別 走行抵抗入力（data-file にフルネームを持たせ、再計算時に読み取る）
         const rlInputs = `<div class="di-roadload di-file-rl" data-file="${esc(entry.fullName)}">
             <span class="di-rl-title">走行抵抗（任意・ER/EER用）</span>
-            <label>A<input type="number" class="di-rl-a" value="${esc(rl.A || '')}" step="any" placeholder="N"></label>
-            <label>B<input type="number" class="di-rl-b" value="${esc(rl.B || '')}" step="any" placeholder="N/(km/h)"></label>
-            <label>C<input type="number" class="di-rl-c" value="${esc(rl.C || '')}" step="any" placeholder="N/(km/h)²"></label>
-            <label>質量<input type="number" class="di-rl-mass" value="${esc(rl.mass || '')}" step="any" placeholder="kg"></label>
+            <label>A<input type="number" class="di-rl-a" value="${esc(rl.A ?? '')}" step="any" placeholder="N"></label>
+            <label>B<input type="number" class="di-rl-b" value="${esc(rl.B ?? '')}" step="any" placeholder="N/(km/h)"></label>
+            <label>C<input type="number" class="di-rl-c" value="${esc(rl.C ?? '')}" step="any" placeholder="N/(km/h)²"></label>
+            <label>質量<input type="number" class="di-rl-mass" value="${esc(rl.mass ?? '')}" step="any" placeholder="kg"></label>
         </div>`;
         const body = entry.result
             ? buildDriveIndexTable(entry.result)
@@ -4535,12 +4699,14 @@ function showDriveIndexModal() {
         <h3 id="drive-index-title"><i class='bx bx-tachometer'></i> Driving Index（モード走行品質・燃費）</h3>
         <p class="di-detected">自動判別: <strong>${esc(detName)}</strong>　<span class="di-note">目標車速は選択モードの法規トレースを使用。走行抵抗はファイルごとに各表の上で入力できます</span></p>
         <div class="di-controls">
+            <label>計算方式<select class="di-method"><option value="excel" ${driveCalculationMethod(di.calculationMethod) === 'excel' ? 'selected' : ''}>Excel方式（通常指標）</option><option value="legacy" ${driveCalculationMethod(di.calculationMethod) === 'legacy' ? 'selected' : ''}>従来方式</option></select></label>
             <label>走行モード<select class="di-cycle">${cycleOpts()}</select></label>
             <label>目標車速<select class="di-ch-target">${targetOpts(di.channels.target)}</select></label>
             <label>実測車速<select class="di-ch-actual">${speedOpts(di.channels.actual)}</select></label>
             <label>燃料流量<select class="di-ch-fuel">${fuelOpts(di.channels.fuel)}</select></label>
             <label class="di-align-toggle"><input type="checkbox" class="di-auto-align" ${di.autoAlign ? 'checked' : ''}>前後の余分データを自動整合</label>
         </div>
+        <p class="di-note di-method-help"></p>
         <p class="di-note">必要単位: 目標・実測車速は km/h、燃料流量は L/h、時間は秒基準です。s / ms の明示された時間は既存の読み込み補正を使用します。</p>
         <div class="di-unit-status" aria-live="polite"></div>
         <details class="di-unit-help"><summary>単位が違う・分からないとき</summary><p>必要単位のチャンネルを選び直してください。m/s の車速は Custom RAM で「元信号 * 3.6」、L/min の流量は「元信号 * 60」を作り、単位を km/h / L/h に設定して選択できます。元データは変更しません。g/s 等の質量流量は密度が必要なため自動換算しません。単位なしの信号は計測仕様を確認し、同じ値を参照する Custom RAM に確認済みの単位を指定してください。</p></details>
@@ -4626,10 +4792,8 @@ function showDriveIndexModal() {
     // ── フェーズ編集行 ──
     const phaseRowsEl = modal.querySelector('.di-phase-rows');
     // モードID（内蔵＋カスタム）から既定フェーズを取得。手動編集の比較・初期化に使う。
-    const registryPhasesOf = id => {
-        const m = driveModeById(id);
-        return (m && m.phases) ? m.phases.map(p => ({ ...p })) : [];
-    };
+    const selectedMethod = () => driveCalculationMethod(modal.querySelector('.di-method').value);
+    const registryPhasesOf = id => getDriveIndexDefaultPhases(id, selectedMethod());
     const renderPhaseRows = phases => {
         phaseRowsEl.innerHTML = phases.map(p => `
             <div class="di-phase-row">
@@ -4652,8 +4816,19 @@ function showDriveIndexModal() {
     const currentEffectiveId = () =>
         modal.querySelector('.di-cycle').value || (di.lastResult ? di.lastResult.detectedId : null);
 
+    const renderMethodHelp = () => {
+        let text = selectedMethod() === 'excel'
+            ? '提供Excelの通常6指標に合わせて計算します。WOT/GEAR補正は含みません。表示波形と距離・燃費は元の値を保持します。'
+            : '以前の前進差分・台形距離積分による計算です。';
+        if (selectedMethod() === 'excel' && window.DriveIndex.resolveCycleId(currentEffectiveId()) === 'mdc') {
+            text += ' MDCの既定区切りは提供Excelと同じ589 / 1022 / 1477秒です。必要に応じて下の区間を編集できます。';
+        }
+        modal.querySelector('.di-method-help').textContent = text;
+    };
+
     // 初期フェーズ＝実効フェーズ（手動編集があればそれ）
     renderPhaseRows(getEffectivePhases(currentEffectiveId()));
+    renderMethodHelp();
 
     modal.querySelector('.di-phase-add').addEventListener('click', () => {
         const rows = readPhaseRows();
@@ -4662,8 +4837,14 @@ function showDriveIndexModal() {
         markDraftChanged();
     });
     // モード変更でフェーズ既定値を入れ替え（手動編集はリセット）
-    modal.querySelector('.di-cycle').addEventListener('change', e =>
-        renderPhaseRows(registryPhasesOf(e.target.value || (di.lastResult ? di.lastResult.detectedId : null))));
+    modal.querySelector('.di-cycle').addEventListener('change', e => {
+        renderPhaseRows(registryPhasesOf(e.target.value || (di.lastResult ? di.lastResult.detectedId : null)));
+        renderMethodHelp();
+    });
+    modal.querySelector('.di-method').addEventListener('change', () => {
+        renderPhaseRows(registryPhasesOf(currentEffectiveId()));
+        renderMethodHelp();
+    });
 
     // ── カスタムモード（時間-車速の貼り付け） ──
     const cycleSelectEl = modal.querySelector('.di-cycle');
@@ -4784,6 +4965,7 @@ function showDriveIndexModal() {
 
     // 再計算
     modal.querySelector('.di-recompute').addEventListener('click', async () => {
+        di.calculationMethod = selectedMethod();
         di.cycleId = modal.querySelector('.di-cycle').value || null;
         di.channels = selectedChannels();
         di.autoAlign = modal.querySelector('.di-auto-align').checked;
@@ -7664,27 +7846,8 @@ async function exportReportHTML() {
     }
 
     // ── Drive Index（計算済みのときだけ）──
-    let diHtml = '';
     const diStatus = typeof getDriveIndexResultState === 'function' ? getDriveIndexResultState() : { status: 'current' };
-    const diResults = diStatus.status === 'current' ? (state.driveIndex.results || []).filter(r => r.result) : [];
-    if (diStatus.status === 'stale') diHtml = `<h2>Drive Index</h2><p>未更新：${esc(diStatus.reason || '条件が変更されています。再計算してください。')}</p>`;
-    if (diResults.length) {
-        const metrics = [
-            ['iwr', 'IWR [%]'], ['rmsse', 'RMSSE [km/h]'], ['ascr', 'ASCR [%]'], ['dr', 'DR [%]'],
-            ['er', 'ER [%]'], ['eer', 'EER [%]'], ['distanceKm', '距離 [km]'],
-            ['fuelL', '燃料 [L]'], ['fuelKmPerL', '燃費 [km/L]'], ['fuelLper100km', '燃費 [L/100km]'],
-        ];
-        diHtml = `<h2>Drive Index（${esc(diResults[0].cycleName || '')}）</h2>`
-            + diResults.filter(r => r.warning).map(r => `<p>${esc(r.fileName)}：${esc(r.warning)}</p>`).join('')
-            + `<table><thead><tr><th>指標</th>`
-            + diResults.map(r => `<th>${esc(r.fileName)}（${r.role}）</th>`).join('')
-            + `</tr></thead><tbody>`
-            + metrics.map(([key, label]) =>
-                `<tr><td>${esc(label)}</td>`
-                + diResults.map(r => `<td class="num">${fmtNum(r.result.total?.[key])}</td>`).join('')
-                + `</tr>`).join('')
-            + `</tbody></table>`;
-    }
+    const diHtml = buildDriveIndexReportHtml(state.driveIndex, diStatus, fmtNum);
 
     // ── Custom RAM ──
     let ramHtml = '';
@@ -7938,6 +8101,7 @@ function collectSettings() {
         fileColors: state.fileColors,
         // ドライビングインデックス設定（results/lastResultは保存しない＝再計算で得られる）
         driveIndex: {
+            calculationMethod: driveCalculationMethod(state.driveIndex.calculationMethod),
             channels:       state.driveIndex.channels,
             cycleId:        state.driveIndex.cycleId,
             phaseOverride:  state.driveIndex.phaseOverride,
@@ -8652,6 +8816,7 @@ function applySettings(rawSettings) {
     // ドライビングインデックス設定を復元（lastResultは保存していないので再計算で得る）
     if (s.driveIndex) {
         const d = s.driveIndex;
+        state.driveIndex.calculationMethod = driveCalculationMethod(d.calculationMethod);
         if (d.channels)      state.driveIndex.channels      = d.channels;
         if (d.cycleId !== undefined) {
             // 孤立ID対策: 復元先が内蔵レジストリにも復元済みカスタムモードにも無ければ、
