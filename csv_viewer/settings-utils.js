@@ -22,7 +22,7 @@
         return root.DriveIndex.LEGACY_CYCLE_ID;
     }
     // プレーンオブジェクトであるべきキー
-    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights', 'sidebarCollapsed', 'comparison', 'importSettings', 'inspection'];
+    const OBJECT_KEYS = ['timeUnitOverrides', 'channelAliases', 'yRanges', 'fileColors', 'gridHeights', 'sidebarCollapsed', 'comparison', 'importSettings', 'inspection', 'eventOptions'];
 
     /**
      * 保存済み設定を現行スキーマに揃える。

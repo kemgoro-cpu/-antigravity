@@ -54,7 +54,7 @@
         bottom.innerHTML = `<div class="compare-overview-heading"><span>全体ナビゲーター <small id="compare-overview-label"></small></span><span id="compare-range-label"></span></div><div id="compare-overview-plot"><canvas id="compare-overview-canvas" height="42"></canvas><div id="compare-overview-window"></div></div><div class="compare-range-inputs"><label>開始 <input id="compare-range-start" type="number" step="any" aria-label="表示区間の開始秒"> s</label><label>終了 <input id="compare-range-end" type="number" step="any" aria-label="表示区間の終了秒"> s</label><button id="compare-range-go" class="btn-secondary">表示</button><button id="compare-range-all" class="btn-secondary">全体</button></div>`;
         main.appendChild(bottom);
         const action = document.createElement('div'); action.id = 'compare-selection'; action.className = 'compare-selection hidden';
-        action.innerHTML = `<strong id="compare-selection-label"></strong><span class="compare-selection-help">選択しただけでは解析しません</span><button data-range-action="zoom">拡大</button><button data-range-action="compare">区間比較</button><button data-range-action="stats">統計</button><button data-range-action="event">イベント登録</button><button data-range-action="note">メモ</button><button data-range-action="copy">画像コピー</button><button data-range-action="close" aria-label="区間選択を解除">×</button>`;
+        action.innerHTML = `<strong id="compare-selection-label"></strong><span class="compare-selection-help">選択しただけでは解析しません</span><button data-range-action="zoom">拡大</button><button data-range-action="compare">区間比較</button><button data-range-action="stats">統計</button><button data-range-action="note" title="選択区間に説明を付けて記録します">メモ</button><button data-range-action="copy">画像コピー</button><button data-range-action="close" aria-label="区間選択を解除">×</button>`;
         bar.after(action);
         const filters = document.createElement('div'); filters.className = 'compare-channel-filters';
         filters.innerHTML = `<select id="compare-channel-filter" aria-label="チャンネルの絞り込み"><option value="all">すべて</option><option value="selected">表示中</option><option value="common">全ファイル共通</option><option value="unmapped">未対応あり</option><option value="favorite">お気に入りセット</option></select><button id="compare-alias-edit" class="btn-secondary" title="検索用の別名を登録">検索別名</button>`;
@@ -204,7 +204,6 @@
                 case 'zoom': zoom(selection); break;
                 case 'compare': setting().analysis.scope = 'selection'; persistAnalysis(); syncAnalysisContext(); api.save(); setPane('results'); await computeResults(); break;
                 case 'stats': setting().analysis.scope = 'selection'; persistAnalysis(); syncAnalysisContext(); api.stats(); api.save(); break;
-                case 'event': s.events = { expr: '手動選択区間', intervals: [...s.events.intervals, { t0: selection[0], t1: selection[1] }] }; api.render(); api.save(); api.success('選択区間をイベントとして登録しました'); break;
                 case 'note': setting().analysis.scope = 'selection'; persistAnalysis(); syncAnalysisContext(); api.save(); setPane('notes'); $('compare-note-text').focus(); break;
                 case 'copy': zoom(selection); await new Promise(requestAnimationFrame); await api.copy(); break;
                 case 'close': selection = null; persistAnalysis(); action.classList.add('hidden'); intervalChanged(); api.clearMeasure(); syncAnalysisContext(); change(); break;

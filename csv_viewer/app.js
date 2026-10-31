@@ -790,7 +790,7 @@ function parseExprToAST(expr) {
  * 各ノードの評価結果はFloat32Array（配列全体）で返す。
  * これにより時系列関数（integral, diff, mavg, delay）が実装できる。
  */
-function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
+function evaluateAST(ast, getArray, timeData, len, getCrossRef, options = {}) {
     // 定数 → 全要素同じ値の配列を返す
     function fillConst(v) {
         const arr = new Float32Array(len);
@@ -801,11 +801,15 @@ function evaluateAST(ast, getArray, timeData, len, getCrossRef) {
     // 二項演算を要素ごとに適用。
     // 比較・論理演算の結果は 1（真）/ 0（偽）。どちらかの入力が NaN の点は
     // NaN のまま伝播させる（欠損を「偽」と混同させない。イベント検出側は
-    // NaN を偽として扱う）
+    // 判定不能として区間を区切る）
     function binop(op, a, b) {
         const out = new Float32Array(len);
+        // Event conditions cannot turn an unavailable/non-finite operand into true/false.
+        // Keep the established Custom RAM and time-series calculation behavior by default.
+        const finiteCondition = options.strictFinite === true && ['>', '<', '>=', '<=', '==', '!=', '&&', '||'].includes(op);
         for (let i = 0; i < len; i++) {
             const x = a[i], y = b[i];
+            if (finiteCondition && (!Number.isFinite(x) || !Number.isFinite(y))) { out[i] = NaN; continue; }
             switch (op) {
                 case '+': out[i] = x + y; break;
                 case '-': out[i] = x - y; break;
@@ -1392,6 +1396,14 @@ const dom = {
     measureBtn: $('measure-mode-btn'),
     eventExpr:      $('event-expr'),
     eventDetectBtn: $('event-detect-btn'),
+    eventClearBtn:  $('event-clear-btn'),
+    eventMinDuration: $('event-min-duration'),
+    eventReleaseExpr: $('event-release-expr'),
+    eventHoldoff:   $('event-holdoff'),
+    eventMergeGap:  $('event-merge-gap'),
+    eventMaxSampleGap: $('event-max-sample-gap'),
+    eventPreSeconds: $('event-pre-seconds'),
+    eventPostSeconds: $('event-post-seconds'),
     eventValidation: $('event-validation'),
     eventSummary:   $('event-summary'),
     eventList:      $('event-list'),
@@ -1908,6 +1920,7 @@ function handleFiles(files, options = {}) {
         else showError(`未対応の形式です: ${f.name}`, 'CSV または TRN ファイルをアップロードしてください。');
     });
     if (!supported.length) return;
+    clearEvents();
     // Capture defaults once; concurrent reads cannot change another file's settings.
     const defaults = window.CSVImportPreview?.getOptions();
     const review = options.review || window.CSVImportPreview?.collectSettings().reviewBeforeLoad;
@@ -2303,6 +2316,7 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     const hasMain = Object.values(state.files).some(f => f.role === 'main');
                     const role    = hasMain ? 'sub' : 'main';
 
+                    clearEvents();
                     state.files[fileId] = {
                         name: fileName, shortName, columns, timeData,
                         importOptions: { ...headerHints },
@@ -2756,6 +2770,7 @@ function applyTimeScale(fileRecord, scale, source, unit, note) {
     const needsDataChange = Math.abs(ratio - 1) > 1e-12;
 
     if (needsDataChange && fileRecord.timeData) {
+        clearEvents();
         for (let i = 0; i < fileRecord.timeData.length; i++) {
             fileRecord.timeData[i] *= ratio;
         }
@@ -2928,6 +2943,7 @@ async function setMainFile(newMainId) {
     const oldMainId = getMainFileId();
     const oldMain = state.files[oldMainId], newMain = state.files[newMainId];
     if (oldMainId === newMainId || !newMain) return;
+    clearEvents();
 
     // Resolve while the old roles/mappings still apply. The new reference may use
     // a different physical column name for the same signal (Pressure -> Press_A).
@@ -3027,6 +3043,7 @@ async function removeFile(fileId) {
         : 'このファイルを比較と自動復元から外します。操作履歴もリセットされます。元のファイルは削除されません。';
     if (!await confirmDestructiveAction(`「${file.name}」を外しますか？`, detail, 'ファイルを外す')) return;
     if (state.files[fileId] !== file) return;
+    clearEvents();
     const wasMain = state.files[fileId]?.role === 'main';
     delete state.files[fileId];
     delete state.fileColors[fileId];
@@ -3453,6 +3470,7 @@ function hasCrossFileCustomRAMs() {
  * クロスファイルRAMが1つも無ければ再計算は不要（無駄な計算を避ける）。
  */
 async function applyOffsetChange() {
+    clearEvents();
     if (hasCrossFileCustomRAMs()) {
         await recomputeCustomRAMs();
     }
@@ -3466,7 +3484,7 @@ async function applyOffsetChange() {
  * @param {string} expr - 計算式
  * @param {object} fileRecord - 対象ファイル（メインでもサブでも可）
  */
-function computeCustomExpr(expr, fileRecord) {
+function computeCustomExpr(expr, fileRecord, options = {}) {
     const td = fileRecord.timeData;
     const len = td.length;
     const ast = parseExprToAST(expr);
@@ -3510,7 +3528,7 @@ function computeCustomExpr(expr, fileRecord) {
         return out;
     };
 
-    return evaluateAST(ast, getArray, td, len, getCrossRef);
+    return evaluateAST(ast, getArray, td, len, getCrossRef, options);
 }
 
 async function addCustomRAM(name, expr, unit = '') {
@@ -3533,6 +3551,7 @@ async function addCustomRAM(name, expr, unit = '') {
     }
 
     // 式で参照されるカラム名を取得
+    clearEvents();
     const refNames = extractExprNames(expr);
     // ファイル間参照（s1:Name等）のカラム名も取得
     const crossRefs = extractCrossRefs(expr);
@@ -3613,6 +3632,7 @@ async function editCustomRAM(id, newExpr, newUnit) {
     if (!newExpr) return false;
     // newUnit 未指定（undefined/null）なら既存単位を維持する
     const unit = String(newUnit != null ? newUnit : (cr.unit || '')).trim();
+    clearEvents();
 
     // 新しい式が参照するカラムを全ファイルにロード（addCustomRAM と同じ手順）
     const refNames  = extractExprNames(newExpr);
@@ -3662,6 +3682,7 @@ async function editCustomRAM(id, newExpr, newUnit) {
 function removeCustomRAM(id) {
     const idx = state.customRAMs.findIndex(c => c.id === id);
     if (idx < 0) return;
+    clearEvents();
 
     const name = state.customRAMs[idx].name;
     state.customRAMs.splice(idx, 1);
@@ -3688,6 +3709,7 @@ function removeCustomRAM(id) {
 }
 
 async function recomputeCustomRAMs() {
+    clearEvents();
     if (state.customRAMs.length === 0) return;
 
     // 全ファイルから既存のCustom RAMカラムを削除
@@ -5177,7 +5199,7 @@ const _validateDebounce = () => {
  *   text … 表示メッセージ（プレビュー統計 or エラー文）
  *   cls  … 付与するCSSクラス（''=なし / 'error' / 'preview'）
  */
-function evaluateExprForValidation(expr) {
+function evaluateExprForValidation(expr, options = {}) {
     expr = String(expr || '').trim();
     // 空欄は「まだ何も入力していない」状態。エラー扱いせず追加は許可する
     if (!expr) return { ok: true, text: '', cls: '' };
@@ -5266,6 +5288,8 @@ function evaluateExprForValidation(expr) {
         return { ok: false, text: unique.join(' / '), cls: 'error' };
     }
 
+    // イベントは全欠損も「判定不能」として集計する。評価は検出時の一度だけ行う。
+    if (options.preview === false) return { ok: true, text: '', cls: '' };
     // 4. 計算結果プレビュー（エラーがなければ）
     try {
         const vals = computeCustomExpr(expr, mainFile);
@@ -6124,6 +6148,7 @@ function getActiveGroups() {
 let _lastAutoRow = null;
 
 function renderChart() {
+    ensureEventsCurrent();
     comparisonWorkspace?.schedule();
     dataInspector?.schedule();
     if (!state.chart) initChart();
@@ -6354,25 +6379,31 @@ function renderChart() {
         }
     });
 
-    // イベント検出結果の区間ハイライト（markArea）を各グリッドに重ねる
+    // 検出結果は赤、手動の選択区間は青。結合したイベントの解除中は赤く塗らない。
     const selectedInterval = comparisonWorkspace?.selectionRange();
-    const highlightedIntervals = [...state.events.intervals];
-    if (selectedInterval) highlightedIntervals.push({ t0: selectedInterval[0], t1: selectedInterval[1] });
-    if (highlightedIntervals.length) {
-        const areaData = highlightedIntervals.map(iv => [{ xAxis: iv.t0 }, { xAxis: iv.t1 }]);
+    const highlights = [
+        { id: 'event-area', intervals: state.events.intervals.flatMap(iv => iv.segments || [iv]), color: EVENT_AREA_COLOR, lineColor: '#ef4444' },
+        { id: 'selection-area', intervals: selectedInterval ? [{ t0: selectedInterval[0], t1: selectedInterval[1] }] : [], color: 'rgba(59,130,246,0.17)', lineColor: '#3b82f6' },
+    ];
+    for (const highlight of highlights) {
+        if (!highlight.intervals.length) continue;
+        const areaData = highlight.intervals.filter(iv => iv.t1 > iv.t0).map(iv => [{ xAxis: iv.t0 }, { xAxis: iv.t1 }]);
+        const pointData = highlight.intervals.filter(iv => iv.t1 === iv.t0).map(iv => ({ xAxis: iv.t0 }));
         order.forEach((groupId, gi) => {
             const yIdxMap = yAxisIndexByGroup.get(groupId);
             const yAxisIndex = yIdxMap && yIdxMap.size ? yIdxMap.values().next().value : 0;
             series.push({
-                id: `event-area-${gi}`,
+                id: `${highlight.id}-${gi}`,
                 type: 'line', data: [],
                 xAxisIndex: gi, yAxisIndex,
                 silent: true, animation: false,
                 markArea: {
                     silent: true, animation: false,
-                    itemStyle: { color: EVENT_AREA_COLOR },
+                    label: { show: false }, itemStyle: { color: highlight.color },
                     data: areaData,
                 },
+                markLine: { silent: true, animation: false, symbol: 'none', label: { show: false },
+                    lineStyle: { color: highlight.lineColor, width: 2, type: 'solid' }, data: pointData },
             });
         });
     }
@@ -7083,38 +7114,93 @@ function buildStatsTableHTML(t0, t1) {
 
 
 // ─────────────────────────────────────────────────────────────
-// イベント検出: 条件式（例 Actual_Speed > 120）を式パーサで評価し、
-// 真（≠0）が連続する区間をメインファイルから抽出して一覧表示・
-// チャート上に markArea でハイライトする。行クリックで区間へズーム。
+// イベント検出: 基準ログ全体を明示操作で評価する。条件だけ保存し、結果は保存しない。
 // ─────────────────────────────────────────────────────────────
-
-// 区間ハイライトの塗り色（canvas描画のため実値。薄い赤は両テーマで見える）
 const EVENT_AREA_COLOR = 'rgba(239,68,68,0.14)';
-// 検出区間の上限。ノイズ的な条件（例 X != 0）で数万区間できると
-// markAreaの描画とリスト構築が固まるため打ち切る
 const EVENT_MAX_INTERVALS = 300;
+const EVENT_DEFAULTS = Object.freeze({ releaseExpr: '', minDuration: 0, holdoff: 0,
+    mergeGap: 0, maxSampleGap: 0, preSeconds: 1, postSeconds: 1 });
+const eventNumberInputs = {
+    minDuration: dom.eventMinDuration, holdoff: dom.eventHoldoff,
+    mergeGap: dom.eventMergeGap, maxSampleGap: dom.eventMaxSampleGap,
+    preSeconds: dom.eventPreSeconds, postSeconds: dom.eventPostSeconds,
+};
+let eventGeneration = 0;
+let eventBusy = false;
+let eventResultSnapshot = null;
 
-/**
- * 真（NaN以外かつ≠0）が連続する区間を抽出する。
- * @returns {{list: {t0:number, t1:number}[], truncated: boolean}}
- */
-function extractTrueIntervals(timeData, vals, cap) {
-    const list = [];
-    let startIdx = null;
-    let truncated = false;
-    const push = (endIdx) => list.push({ t0: timeData[startIdx], t1: timeData[endIdx] });
-    for (let i = 0; i < vals.length; i++) {
-        const v = vals[i];
-        const on = !Number.isNaN(v) && v !== 0;
-        if (on && startIdx === null) startIdx = i;
-        if (!on && startIdx !== null) {
-            push(i - 1);
-            startIdx = null;
-            if (list.length >= cap) { truncated = true; break; }
+function eventInputSignature() {
+    return JSON.stringify([dom.eventExpr.value, dom.eventReleaseExpr.value,
+        ...Object.values(eventNumberInputs).map(input => input.value)]);
+}
+
+/** Settings may hold an unfinished numeric input; don't silently turn it into a valid condition. */
+function collectEventOptions() {
+    const options = { releaseExpr: dom.eventReleaseExpr.value };
+    for (const [key, input] of Object.entries(eventNumberInputs)) {
+        const value = Number(input.value);
+        options[key] = input.value.trim() !== '' && Number.isFinite(value) && value >= 0 ? value : input.value;
+    }
+    return options;
+}
+
+function applyEventOptions(saved) {
+    const options = saved && typeof saved === 'object' ? saved : {};
+    dom.eventReleaseExpr.value = typeof options.releaseExpr === 'string' ? options.releaseExpr : '';
+    for (const [key, input] of Object.entries(eventNumberInputs)) {
+        const value = options[key];
+        input.value = typeof value === 'number' && Number.isFinite(value) && value >= 0
+            ? value : (typeof value === 'string' ? value : EVENT_DEFAULTS[key]);
+    }
+}
+
+function readEventOptions() {
+    const options = collectEventOptions();
+    for (const [key, input] of Object.entries(eventNumberInputs)) {
+        if (typeof options[key] !== 'number' || !Number.isFinite(options[key]) || options[key] < 0) {
+            throw new Error(`${input.closest('label')?.firstChild.textContent.trim() || key}は0以上の有限の秒数で指定してください。`);
         }
     }
-    if (startIdx !== null && !truncated) push(vals.length - 1);
-    return { list, truncated };
+    return { ...options, releaseExpr: options.releaseExpr.trim(),
+        ...CSVEvents.normalizeOptions({ ...options, maxResults: EVENT_MAX_INTERVALS }) };
+}
+
+/** Constant-time with respect to rows: watch data identities and source metadata, never rescan a log during drawing. */
+function captureEventSource() {
+    const refs = [];
+    const files = Object.entries(state.files).map(([id, file]) => {
+        refs.push(file, file.timeData);
+        const columns = file.columns.map(col => {
+            if (col.isCustom) refs.push(file.colData[col.id]);
+            return [col.id, col.name, !!col.isCustom];
+        });
+        const td = file.timeData;
+        return [id, file.role, file.offset, file.headerInfo?.timeScale, td?.length,
+            td?.[0], td?.[td.length - 1], columns];
+    });
+    return { refs, metadata: JSON.stringify([files, state.customRAMs, state.channelAliases]) };
+}
+
+function sameEventSource(a, b) {
+    return a.metadata === b.metadata && a.refs.length === b.refs.length
+        && a.refs.every((ref, i) => ref === b.refs[i]);
+}
+
+function ensureEventsCurrent() {
+    if (!eventResultSnapshot) return false;
+    if (eventResultSnapshot.input !== eventInputSignature()
+        || !sameEventSource(eventResultSnapshot.source, captureEventSource())) {
+        clearEvents(false);
+        dom.eventSummary.textContent = '条件または元データが変わりました。「検出」で再計算してください。';
+        return true;
+    }
+    return false;
+}
+
+// Existing debug consumers can still inspect the simple, no-duration case.
+function extractTrueIntervals(timeData, vals, cap = EVENT_MAX_INTERVALS) {
+    const result = CSVEvents.detect(timeData, vals, null, { maxResults: cap });
+    return { list: result.intervals, truncated: result.truncated };
 }
 
 function setEventValidation(text, cls) {
@@ -7122,84 +7208,190 @@ function setEventValidation(text, cls) {
     dom.eventValidation.className = 'custom-ram-validation' + (cls ? ' ' + cls : '');
 }
 
-/** 検出結果とハイライトをすべて消す */
+function updateEventButtons() {
+    dom.eventDetectBtn.disabled = eventBusy;
+    dom.eventDetectBtn.textContent = eventBusy ? '検出中…' : '検出';
+    dom.eventClearBtn.disabled = !eventBusy && !state.events.intervals.length;
+    dom.eventList.setAttribute('aria-busy', String(eventBusy));
+}
+
+/** Clear only derived results; keep the conditions and the independent blue selection. */
 function clearEvents(rerender = true) {
+    eventGeneration++;
     const had = state.events.intervals.length > 0;
+    eventBusy = false;
+    eventResultSnapshot = null;
     state.events = { expr: '', intervals: [] };
     dom.eventSummary.textContent = '';
-    dom.eventList.innerHTML = '';
+    dom.eventList.replaceChildren();
     setEventValidation('', '');
+    updateEventButtons();
     if (rerender && had && state.chart && state.numGrids > 0) renderChart();
 }
 
-/** 条件式を評価してイベント区間を検出し、一覧とハイライトを更新する */
 async function detectEvents() {
+    clearEvents();
     const expr = dom.eventExpr.value.trim();
-    if (!expr) { clearEvents(); return; }
-    const mainFile = getMainFile();
-    if (!mainFile) { setEventValidation('ファイルを読み込んでください', 'error'); return; }
-
-    // 参照カラムをロードしてから検証・評価する（未ロード列はNaN扱いになるため）
-    const mainFileId = getMainFileId();
+    if (!expr) { setEventValidation('開始条件を入力してください。', 'error'); return; }
+    const mainFile = getMainFile(), mainFileId = getMainFileId();
+    if (!mainFile) { setEventValidation('ファイルを読み込んでください。', 'error'); return; }
+    let options;
+    try { options = readEventOptions(); }
+    catch (error) { setEventValidation(error.message, 'error'); return; }
+    const expressions = [expr, options.releaseExpr].filter(Boolean);
+    for (const expression of expressions) {
+        const validation = evaluateExprForValidation(expression, { preview: false });
+        if (!validation.ok) { setEventValidation(validation.text, 'error'); return; }
+    }
+    const generation = eventGeneration, input = eventInputSignature(), source = captureEventSource();
+    const current = () => generation === eventGeneration && input === eventInputSignature()
+        && sameEventSource(source, captureEventSource()) && getMainFile() === mainFile;
+    eventBusy = true;
+    updateEventButtons();
+    dom.eventSummary.textContent = '基準ログ全体を検出中です。';
     try {
-        await loadColumnsForFile(mainFileId, extractExprNames(expr));
-    } catch (e) { /* ロード失敗は検証エラーとして下で表面化する */ }
-
-    const v = evaluateExprForValidation(expr);
-    if (!v.ok) { setEventValidation(v.text, 'error'); return; }
-    setEventValidation('', '');
-
-    const vals = computeCustomExpr(expr, mainFile);
-    const { list, truncated } = extractTrueIntervals(mainFile.timeData, vals, EVENT_MAX_INTERVALS);
-    state.events = { expr, intervals: list };
-    renderEventList(truncated);
-    renderChart();
-    saveSettings();
+        const loads = [loadColumnsForFile(mainFileId, [...new Set(expressions.flatMap(extractExprNames))])];
+        const subIds = getSubFileIds();
+        for (const ref of expressions.flatMap(extractCrossRefs)) {
+            const id = subIds[parseInt(ref.fileKey.slice(1), 10) - 1];
+            if (id) loads.push(loadColumnsForFile(id, [ref.name]));
+        }
+        await Promise.all(loads);
+        if (!current()) return;
+        const required = expressions.flatMap(expression => extractExprNames(expression).map(name => [mainFile, name]));
+        for (const ref of expressions.flatMap(extractCrossRefs)) {
+            required.push([state.files[subIds[parseInt(ref.fileKey.slice(1), 10) - 1]], ref.name]);
+        }
+        for (const [file, name] of required) {
+            const column = file?.columns.find(col => col.name === name);
+            if (!column || !file.colData[column.id]) {
+                throw new Error(`「${name}」の読み込みが完了していません。キャンセルまたは読み込み失敗を確認し、再検出してください。`);
+            }
+        }
+        const values = computeCustomExpr(expr, mainFile, { strictFinite: true });
+        const releaseValues = options.releaseExpr ? computeCustomExpr(options.releaseExpr, mainFile, { strictFinite: true }) : null;
+        const result = CSVEvents.detect(mainFile.timeData, values, releaseValues, options);
+        if (!current()) return;
+        if (result.reason) {
+            dom.eventSummary.textContent = '';
+            setEventValidation(result.reason, 'error');
+            return;
+        }
+        state.events = { ...result, expr, releaseExpr: options.releaseExpr, options,
+            scope: 'main-log', fileName: mainFile.name, evaluated: true };
+        eventResultSnapshot = { input, source: captureEventSource() };
+        renderEventList();
+        renderChart();
+        saveSettings();
+    } catch (error) {
+        if (current()) {
+            dom.eventSummary.textContent = '';
+            setEventValidation(`検出できませんでした: ${error.message || error}`, 'error');
+        }
+    } finally {
+        if (generation === eventGeneration) {
+            eventBusy = false;
+            // Metadata-only changes may bypass input listeners while a file read is pending.
+            if (!current()) {
+                clearEvents();
+                dom.eventSummary.textContent = '条件または元データが変わりました。「検出」で再計算してください。';
+            }
+            updateEventButtons();
+        }
+    }
 }
 
-/** イベント一覧（サマリ行+区間リスト）を再構築する */
-function renderEventList(truncated) {
-    const { intervals } = state.events;
-    dom.eventList.innerHTML = '';
-
-    if (!intervals.length) {
-        dom.eventSummary.textContent = '条件を満たす区間はありません';
-        return;
+function eventTime(value) { return Number.isFinite(value) ? `${Number(value.toFixed(3))} s` : '不明'; }
+function eventEndLabel(iv) {
+    if (iv.endReason === 'missing') return `欠損で中断（${eventTime(iv.boundaryAt)}・実際の終了は不明）`;
+    if (iv.endReason === 'gap') return `サンプル間隔超過で中断（実際の終了は不明）`;
+    if (iv.endReason === 'end-of-data') return 'ログ末尾で継続中（実際の終了は不明）';
+    return Number.isFinite(iv.releaseAt) ? `解除を確認 ${eventTime(iv.releaseAt)}` : '終了';
+}
+function eventDetails(iv) {
+    const segments = iv.segments || [iv];
+    const segmentCount = iv.segmentCount ?? segments.length;
+    const details = [`確定 ${eventTime(iv.confirmedAt ?? iv.t0)}`];
+    if (iv.openStart) details.push('開始以前は不明');
+    details.push(eventEndLabel(iv));
+    if (segmentCount > 1) {
+        details.push(`${segmentCount}区間を結合・外側の幅 ${eventTime(iv.t1 - iv.t0)}（連続時間ではありません）`);
+        if (segments.length) details.push('赤い範囲: ' + segments.slice(0, 5).map(s => `${eventTime(s.t0)}〜${eventTime(s.t1)}`).join(' / ')
+            + (segments.length > 5 ? `（詳細は先頭5区間・赤帯は${segments.length}区間）` : ''));
+    } else {
+        details.push(`観測した幅 ${eventTime(iv.t1 - iv.t0)}`);
     }
-    dom.eventSummary.innerHTML =
-        `${intervals.length}件${truncated ? `（上限${EVENT_MAX_INTERVALS}件で打ち切り）` : ''}　`
-        + `<button type="button" id="event-clear-btn" class="event-clear-btn">クリア</button>`;
-    dom.eventSummary.querySelector('#event-clear-btn')
-        .addEventListener('click', () => { dom.eventExpr.value = state.events.expr; clearEvents(); });
+    if (iv.segmentsTruncated) details.push(`赤帯は${segments.length}/${segmentCount}区間のみ（表示上限）`);
+    return details.join(' / ');
+}
 
-    intervals.forEach((iv, i) => {
+function eventSummaryText() {
+    const event = state.events;
+    const total = event.totalCount ?? event.intervals.length;
+    const parts = [`基準ログ全体: ${total}件`];
+    if (event.truncated) parts.push(`全件を検出し、一覧・赤い範囲は先頭${EVENT_MAX_INTERVALS}件のみ表示`);
+    if (event.segmentsTruncated) parts.push(`赤帯は表示上限により${event.retainedSegmentCount}区間のみ表示（検出数は全件集計）`);
+    if (event.unknownCount) parts.push(`判定不能 ${event.unknownCount}点（条件の欠損・非有限値。時間は推定しません）`);
+    if (event.gapCount) parts.push(`サンプル間隔超過 ${event.gapCount}箇所`);
+    if (event.suppressedCount) parts.push(`再検出待ちで除外 ${event.suppressedCount}点`);
+    if (!total) parts.push('最低継続と解除条件を満たす区間はありません');
+    return parts.join('。');
+}
+
+function renderEventList() {
+    dom.eventList.replaceChildren();
+    dom.eventSummary.textContent = eventSummaryText();
+    state.events.intervals.forEach((iv, index) => {
         const li = document.createElement('li');
         li.className = 'event-item';
-        li.innerHTML = `<span class="event-idx">${i + 1}</span>`
-            + `<span class="event-range">${esc(iv.t0.toFixed(2))} – ${esc(iv.t1.toFixed(2))} s</span>`
-            + `<span class="event-dur">${esc((iv.t1 - iv.t0).toFixed(2))} s</span>`;
-        li.title = 'クリックでこの区間へズーム';
-        li.addEventListener('click', () => zoomToInterval(iv));
-        dom.eventList.appendChild(li);
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'event-jump-btn';
+        const title = `${index + 1}. ${eventTime(iv.t0)} → ${eventTime(iv.t1)}`;
+        button.innerHTML = `<span class="event-range">${esc(title)}</span>`
+            + `<span class="event-detail">${esc(eventDetails(iv))}</span>`;
+        button.title = '観測開始〜最終成立の範囲へ移動します（設定した前後余白を含む）';
+        button.setAttribute('aria-label', `${title}。${eventDetails(iv)}。この区間へ移動`);
+        button.addEventListener('click', () => zoomToInterval(iv));
+        li.appendChild(button); dom.eventList.appendChild(li);
     });
+    updateEventButtons();
 }
 
-/** 区間の前後に余白を付けてX軸ズームする */
 function zoomToInterval(iv) {
-    if (!state.chart || state.numGrids === 0) return;
-    const pad = Math.max((iv.t1 - iv.t0) * 0.3, 1);
-    // dataZoomIndex:0（X軸スライダー）を対象にする（守るべき制約: index指定必須）
-    state.chart.dispatchAction({
-        type: 'dataZoom', dataZoomIndex: 0,
-        startValue: iv.t0 - pad, endValue: iv.t1 + pad,
-    });
+    ensureEventsCurrent();
+    if (!state.chart || state.numGrids === 0 || !state.events.intervals.includes(iv)) return;
+    const times = getMainFile()?.timeData;
+    if (!times?.length) return;
+    const options = state.events.options || EVENT_DEFAULTS;
+    let start = Math.max(times[0], iv.t0 - options.preSeconds);
+    let end = Math.min(times[times.length - 1], iv.t1 + options.postSeconds);
+    if (start === end && times.length > 1) {
+        // A single observed point needs a non-zero viewport, even with zero margins.
+        let left = 0, right = times.length;
+        while (left < right) { const mid = (left + right) >>> 1; if (times[mid] < start) left = mid + 1; else right = mid; }
+        const position = left;
+        start = times[Math.max(0, position - 1)]; end = times[Math.min(times.length - 1, position + 1)];
+    }
+    state.chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, startValue: start, endValue: end });
     recordHistory();
 }
 
 dom.eventDetectBtn.addEventListener('click', detectEvents);
-dom.eventExpr.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); detectEvents(); }
+dom.eventClearBtn.addEventListener('click', () => {
+    clearEvents();
+    dom.eventSummary.textContent = '検出結果を解除しました。条件は残しています。青い選択区間は操作バーの「×」で解除できます。';
 });
+for (const input of [dom.eventExpr, dom.eventReleaseExpr, ...Object.values(eventNumberInputs)]) {
+    input.addEventListener('input', () => {
+        const had = !!state.events.evaluated || state.events.intervals.length > 0 || eventBusy;
+        clearEvents();
+        if (had) dom.eventSummary.textContent = '条件を変更しました。「検出」で再計算してください。';
+    });
+    input.addEventListener('change', () => saveSettings());
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); detectEvents(); }
+    });
+}
 
 // ─────────────────────────────────────────────────────────────
 // Undo / Redo（Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z）
@@ -7853,6 +8045,7 @@ function exportVisibleCSV() {
  * イベント検出結果を1枚の自己完結HTMLレポートとして保存する（F9）。
  */
 async function exportReportHTML() {
+    if (ensureEventsCurrent()) renderChart();
     const mainFile = getMainFile();
     if (!mainFile || state.numGrids === 0) return;
     const context = getAnalysisContext();
@@ -7860,6 +8053,7 @@ async function exportReportHTML() {
     comparisonWorkspace?.showAnalysisRange();
     await new Promise(requestAnimationFrame);
     if (mainFile !== getMainFile() || JSON.stringify(context) !== JSON.stringify(getAnalysisContext())) return showWarning('解析条件が変わりました。もう一度レポートを保存してください');
+    if (ensureEventsCurrent()) renderChart();
     const imgURL = getChartImageDataURL();
     const range = context.range;
     const [t0, t1] = [Math.min(range[0], range[1]), Math.max(range[0], range[1])];
@@ -7902,17 +8096,29 @@ async function exportReportHTML() {
             + `</tbody></table>`;
     }
 
-    // ── イベント検出結果 ──
+    // ── イベント: 解析対象の選択区間とは独立した、基準ログ全体の検出 ──
     let evHtml = '';
-    if (state.events.intervals.length) {
-        const list = state.events.intervals.slice(0, 50);
-        evHtml = `<h2>イベント検出（${esc(state.events.expr)}）: ${state.events.intervals.length}件`
-            + (state.events.intervals.length > 50 ? '（先頭50件のみ表示）' : '') + `</h2>`
-            + `<table><thead><tr><th>#</th><th>開始 [s]</th><th>終了 [s]</th><th>継続 [s]</th></tr></thead><tbody>`
-            + list.map((iv, i) =>
-                `<tr><td class="num">${i + 1}</td><td class="num">${iv.t0.toFixed(2)}</td>`
-                + `<td class="num">${iv.t1.toFixed(2)}</td><td class="num">${(iv.t1 - iv.t0).toFixed(2)}</td></tr>`).join('')
-            + `</tbody></table>`;
+    const event = state.events;
+    const evaluated = !!event.evaluated || event.intervals.length > 0;
+    const eventExpr = evaluated ? event.expr : dom.eventExpr.value.trim();
+    if (eventExpr) {
+        const options = evaluated ? (event.options || EVENT_DEFAULTS) : collectEventOptions();
+        const release = evaluated ? (event.releaseExpr || '') : dom.eventReleaseExpr.value.trim();
+        evHtml = `<h2>イベント検出</h2><p>評価範囲: 基準ログ全体（${esc(event.fileName || mainFile.name)}）。統計の解析対象とは独立しています。</p>`
+            + `<p>開始条件: <code>${esc(eventExpr)}</code> / 解除条件: <code>${esc(release || '開始条件が偽で終了')}</code></p>`
+            + `<p>最低継続: ${esc(options.minDuration)} s / 再検出待ち: ${esc(options.holdoff)} s / まとめる解除区間: ${esc(options.mergeGap)} s / `
+            + `許容サンプル間隔: ${esc(options.maxSampleGap)} s（0＝間隔の制限なし） / 移動時の余白: 前 ${esc(options.preSeconds)} s、後 ${esc(options.postSeconds)} s</p>`;
+        if (evaluated) {
+            const list = event.intervals.slice(0, 50), total = event.totalCount ?? event.intervals.length;
+            evHtml += `<p>${esc(eventSummaryText())}。レポートの一覧は先頭${list.length}件 / 全${total}件です。</p>`
+                + '<p>開始と最終成立は観測値の時刻です。確定は最低継続を初めて満たした観測時刻です。結合区間の外側の幅は連続時間ではありません。赤帯は実際に保持した区間のみを描きます。</p>'
+                + `<table><thead><tr><th>#</th><th>観測開始 [s]</th><th>最終成立 [s]</th><th>確定 [s]</th><th>状態・観測範囲</th></tr></thead><tbody>`
+                + list.map((iv, index) => `<tr><td>${index + 1}</td><td>${iv.t0.toFixed(3)}</td><td>${iv.t1.toFixed(3)}</td>`
+                    + `<td>${(iv.confirmedAt ?? iv.t0).toFixed(3)}</td><td>${esc(eventDetails(iv))}</td></tr>`).join('')
+                + '</tbody></table>';
+        } else {
+            evHtml += '<p>未評価（検出結果なし）。条件の変更・解除後は「検出」で再計算してください。</p>';
+        }
     }
 
     const html = `<!DOCTYPE html>
@@ -8125,6 +8331,7 @@ function collectSettings() {
         theme: state.theme,
         // イベント検出の条件式（区間は保存しない。次回は式だけ復元して手動で再検出）
         eventExpr: dom.eventExpr?.value || '',
+        eventOptions: collectEventOptions(),
         // Keep the legacy flag for older readers; inspection is the current source of truth.
         statsPanel: !!(dataInspector?.collectSettings().open && dataInspector.collectSettings().tab === 'stats'),
         fontScale: state.fontScale,
@@ -8231,6 +8438,8 @@ function buildPresetSettings() {
         _version: CSVSettings.SETTINGS_VERSION,
         comparison: { ...state.comparison, notes: [] },
         importSettings: window.CSVImportPreview?.collectSettings(),
+        eventExpr: dom.eventExpr.value,
+        eventOptions: collectEventOptions(),
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
         chartGroups: serializeChartGroups(),
@@ -8761,6 +8970,7 @@ function applySettings(rawSettings) {
         return;
     }
     const s = result.settings;
+    clearEvents(false);
     state.comparison = CSVCompare.cleanSettings(s.comparison);
     comparisonWorkspace?.changedSettings();
 
@@ -8782,6 +8992,7 @@ function applySettings(rawSettings) {
     // チャート表示設定を復元
     if (s.theme === 'light' || s.theme === 'dark') applyTheme(s.theme);
     if (typeof s.eventExpr === 'string' && dom.eventExpr) dom.eventExpr.value = s.eventExpr;
+    applyEventOptions(s.eventOptions);
     if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
         state.fontScale = s.fontScale;
         if (dom.fontScale) dom.fontScale.value = s.fontScale;

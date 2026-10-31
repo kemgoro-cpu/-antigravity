@@ -89,7 +89,7 @@ const { chromium } = require('playwright');
         const points = await state(() => { const d = window.__csvViewerDebug, rect = document.getElementById('chart').getBoundingClientRect(), y = rect.top + d.state.gridRegions[0].top + 60; return { x0: rect.left + d.state.chart.convertToPixel({ xAxisIndex: 0 }, 4), x1: rect.left + d.state.chart.convertToPixel({ xAxisIndex: 0 }, 8), y }; });
         await page.mouse.move(points.x0, points.y); await page.mouse.down(); await page.mouse.move(points.x1, points.y, { steps: 12 }); await page.mouse.up();
         await page.locator('#compare-selection:not(.hidden)').waitFor();
-        await page.waitForFunction(() => window.__csvViewerDebug.state.chart.getOption().series.some(s => s.id.startsWith('event-area-')));
+        await page.waitForFunction(() => window.__csvViewerDebug.state.chart.getOption().series.some(s => s.id.startsWith('selection-area-')));
         await page.locator('[data-range-action="note"]').click(); await page.locator('#compare-note-text').fill('圧力一致、状態だけ遅れ'); await page.locator('#compare-note-add').click();
         await page.waitForFunction(() => window.__csvViewerDebug.state.comparison.notes.length === 1);
         const note = await state(() => window.__csvViewerDebug.state.comparison.notes[0]); assert.ok(Math.abs(note.t0 - 4) < .2 && Math.abs(note.t1 - 8) < .2); assert.ok(note.image.startsWith('data:image/png'));

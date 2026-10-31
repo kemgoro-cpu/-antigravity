@@ -19,10 +19,12 @@ function functionSource(name) {
 
 function environment() {
     const errors = [];
+    const eventClears = [];
     const noop = () => {};
     const context = vm.createContext({
         ...U, Papa, File: class SyntheticFile {},
-        state: { files: {}, fileColors: {}, customRAMs: [], colorCtr: 0 },
+        state: { files: {}, fileColors: {}, customRAMs: [], colorCtr: 0,
+            events: { expr: 'Previous > 0', intervals: [{ t0: 0, t1: 1 }] } },
         dom: { nameRow: {}, unitRow: {} },
         SERIES_COLORS: ['#2563eb'],
         _restoreOrderById: new Map(), _origFileById: new Map(),
@@ -35,12 +37,16 @@ function environment() {
         applyPendingSettings: async () => {}, applyDeferredCrossRAMs: async () => {},
         autoGenerateFuelRAMs: async () => {}, computeDriveIndex: async () => {},
         updateUI: noop, saveSettings: noop, resetHistoryBaseline: noop,
+        clearEvents: () => {
+            eventClears.push(context.state.events);
+            context.state.events = { expr: '', intervals: [] };
+        },
         detectBitChannels: noop, console: { log: noop, warn: noop },
     });
     for (const name of ['isTrnFile', 'describeHeaderParseIssue', 'onHeaderParsed', 'loadColumnsForFile']) {
         vm.runInContext(functionSource(name), context);
     }
-    return { context, errors };
+    return { context, errors, eventClears };
 }
 
 async function load(text, extension = 'trn') {
@@ -60,6 +66,8 @@ const header = 'Time  Actual Speed  Engine RPM\ns     km/h          rpm\n';
 (async () => {
     const signed = await load(header + '0.0  0.5  500\n0.1 -0.5  500\n0.2  0.5  500');
     assert.deepEqual(signed.errors, []);
+    assert.equal(signed.eventClears.length, 1, 'accepted source data invalidates previous event results');
+    assert.deepEqual(signed.context.state.events.intervals, []);
     assert.deepEqual(Array.from(signed.file.timeData), [0, 0.1, 0.2]);
     assert.deepEqual(Array.from(signed.file.colData.f_c1), [0.5, -0.5, 0.5]);
     assert.deepEqual(Array.from(signed.file.colData.f_c2), [500, 500, 500]);
