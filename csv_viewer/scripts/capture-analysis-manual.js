@@ -67,9 +67,9 @@ async function openInspector(page, tab) {
         assert.deepEqual(remoteRequests, []);
         assert.deepEqual(samples.map(hash), sampleHashes, 'source samples are unchanged');
         fs.writeFileSync(path.join(images, 'analysis-capture-manifest.json'), JSON.stringify({
-            revision: '2026-10-30', generatedAt: new Date().toISOString(),
+            revision: '2026-10-31', generatedAt: new Date().toISOString(),
             source: 'Real application screenshots, isolated Edge, synthetic bundled logs, no image editing.',
-            sampleHashes, sourceHashes: Object.fromEntries(['app.js', 'index.html', 'data-inspector.js', 'data-quality-utils.js', 'import-preview.js', 'session-status.js'].map(file => [file, hash(path.join(root, file))])),
+            sampleHashes, sourceHashes: Object.fromEntries(['app.js', 'index.html', 'event-utils.js', 'settings-utils.js', 'data-inspector.js', 'data-quality-utils.js', 'import-preview.js', 'session-status.js'].map(file => [file, hash(path.join(root, file))])),
             shots, errors, remoteRequests,
         }, null, 2) + '\n');
         console.log(JSON.stringify({ screenshots: shots.length, samplesUnchanged: true, offline: true }));

@@ -45,7 +45,7 @@ function writeSamples() {
     });
     const page = await context.newPage();
     const errors = [], shots = [], facts = { sampleCount: 121, samplePeriodSeconds: 0.5, comparisonTimeDelaySeconds: 2, comparisonPressureIncreaseKPa: 5 };
-    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'styles.css', 'parser-utils.js', 'compare-utils.js', 'chart-options-utils.js', 'layout-utils.js', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css', 'save-workspace.js', 'save-workspace.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
+    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'event-utils.js', 'settings-utils.js', 'styles.css', 'parser-utils.js', 'compare-utils.js', 'chart-options-utils.js', 'layout-utils.js', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css', 'save-workspace.js', 'save-workspace.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
     page.on('pageerror', error => errors.push(error.stack || error.message));
     async function settle() {
         await page.mouse.move(750, 25);
@@ -71,7 +71,9 @@ function writeSamples() {
         if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.locator('#theme-toggle-btn').click();
         await capture('start', '初期画面。ファイルを選ぶ前のライトテーマ。');
 
-        await page.locator('#file-input').setInputFiles([path.join(samples, '基準_ﾛｸﾞ.csv'), path.join(samples, '比較_ﾛｸﾞ.csv')]);
+        await page.locator('#file-input').setInputFiles(path.join(samples, '基準_ﾛｸﾞ.csv'));
+        await page.waitForFunction(() => Object.keys(window.__csvViewerDebug.state.files).length === 1 && window.__csvViewerDebug.state.parseJobs.size === 0);
+        await page.locator('#file-input').setInputFiles(path.join(samples, '比較_ﾛｸﾞ.csv'));
         await page.waitForFunction(() => Object.keys(window.__csvViewerDebug.state.files).length === 2 && window.__csvViewerDebug.state.parseJobs.size === 0);
         await select('Pressure'); await select('Speed');
         await page.waitForFunction(() => window.__csvViewerDebug.state.numGrids === 2);
@@ -165,7 +167,7 @@ function writeSamples() {
         assert.deepEqual(errors, []);
         const browserErrors = await page.evaluate(() => window.__manualBrowserErrors);
         assert.deepEqual(browserErrors, []);
-        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ revision: '2026-10-30', generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png', 'navigator-panel.png', 'tolerance-nav.png'], errors, browserErrors }, null, 2) + '\n');
+        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ revision: '2026-10-31', generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png', 'navigator-panel.png', 'tolerance-nav.png'], errors, browserErrors }, null, 2) + '\n');
         console.log(JSON.stringify({ images, facts, screenshots: shots.length }, null, 2));
     } catch (error) {
         const out = path.join(root, 'tests/fixtures/generated/manual-capture');

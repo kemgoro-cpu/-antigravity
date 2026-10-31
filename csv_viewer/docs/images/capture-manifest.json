@@ -1,6 +1,6 @@
 {
-  "revision": "2026-10-30",
-  "generatedAt": "2026-10-29T23:53:42.150Z",
+  "revision": "2026-10-31",
+  "generatedAt": "2026-10-31T00:25:30.167Z",
   "viewport": {
     "width": 1400,
     "height": 1000
@@ -8,16 +8,18 @@
   "theme": "light",
   "source": "Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.",
   "sourceHashes": {
-    "index.html": "3fdda77e487c680d984994c9a38968b6bf4c6b7a9bf3080b5c33120b65ad967a",
-    "app.js": "a24cbeb208765ff0d51b7a804b59fde38a500feb991921bcc1f4764e88d3b35a",
-    "styles.css": "c8145b63a4bbe075a02e0dd2fe51dcfd2c78c6e122e3f9efb5503fdb32c49a80",
-    "parser-utils.js": "f1cd3ca58f521d530b90e1787f18d3b5227dac6c8389443ee323f33b87fad8fd",
+    "index.html": "307a8764821ae8ee3a72b1639ea42443680b6bab34fe23ada2746830b7bac42c",
+    "app.js": "31599b0f74f810978c1925ffb63fbbc37f5e45092ba8133d4cb39d01cf662ecd",
+    "event-utils.js": "2bb17ba95cc07f980ec672ead03dc881bafca465461cb061b37583169230a770",
+    "settings-utils.js": "ad59228cd476c16b784725c9306303368a5136e5f5a363c328a30f73c55ccf77",
+    "styles.css": "1d97aa2b1ca9d67d80a12af1d410623fb1032659536db1179c9d2f576eaa51ef",
+    "parser-utils.js": "51c71ecf89a6d374388d9b9bbb0e336ed1282ea73679555c62f47ff89d870baf",
     "compare-utils.js": "d915a49da74126a9a00c3600fea1bdfe3ca9ba2fbc45c0d9f4e33f76b9e75c13",
     "chart-options-utils.js": "cc979337388ff2b35f3355cdc2acde2adac08d975495b9a9604f9be269958631",
     "layout-utils.js": "8a086039297846aa100f669d42a293a17a55bf0854c6278c3a6086de4a897b39",
-    "compare-workspace.js": "ab6d8921b00edceadc3cb97a34bdc7ea3f7e580bd62510397b6e178afe974081",
+    "compare-workspace.js": "a53c6018b9d009352deff4a493b6d6d323a26c2488f2d9b3cdfb72b024c7de7b",
     "compare-workspace.css": "1a3535ee1a968f2a01d4210553909c1fa996f10b9303607a9f936c6cf50b7e55",
-    "workspace-ui.js": "dce786d3d954b90a45607138300c09ccb90d1b65fd8bf817ea2989adf17609c7",
+    "workspace-ui.js": "1714d09657da6a233682251d136336e6fe72452b30f4cdb5b6a88c888b743394",
     "workspace-ui.css": "690511b2d30aca1da5df656a06048a4fd9976831d046e9cb6806a094ecb3a987",
     "save-workspace.js": "5325a4e0184a8c100f658915efc894dde260e262775e872acb2a4f2c90c8cbdd",
     "save-workspace.css": "4a4aabcc1c11a5127680c96ef11452be791ccff494d37328b7176cd0b4ae4a91"

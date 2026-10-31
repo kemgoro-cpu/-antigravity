@@ -3,7 +3,7 @@
   "enginePriorities": {
     "updatedDate": "2026-10-31",
     "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
-    "status": "proposal",
+    "status": "partially-implemented",
     "runtimeAssessment": {
       "updatedDate": "2026-10-31",
       "basis": "qualitative code review",
@@ -18,6 +18,8 @@
           22
         ],
         "title": "欠測・補間・計算の扱いを統一",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "小〜中",
           "compute": "小〜中",
@@ -31,6 +33,8 @@
           14
         ],
         "title": "運転条件で絞り込み、全解析へ適用",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "中〜大",
           "compute": "中〜大",
@@ -44,6 +48,8 @@
           10
         ],
         "title": "イベントに継続時間・解除条件を追加",
+        "status": "complete",
+        "reviewedRevision": "d9103873f2cf79d9e66bcf0ae5ef8b14b93e9b14",
         "runtime": {
           "overall": "小〜中",
           "compute": "小〜中",
@@ -57,6 +63,8 @@
           6
         ],
         "title": "単位の確認・換算",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "小〜中",
           "compute": "小",
@@ -70,6 +78,8 @@
           7
         ],
         "title": "制御状態の帯表示",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "中",
           "compute": "小〜中",
@@ -84,6 +94,8 @@
           13
         ],
         "title": "XYの色分けと元波形への移動",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "中〜大",
           "compute": "中",
@@ -97,6 +109,8 @@
           17
         ],
         "title": "繰り返しイベントを同じ起点で比較",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "中〜大",
           "compute": "中〜大",
@@ -110,6 +124,8 @@
           18
         ],
         "title": "時間合わせの根拠・曖昧さを表示",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "中〜大",
           "compute": "大",
@@ -123,6 +139,8 @@
           35
         ],
         "title": "短いピークを残す表示",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "中",
           "compute": "中",
@@ -136,6 +154,8 @@
           12
         ],
         "title": "信号の分類・説明を整理",
+        "status": "proposal",
+        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
         "runtime": {
           "overall": "小",
           "compute": "小",
@@ -190,14 +210,14 @@
     "inPlaceCount": 36,
     "status": "proposal"
   },
-  "progressUpdated": "2026-10-30",
-  "implementationCommit": "1f969745c55d61acf986f2d0ac5e4e2d086f394a",
+  "progressUpdated": "2026-10-31",
+  "implementationCommit": "d9103873f2cf79d9e66bcf0ae5ef8b14b93e9b14",
   "statusCounts": {
-    "complete": 5,
+    "complete": 6,
     "partial": 1,
-    "pending": 49
+    "pending": 48
   },
-  "remainingCount": 50,
+  "remainingCount": 49,
   "productCount": 37,
   "proposalCount": 55,
   "rawCandidateCount": 92,

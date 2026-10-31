@@ -1,0 +1,95 @@
+{
+  "revision": "2026-10-31",
+  "generatedAt": "2026-10-31T00:25:37.463Z",
+  "source": "Real app screenshot in isolated Edge; unchanged bundled synthetic log; no image editing.",
+  "sampleHash": "8b9d170a15f3dd257ce75b488b97fe9721b7540da7e34576a2bd5a45428438e8",
+  "sourceHashes": {
+    "index.html": "307a8764821ae8ee3a72b1639ea42443680b6bab34fe23ada2746830b7bac42c",
+    "app.js": "31599b0f74f810978c1925ffb63fbbc37f5e45092ba8133d4cb39d01cf662ecd",
+    "styles.css": "1d97aa2b1ca9d67d80a12af1d410623fb1032659536db1179c9d2f576eaa51ef",
+    "event-utils.js": "2bb17ba95cc07f980ec672ead03dc881bafca465461cb061b37583169230a770",
+    "settings-utils.js": "ad59228cd476c16b784725c9306303368a5136e5f5a363c328a30f73c55ccf77",
+    "compare-workspace.js": "a53c6018b9d009352deff4a493b6d6d323a26c2488f2d9b3cdfb72b024c7de7b"
+  },
+  "screenshot": "events-panel.png",
+  "result": {
+    "intervals": [
+      {
+        "t0": 19.5,
+        "t1": 29.5,
+        "confirmedAt": 21.5,
+        "endReason": "release",
+        "openStart": false,
+        "openEnd": false,
+        "releaseAt": 30,
+        "boundaryAt": 30,
+        "segments": [
+          {
+            "t0": 19.5,
+            "t1": 29.5,
+            "confirmedAt": 21.5,
+            "endReason": "release",
+            "openStart": false,
+            "openEnd": false,
+            "releaseAt": 30,
+            "boundaryAt": 30
+          }
+        ],
+        "segmentCount": 1,
+        "segmentsTruncated": false
+      },
+      {
+        "t0": 43.5,
+        "t1": 48,
+        "confirmedAt": 45.5,
+        "endReason": "release",
+        "openStart": false,
+        "openEnd": false,
+        "releaseAt": 48.5,
+        "boundaryAt": 48.5,
+        "segments": [
+          {
+            "t0": 43.5,
+            "t1": 48,
+            "confirmedAt": 45.5,
+            "endReason": "release",
+            "openStart": false,
+            "openEnd": false,
+            "releaseAt": 48.5,
+            "boundaryAt": 48.5
+          }
+        ],
+        "segmentCount": 1,
+        "segmentsTruncated": false
+      }
+    ],
+    "totalCount": 2,
+    "acceptedCount": 2,
+    "truncated": false,
+    "retainedSegmentCount": 2,
+    "totalSegmentCount": 2,
+    "segmentsTruncated": false,
+    "unknownCount": 0,
+    "gapCount": 0,
+    "suppressedCount": 0,
+    "reason": "",
+    "expr": "Pressure > 120",
+    "releaseExpr": "Pressure <= 118",
+    "options": {
+      "releaseExpr": "Pressure <= 118",
+      "minDuration": 2,
+      "holdoff": 0,
+      "mergeGap": 0,
+      "maxSampleGap": 0,
+      "preSeconds": 1,
+      "postSeconds": 1,
+      "maxResults": 300,
+      "maxSegments": 3000
+    },
+    "scope": "main-log",
+    "fileName": "基準_ﾛｸﾞ.csv",
+    "evaluated": true
+  },
+  "errors": [],
+  "requests": []
+}

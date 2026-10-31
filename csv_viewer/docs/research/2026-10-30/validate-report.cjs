@@ -31,6 +31,8 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   assert.match(await page.locator('#engine-1 .engine-current').innerText(),/空欄・NaN/);
   assert.match(await page.locator('#engine-1 .engine-current').innerText(),/4秒の次が10秒/);
   assert.match(await page.locator('#engine-4 .engine-plan-state').innerText(),/単位検証の基本部分は実装済み/);
+  assert.match(await page.locator('#engine-3 .engine-plan-state').innerText(), /実装・検証済み/);
+  assert.match(await page.locator('#engine-3 .engine-checks').textContent(), /実装後に確認した項目/);
   assert.equal(await page.locator('.engine-gap-figure svg[role="img"][aria-label]').count(),3);
   assert.equal(await page.locator('.engine-runtime-detail').count(),10);
   assert.equal(await page.locator('.runtime-table tbody tr').count(),10);
@@ -162,7 +164,7 @@ const idsFor = status => proposals.filter(item=>statusOf(item)===status).map(ite
   await page.goto(pathToFileURL(path.join(__dirname,'report.html')).href+'#engine-6');
   assert.equal(await page.locator('#engine-6').isVisible(),true);
   assert.equal(await page.locator('#status').inputValue(),'remaining','new ranking links do not change historical filters');
-  const result={products:37,proposals:55,enginePriorities:{updatedDate:engine.reviewedDate,count:10,oldRanks:engine.items.map(item=>item.oldRanks),status:'proposal',runtimeAssessment:{...engine.runtimeAssessment,sorting:'passed',narrowTableScroll:'passed'},expansionAndPrint:'passed',uniqueAnchors:true},implementationStatus:{...statusCounts,remaining},consolidation:upgrade.consolidation.items.map(item=>({order:item.order,status:item.status})),upgradeAudit:{counts:upgrade.counts,inPlaceCount:upgrade.inPlaceCount,coverage:55,filters:'passed'},defaultView:'engine-priorities, historical remaining list',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
+  const result={products:37,proposals:55,enginePriorities:{updatedDate:engine.reviewedDate,count:10,oldRanks:engine.items.map(item=>item.oldRanks),status:'partially-implemented',completedRanks:engine.items.filter(item=>item.status==='complete').map(item=>item.rank),runtimeAssessment:{...engine.runtimeAssessment,sorting:'passed',narrowTableScroll:'passed'},expansionAndPrint:'passed',uniqueAnchors:true},implementationStatus:{...statusCounts,remaining},consolidation:upgrade.consolidation.items.map(item=>({order:item.order,status:item.status})),upgradeAudit:{counts:upgrade.counts,inPlaceCount:upgrade.inPlaceCount,coverage:55,filters:'passed'},defaultView:'engine-priorities, historical remaining list',filters:'passed',images:'loaded',internalLinks:'valid',widths:records,pageErrors:errors,externalRequests:network};
   fs.writeFileSync(path.join(__dirname,'report-validation.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));
  }finally{await browser.close();}

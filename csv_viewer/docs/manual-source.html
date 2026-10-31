@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="manual-revision" content="2026-10-30">
+<meta name="manual-revision" content="2026-10-31">
 <title>CSV Chart Viewer 操作マニュアル</title>
 <style>
 :root{--ink:#182b38;--muted:#536875;--teal:#08786e;--line:#d5e1e5;--paper:#fff;--soft:#eff7f6}
@@ -30,10 +30,10 @@ table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;margin:
 </head>
 <body>
 <header class="top"><strong>CSV Chart Viewer · 操作マニュアル</strong><a href="index.html" target="_blank" rel="noopener">ツールを開く</a><a href="docs/CSV-Chart-Viewer-Manual.pdf" download>PDFを保存</a><button id="toc-toggle" type="button" aria-controls="manual-toc" aria-expanded="false">目次</button><button id="print-manual" type="button">印刷</button></header>
-<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモを残す</a><a href="#templates">09 続き：比較条件を再利用</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
+<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモを残す</a><a href="#templates">09 続き：比較条件を再利用</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#events">11 続き：イベントの操作</a><a href="#event-rules">11 続き：時刻と詳細設定</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
 <main>
 <section class="page" id="start">
-<div class="eyebrow">Operation guide / 2026.10.30</div>
+<div class="eyebrow">Operation guide / 2026.10.31</div>
 <h1>波形を開く。<br>違いを見つけて、記録する。</h1>
 <p class="lead">CSV Chart Viewer 操作マニュアル</p>
 <span class="tag">初めて使う人から、日常の比較作業まで</span><span class="tag">図・実画面・練習用データ付き</span>
@@ -83,9 +83,9 @@ s,km/h,kPa,
 <section class="page" id="range">
 <div class="chapter"><span class="num">05</span><h2>区間選択・ズーム・計測を使い分ける</h2></div>
 <table><thead><tr><th>やりたいこと</th><th>使う操作</th><th>波形上の操作と結果</th></tr></thead><tbody><tr><td>一部分をすぐ大きく見る</td><td>ボックスズーム <kbd>B</kbd></td><td>横ドラッグ → その場で拡大。</td></tr><tr><td>範囲を決めて解析や記録をする</td><td>区間を選択・解析</td><td>横ドラッグ → 色付きの区間と操作バーが表示。</td></tr><tr><td>2つの時刻の値や時間差を読む</td><td>計測 <kbd>M</kbd></td><td>2回クリック → A / Bの値・差・区間統計を表示。</td></tr></tbody></table>
-<figure><img data-image="selection-strip.png" alt="選択した対象区間と、拡大・区間比較・統計・イベント登録・メモ・画像コピーを選べる操作バー"></figure>
+<figure><img data-image="selection-strip.png" alt="選択した対象区間と、拡大・区間比較・統計・メモ・画像コピーを選べる操作バー"></figure>
 <figure class="range-screen"><img data-image="selection.png" alt="区間を選択すると波形に背景色が付き、拡大・区間比較・統計・記録などの操作が現れる画面"><figcaption>背景色は「対象区間を選択中」の目印。色が付いただけでは、比較の実行やメモ保存はしていません。</figcaption></figure>
-<table class="table-tight"><thead><tr><th>選択後の操作</th><th>実行されること</th></tr></thead><tbody><tr><td>拡大</td><td>選択した区間へズームします。</td></tr><tr><td>区間比較</td><td>右の比較結果を開き、その区間の差を計算します。</td></tr><tr><td>統計</td><td>選択区間を解析対象にして統計を表示します。</td></tr><tr><td>イベント登録／メモ</td><td>選択区間をイベントに登録、またはメモ入力を開きます。メモは入力後に保存します。</td></tr><tr><td>画像コピー</td><td>選択区間へズームし、波形画像をクリップボードへコピーします。</td></tr><tr><td>×</td><td>選択区間を解除します。</td></tr></tbody></table>
+<table class="table-tight"><thead><tr><th>選択後の操作</th><th>実行されること</th></tr></thead><tbody><tr><td>拡大</td><td>選択した区間へズームします。</td></tr><tr><td>区間比較</td><td>右の比較結果を開き、その区間の差を計算します。</td></tr><tr><td>統計</td><td>選択区間を解析対象にして統計を表示します。</td></tr><tr><td>メモ</td><td>選択区間に説明を付けて残します。入力画面で本文を書き、保存してください。</td></tr><tr><td>画像コピー</td><td>選択区間へズームし、波形画像をクリップボードへコピーします。</td></tr><tr><td>×</td><td>青い選択区間を解除します。赤いイベントや保存済みメモは消しません。</td></tr></tbody></table>
 <div class="note"><strong>「解析対象」で区間を共通に選びます</strong>表示範囲／選択区間／全体から選び、横の開始・終了秒と時間基準を確認します。比較・統計・XY・基準CSV・メモはこの条件を使います。区間を選ぶと「選択区間」に切り替わり、別の場所へズームしても保持されます。画面内を解析したいときは「表示範囲」へ切り替えます。</div>
 </section>
 
@@ -185,11 +185,31 @@ s,km/h,kPa,
 <div class="chapter"><span class="num">11</span><h2>計算・イベント・XYを使う</h2></div>
 <div class="two"><div><h3>Custom RAM：計算チャンネル</h3><p>左の「読み込み設定・計算・イベント」で名前・単位・式を入力して「追加」。作成名には<code>@</code>が付きます。</p><pre>Pressure * 1000
 Speed / 3.6
-Pressure - s1:Pressure</pre><p class="small">例の単位は順にPa、m/s、kPa。単位欄は表示用なので、換算は式で行います。s1は比較ファイルの番号です。現在のファイル順と実際の信号名を確認します。</p><p>「式に挿入」で信号名を挿入できます。「?」で関数一覧、鉛筆で式・単位の編集、×で削除。編集時の名前は固定です。</p><p class="small">ファイル間の式は基準時刻に固定した1本を作ります。比較結果では基準固定の計算チャンネルとして比較不可になります。</p></div><div><h3>イベント：条件を満たす区間</h3><p>条件式を入力して「検出」。基準ログで評価し、最大300区間を一覧と波形に表示します。行を押すとその区間へ移動します。</p><pre>Pressure > 120
+Pressure - s1:Pressure</pre><p class="small">例の単位は順にPa、m/s、kPa。単位欄は表示用なので、換算は式で行います。s1は比較ファイルの番号です。現在のファイル順と実際の信号名を確認します。</p><p>「式に挿入」で信号名を挿入できます。「?」で関数一覧、鉛筆で式・単位の編集、×で削除。編集時の名前は固定です。</p><p class="small">ファイル間の式は基準時刻に固定した1本を作ります。比較結果では基準固定の計算チャンネルとして比較不可になります。</p></div><div><h3>イベント：条件を満たす区間</h3><p>開始条件・最低継続時間・解除条件を指定して「検出」。基準ログ全体の該当区間を探し、先頭300件までを一覧と赤い帯で表示します。<a href="#events">次ページで操作と解除方法</a>を説明します。</p><pre>Pressure > 120
 Speed > 30 && State == 1</pre><p>検出した区間は再起動で復元しないため、次回は再検出します。条件に該当することと、異常かどうかの判断は分けてください。</p><div class="note"><strong>3つの区間の違い</strong>対象区間は自分で指定。イベントは基準ログの条件式で抽出。許容差超過は基準と比較の差から抽出します。</div></div></div>
 <h3>XY：時間以外の軸で関係を見る</h3>
 <p>「解析ツール → XYプロット」でX・Yを指定します。各ファイル内の同じ時刻のX/Yを組にして描く散布図で、上下比較や差分表示の見た目をそのまま変換する機能ではありません。</p>
 <figure><img data-image="xy-panel.png" alt="XにSpeed、YにPressureを指定し、共通の解析区間を描くXYプロット"><figcaption>対象区間と元時刻／時間合わせ後は、上部の解析対象に連動します。有効点数・描画点数と間引きの有無を確認できます。単位不一致等は理由を表示します。未対応・欠損ペアは描かず、欠損数の内訳は表示しません。各ファイル最大50,000点へ間引きます。</figcaption></figure>
+</section>
+
+<section class="page" id="events">
+<div class="chapter"><span class="num">11</span><h2>イベントで、続いた現象を探す</h2></div>
+<p>左の「読み込み設定・計算・イベント → イベント検出」を開きます。自分で見つけた区間を残す場合は、区間選択後の「メモ」を使います。手動の「イベント登録」はメモへ統合しました。</p>
+<div class="detail"><figure><img data-image="events-panel.png" alt="開始条件・最低継続時間・解除条件と、検出結果を解除するボタンを備えたイベント検出欄"><figcaption>練習用の合成ログ。しきい値は説明用です。</figcaption></figure><div><ol class="steps"><li><strong>開始条件を入力</strong><p>例：<code>Pressure &gt; 120</code>。チャンネル名はログに合わせます。</p></li><li><strong>最低継続を設定</strong><p>例：2秒。その条件が実測時刻で2秒以上続いた区間だけを採用します。</p></li><li><strong>必要なら解除条件を入力</strong><p>例：<code>Pressure &lt;= 118</code>。確定後は118以下になるまで保持します。空欄なら開始条件が偽になった時に終了します。</p></li><li><strong>「検出」で計算</strong><p>基準ログ全体が対象です。画面のズームや共通の解析対象で切り詰めません。結果の行を押すと前後の余白を含めて移動します。</p></li></ol></div></div>
+<div class="note"><strong>消す場所は、色と目的で区別</strong>青い選択区間：上の選択バーの「×」。赤い検出イベント：この欄の「検出結果を解除」。後者は入力した条件を残し、選択区間や保存済みメモを消しません。メモの削除は右パネルのメモ一覧から行います。</div>
+<p class="small">条件の変更は古い結果を無効にします。入力中は自動で再検出しません。次回起動・プリセット適用では条件だけを復元し、再度「検出」します。</p>
+</section>
+
+<section class="page" id="event-rules">
+<div class="chapter"><span class="num">11</span><h2>イベントの時刻と詳細設定を読む</h2></div>
+<h3>開始と確定は、別の時刻</h3>
+<p>例えば10.0秒から条件が続き、最低継続が0.5秒なら、10.5秒以降の最初の観測点で確定します。開始は10.0秒のままです。サンプル間を補間して「10.5秒に成立した」とは決めません。確定前に開始条件が偽になれば、その短い区間は採用しません。開始と解除が同時に成立した点は、解除を優先します。</p>
+<table class="table-tight"><thead><tr><th>詳細設定</th><th>使い方と注意</th></tr></thead><tbody><tr><td>解除後、再検出を待つ</td><td>採用したイベントの解除・中断時刻から、次の開始を待つ秒数です。</td></tr><tr><td>短い解除区間をまとめる</td><td>個別に最低継続を満たしたイベントについて、解除を確認した時刻から次の開始までが短い場合に、表示上まとめます。欠損や、設定した許容サンプル間隔を超える穴はまたぎません。短い未採用パルスを集めて最低継続を満たす機能ではありません。</td></tr><tr><td>前／後の表示余白</td><td>一覧からジャンプする際の余白です。検出条件は変わりません。ログの先頭・末尾を超える分は切り詰めます。</td></tr><tr><td>許容サンプル間隔</td><td>指定秒数を超える間隔でイベントを区切ります。0は上限なしです。行ごと抜けた時間の穴も分断したい場合は、記録周期に合う正の値を指定します。</td></tr></tbody></table>
+<h3>赤い帯は「観測した範囲」</h3>
+<p>終了はイベント内で最後に観測した時刻です。解除条件が成立した時刻は別に表示します。欠損・非有限の式結果は「条件不明」として区切り、正常や解除とは扱いません。欠損後やログ先頭から始まる区間、ログ末尾まで続く区間は前後未観測を示します。</p>
+<p>結合したイベントは全体の幅と元の区間を区別します。間の途切れを含む幅を、連続成立時間とは読みません。時刻の重複・逆転・非有限値があるログは検出不可とし、並べ替えて推測しません。</p>
+<div class="note"><strong>全件数と表示件数を区別</strong>検出はログの最後まで行い、一覧と赤い帯には先頭300件までを表示します。未表示件数も案内します。結合内の赤い範囲と明細は合計3,000区間まで保持し、省略を明示します。省略部分を連続した赤い帯で埋めません。条件の見直しで対象を絞ってください。HTMLレポートには検出条件・全件数と先頭50件の結果を残し、未検出・解除済みと0件の検出結果を区別します。</div>
+<p class="small">処理は「検出」時にまとめて実行し、一覧からの移動では再計算しません。大きなログや複雑な式では時間・メモリが増えます。イベントに該当することと、エンジンの異常・原因が確定することは別です。</p>
 </section>
 
 <section class="page" id="advanced">
