@@ -5,10 +5,11 @@
         const F = root.CSVFuelMap, U = root.CSVXYUtils, s = api.state;
         const esc = api.esc, $ = id => document.getElementById(id);
         const fmt = value => Number.isFinite(value) ? Number(value.toPrecision(7)).toString() : '—';
-        const defaults = { mode: 'scatter', x: '', y: '', z: '', source: 'main', sourceName: '', mapX: 'sfc_ne', mapY: 'sfc_te', mapZ: 'sfc_g_kwh', rpmStep: 400, torqueStep: 3, colorMin: null, colorMax: null, contours: false };
+        const defaults = { mode: 'scatter', x: '', y: '', z: '', source: 'main', sourceName: '', mapX: 'sfc_ne', mapY: 'sfc_te', mapZ: 'sfc_g_kwh', rpmStep: 400, torqueStep: 3, colorMin: null, colorMax: null, mapStyle: 'lines', contourStep: 10 };
         let cfg = { ...defaults }, visible = false, expanded = false, generation = 0, importGeneration = 0, frame = null;
         let chart = null, destroyed = false, externalMap = null, pendingFile = null, pendingRows = null, pendingIdentity = null, savedExternalIdentity = null, opener = null;
-        let lastSignature = '', controlsSignature = '', lastResult = null, mapCache = null, lastCursor = null;
+        let lastSignature = '', controlsSignature = '', lastResult = null, mapCache = null, lastCursor = null, contourCache = null, contourBuildCount = 0;
+        let zoomEnabled = false, viewSignature = '', zoomRanges = [{ start: 0, end: 100 }, { start: 0, end: 100 }];
         let preparedFiles = [], renderCount = 0, cursorUpdateCount = 0, contourNotice = '', busy = false, pendingImport = false, externalStatus = '';
         const identities = new WeakMap(); let nextIdentity = 1;
         const idOf = object => { if (!object || typeof object !== 'object') return 0; if (!identities.has(object)) identities.set(object, nextIdentity++); return identities.get(object); };
@@ -28,14 +29,16 @@
           <label>CSVの形式<select id="xy-map-format"><option value="auto">自動判別</option><option value="matrix">行列（先頭行X・先頭列Y）</option><option value="long">3列（X・Y・燃費率）</option></select></label>
           <label class="xy-checkbox"><input id="xy-map-confirm-units" type="checkbox">このCSVの単位が X＝rpm、Y＝Nm、燃費率＝g/kWh であることを確認した</label>
           <div class="xy-field-pair"><button id="xy-map-apply" class="btn-primary" aria-describedby="xy-map-feedback" disabled>背景に適用</button><button id="xy-map-clear" class="btn-secondary" disabled>背景を解除</button></div><p id="xy-map-feedback" class="xy-help xy-map-feedback" role="status" aria-live="polite">CSVを選び、単位確認にチェックを入れてください。</p></div>
-          <div class="xy-field-pair"><label>色の下限 [g/kWh]<input id="xy-map-color-min" type="number" step="any" placeholder="空欄＝自動"></label><label>色の上限 [g/kWh]<input id="xy-map-color-max" type="number" step="any" placeholder="空欄＝自動"></label></div>
-          <p class="xy-help">空欄は全有効値の範囲です。範囲外は端の色で表示し、元の値は保持します。例：200〜500 g/kWh。</p>
-          <label class="xy-checkbox"><input id="xy-map-contours" type="checkbox">等高線を重ねる</label><p class="xy-help">色面は元の格子の値、等高線は隣り合う有効な格子間の補間線です。欠損セルを埋めません。動作点は燃料カット・停車も含み、回転数とトルクが非負の点を表示します。</p>
+          <label>背景の表示<select id="xy-map-style"><option value="fill">塗りつぶし</option><option value="lines">等高線のみ</option><option value="both">塗りつぶし＋等高線</option></select></label>
+          <div class="xy-field-pair"><label>燃費率の下限 [g/kWh]<input id="xy-map-color-min" type="number" step="any" placeholder="空欄＝自動"></label><label>燃費率の上限 [g/kWh]<input id="xy-map-color-max" type="number" step="any" placeholder="空欄＝自動"></label></div>
+          <p class="xy-help">色と等高線に共通の範囲です。空欄は元データ全体。例：200〜500 g/kWh。塗りつぶしの範囲外は端の色になり、元の値は保持します。</p>
+          <label>等高線の間隔 [g/kWh]<input id="xy-map-contour-step" type="number" min="0" step="any" value="10" aria-describedby="xy-contour-help"></label>
+          <p id="xy-contour-help" class="xy-help">通常10、詳細5、広く見るときは20が目安です。主要線は太線と数値で表示。等高線は有効な格子間の線形補間で、元データの精度を増やしません。欠損セルは埋めません。走行点は回転数とトルクが非負の元サンプルです。</p>
           </details><p id="xy-map-status" class="xy-help" role="status" aria-live="polite"></p></div>
-          </div><p id="xy-analysis-context" class="analysis-result-context"></p><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
+          </div><p id="xy-analysis-context" class="analysis-result-context"></p><div id="xy-map-navigation" class="xy-map-navigation hidden"><button id="xy-map-zoom-btn" class="btn-secondary" aria-pressed="false">拡大操作 OFF</button><button id="xy-map-reset-view" class="btn-secondary">全体に戻す</button><span class="xy-help">ONでホイール・ピンチ拡大、ドラッグ移動</span></div><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
           <p id="xy-cursor-status" class="xy-help" role="status"></p><p class="xy-help">波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。</p></div>`;
         document.querySelector('.compare-body').appendChild(panel);
-        const dom = Object.fromEntries(['mode', 'x-label', 'y-label', 'x-select', 'y-select', 'z-select', 'point-status', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-feedback', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-contours', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
+        const dom = Object.fromEntries(['mode', 'x-label', 'y-label', 'x-select', 'y-select', 'z-select', 'point-status', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-feedback', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-style', 'map-contour-step', 'map-zoom-btn', 'map-reset-view', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
 
         function showImportFeedback(message, error = false, reveal = false) {
             externalStatus = message;
@@ -109,7 +112,9 @@
             $('xy-map-controls').classList.toggle('hidden', cfg.mode !== 'map');
             $('xy-map-log-fields').classList.toggle('hidden', cfg.source === 'external');
             $('xy-map-external-fields').classList.toggle('hidden', cfg.source !== 'external');
-            dom['map-contours'].checked = cfg.contours;
+            $('xy-map-navigation').classList.toggle('hidden', cfg.mode !== 'map');
+            dom['map-style'].value = cfg.mapStyle;
+            dom['map-contour-step'].disabled = cfg.mapStyle === 'fill';
         }
         function sourceSignature() {
             return JSON.stringify(Object.entries(s.files).map(([fid, file]) => [fid, idOf(file), idOf(file.timeData), file.role, file.offset,
@@ -119,6 +124,22 @@
         function signature() { return JSON.stringify([cfg, api.getContext(), sourceSignature(), s.theme, idOf(externalMap)]); }
         function invalidate(clearFocus = false) { generation++; busy = false; panel.setAttribute('aria-busy', 'false'); lastSignature = ''; lastResult = null; preparedFiles = []; if (chart) chart.clear(); dom['cursor-status'].textContent = ''; if (clearFocus) api.clearFocus?.(); }
         function changed() { invalidate(true); syncMode(); api.save(); schedule(); }
+        function zoomOptions() {
+            return ['x', 'y'].map((axis, i) => ({ id: 'xy-' + axis + '-zoom', type: 'inside', [axis + 'AxisIndex']: 0, filterMode: 'none',
+                disabled: !zoomEnabled, zoomOnMouseWheel: zoomEnabled, moveOnMouseWheel: false, moveOnMouseMove: zoomEnabled,
+                preventDefaultMouseMove: zoomEnabled, ...zoomRanges[i] }));
+        }
+        function syncZoomButton() {
+            dom['map-zoom-btn'].textContent = zoomEnabled ? '拡大操作 ON' : '拡大操作 OFF';
+            dom['map-zoom-btn'].setAttribute('aria-pressed', String(zoomEnabled));
+        }
+        function resetView() {
+            zoomRanges = [{ start: 0, end: 100 }, { start: 0, end: 100 }]; zoomEnabled = false; syncZoomButton();
+            if (chart && cfg.mode === 'map') {
+                chart.dispatchAction({ type: 'dataZoom', batch: ['x', 'y'].map(axis => ({ dataZoomId: 'xy-' + axis + '-zoom', start: 0, end: 100 })) });
+                chart.setOption({ dataZoom: zoomOptions() });
+            }
+        }
         function chartInstance() {
             if (chart) return chart;
             chart = root.echarts.init($('xy-chart'), 'v5', { renderer: 'canvas' });
@@ -128,6 +149,13 @@
                 const [, , , index, time, displayTime] = data.value;
                 api.focusPoint({ fileId: data.fileId, index, time, displayTime });
                 cursor(displayTime);
+            });
+            chart.on('datazoom', () => {
+                const items = chart.getOption().dataZoom || [];
+                zoomRanges = ['x', 'y'].map(axis => {
+                    const item = items.find(value => value.id === 'xy-' + axis + '-zoom');
+                    return { start: item?.start ?? 0, end: item?.end ?? 100 };
+                });
             });
             return chart;
         }
@@ -154,12 +182,12 @@
         function colorRange(map) {
             const min = cfg.colorMin ?? map.zmin, max = cfg.colorMax ?? map.zmax;
             const manual = cfg.colorMin !== null || cfg.colorMax !== null;
-            if (!Number.isFinite(min) || !Number.isFinite(max) || (manual && min >= max)) return { ok: false, reason: '色の範囲は、下限より上限が大きくなるよう指定してください。空欄はその端の自動値です。' };
+            if (!Number.isFinite(min) || !Number.isFinite(max) || (manual && min >= max)) return { ok: false, reason: '燃費率の範囲は、下限より上限が大きくなるよう指定してください。空欄はその端の自動値です。' };
             return { ok: true, min, max, manual, clipped: 0 };
         }
         function makeMapSeries(map, range) {
             const cells = [];
-            for (let j = 0; j < map.ys.length; j++) for (let i = 0; i < map.xs.length; i++) {
+            if (cfg.mapStyle !== 'lines') for (let j = 0; j < map.ys.length; j++) for (let i = 0; i < map.xs.length; i++) {
                 const value = map.zz[j][i];
                 if (Number.isFinite(value)) {
                     if (value < range.min || value > range.max) range.clipped++;
@@ -167,7 +195,7 @@
                     cells.push([map.xEdges[i], map.yEdges[j], map.xEdges[i + 1], map.yEdges[j + 1], value, map.xs[i], map.ys[j], map.counts?.[j]?.[i] || 1, Math.max(range.min, Math.min(range.max, value))]);
                 }
             }
-            const series = [{ id: 'xy-map-cells', name: '燃費率 [g/kWh]', type: 'custom', data: cells, silent: false, z: 0,
+            const series = cfg.mapStyle === 'lines' ? [] : [{ id: 'xy-map-cells', name: '燃費率 [g/kWh]', type: 'custom', data: cells, silent: false, z: 0,
                 dimensions: ['x0', 'y0', 'x1', 'y1', 'fuel', 'rpm', 'torque', 'count', 'displayColor'], encode: { x: [0, 2], y: [1, 3], tooltip: [4] },
                 renderItem(params, render) {
                     const a = render.coord([render.value(0), render.value(1)]), b = render.coord([render.value(2), render.value(3)]);
@@ -175,30 +203,66 @@
                     return shape && { type: 'rect', shape, style: { fill: render.visual('color'), opacity: 0.82 } };
                 } }];
             contourNotice = '';
-            if (cfg.contours && U) {
-                if (map.xs.length * map.ys.length > 12000) contourNotice = '格子が多いため等高線は省略しました。色面と元の値は保持しています。';
-                else {
-                    const contours = [], levels = U.niceLevels(range.min, range.max, 6).slice(0, 8); let count = 0;
-                    for (const level of levels) {
-                        const segments = U.computeIsoSegments(map.xs, map.ys, map.zz, level); count += segments.length;
-                        if (count > 12000) { contourNotice = '等高線の線分が多いため省略しました。色面と元の値は保持しています。'; break; }
-                        const data = []; for (const pair of segments) data.push(pair[0], pair[1], [null, null]);
-                        contours.push({ id: 'xy-contour-' + level, name: '等高線 ' + fmt(level) + ' g/kWh', type: 'line', data, showSymbol: false, connectNulls: false, triggerLineEvent: true, z: 1, lineStyle: { color: '#34465a', width: 1, opacity: 0.75 }, emphasis: { lineStyle: { width: 2 } } });
-                    }
-                    if (!contourNotice) series.push(...contours);
+            if (cfg.mapStyle !== 'fill') {
+                const key = JSON.stringify([idOf(map), range.min, range.max, cfg.contourStep]);
+                if (contourCache?.key !== key) {
+                    contourCache = { key, value: U.prepareContours(map, { min: range.min, max: range.max, step: cfg.contourStep }) };
+                    contourBuildCount++;
                 }
+                const result = contourCache.value;
+                if (!result.ok || !result.segmentCount) {
+                    contourNotice = `${result.reason || 'この範囲に等高線はありません。'} 「塗りつぶし」で元の格子値を確認できます。`;
+                    return series;
+                }
+                const levels = result.levels.filter(level => level.segments.length), majorEvery = Math.max(1, Math.ceil(levels.length / 12));
+                const colors = theme(), labels = [];
+                for (let index = 0; index < levels.length; index++) {
+                    const level = levels[index], majorIndex = level.value / (result.step * majorEvery), major = Math.abs(majorIndex - Math.round(majorIndex)) < 1e-8, data = [];
+                    for (const path of level.paths) data.push(...path, [null, null]);
+                    series.push({ id: 'xy-contour-' + level.value, name: '等高線 ' + fmt(level.value) + ' g/kWh', type: 'line', data, showSymbol: false, connectNulls: false, triggerLineEvent: true, clip: true, z: 1,
+                        lineStyle: { color: cfg.mapStyle === 'both' ? colors.overFill : colors.contour, width: major ? 1.6 : 0.8, opacity: major ? 0.95 : 0.65 }, emphasis: { lineStyle: { width: 2.2 } } });
+                    if (major) {
+                        const point = contourLabelPoint(level.paths, map, index);
+                        if (point) labels.push([point[0], point[1], level.value]);
+                    }
+                }
+                series.push({ id: 'xy-contour-labels', name: '等高線の値 [g/kWh]', type: 'scatter', data: labels, symbolSize: 0, silent: true, clip: true, z: 2,
+                    label: { show: true, position: 'inside', formatter: item => fmt(item.value[2]), color: colors.label, backgroundColor: colors.background, padding: [2, 3], borderRadius: 2, fontSize: 10 },
+                    labelLayout: { hideOverlap: true }, tooltip: { show: false } });
+                contourNotice = `等高線 ${fmt(result.step)} g/kWh刻み・${levels.length}段階。数字は主要線の燃費率[g/kWh]です。${result.adjusted ? result.reason : ''}`;
             }
             return series;
+        }
+        function contourLabelPoint(paths, map, index) {
+            const dx = map.xs[map.xs.length - 1] - map.xs[0] || 1, dy = map.ys[map.ys.length - 1] - map.ys[0] || 1;
+            const distance = (a, b) => Math.hypot((a[0] - b[0]) / dx, (a[1] - b[1]) / dy);
+            let longest = null, length = 0;
+            for (const path of paths) {
+                let total = 0;
+                for (let i = 1; i < path.length; i++) total += distance(path[i - 1], path[i]);
+                if (total > length) { length = total; longest = path; }
+            }
+            if (!longest || length < 0.06) return null;
+            const target = length * [0.35, 0.55, 0.7][index % 3]; let walked = 0;
+            for (let i = 1; i < longest.length; i++) {
+                const a = longest[i - 1], b = longest[i], step = distance(a, b);
+                if (step > 0 && walked + step >= target) { const t = (target - walked) / step; return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]; }
+                walked += step;
+            }
+            return longest[longest.length - 1];
         }
         function showMapStatus(background, range) {
             if (cfg.mode !== 'map') return;
             if (!background?.map) { dom['map-status'].textContent = background?.reason || '背景を読み込んでいます。'; return; }
             const map = background.map, stats = map.stats || {};
-            dom['map-status'].textContent = `${background.name} · ${map.format === 'matrix' ? '行列' : map.format === 'long' ? '3列' : '格子集計'} ${map.xs.length} × ${map.ys.length} · 有効 ${stats.eligible ?? '—'}点 / 除外 ${stats.excluded ?? 0}点 · 空白 ${stats.emptyCells ?? 0}格子。背景は全体。${range?.manual ? '色 ' + fmt(range.min) + '〜' + fmt(range.max) + ' g/kWh / 範囲外 ' + range.clipped + '格子は端色（値を保持）。' : ''}${contourNotice}`;
+            dom['map-status'].textContent = `${background.name} · ${map.format === 'matrix' ? '行列' : map.format === 'long' ? '3列' : '格子集計'} ${map.xs.length} × ${map.ys.length} · 有効 ${stats.eligible ?? '—'}点 / 除外 ${stats.excluded ?? 0}点 · 空白 ${stats.emptyCells ?? 0}格子。背景は時間区間で切り取りません。${range?.manual ? '燃費率 ' + fmt(range.min) + '〜' + fmt(range.max) + ' g/kWh。' + (cfg.mapStyle === 'lines' ? '' : '範囲外 ' + range.clipped + '格子は端色（値を保持）。') : ''}${contourNotice}`;
         }
         function theme() {
             const style = getComputedStyle(document.documentElement);
-            return { text: style.getPropertyValue('--text-secondary').trim() || '#8899aa', grid: style.getPropertyValue('--border').trim() || '#354052', background: style.getPropertyValue('--bg-surface').trim() || '#171c26' };
+            const light = s.theme === 'light';
+            return { text: style.getPropertyValue('--text-secondary').trim() || (light ? '#536875' : '#aab9cb'), grid: style.getPropertyValue('--border').trim() || '#354052',
+                background: style.getPropertyValue('--bg-surface').trim() || (light ? '#f5f8fc' : '#171c26'), label: light ? '#253d50' : '#edf5ff',
+                contour: light ? '#42647c' : '#b3ccdf', overFill: light ? '#2b455b' : '#26394b' };
         }
         async function render() {
             if (!visible || destroyed) return;
@@ -238,8 +302,11 @@
             const color = background?.map ? colorRange(background.map) : null;
             if (color && !color.ok) {
                 busy = false; panel.setAttribute('aria-busy', 'false'); lastSignature = signature();
-                dom['map-status'].textContent = color.reason; dom['data-count'].textContent = '色の範囲を修正すると、マップと動作点を再表示します。'; $('xy-map-settings').open = true; return;
+                dom['map-status'].textContent = color.reason; dom['data-count'].textContent = '燃費率の範囲を修正すると、マップと動作点を再表示します。'; $('xy-map-settings').open = true; return;
             }
+            const map = background?.map;
+            const xExtent = map ? [Math.max(0, map.xEdges[0]), map.xEdges[map.xEdges.length - 1]] : [Infinity, -Infinity];
+            const yExtent = map ? [Math.max(0, map.yEdges[0]), map.yEdges[map.yEdges.length - 1]] : [Infinity, -Infinity];
             const series = mapMode && background?.map ? makeMapSeries(background.map, color) : [];
             const pointSeries = [], summaries = [], dataFiles = [], colourSeries = []; let zmin = Infinity, zmax = -Infinity;
             for (const [fid, file] of files) {
@@ -252,6 +319,10 @@
                 if (!x || !y || (zc && !z)) { fail('列の読み込み未完了'); continue; }
                 const offset = api.effectiveOffset(file), result = F.pickPoints(file.timeData, x, y, z, { range: context.range, offset, maxPoints: 10000, nonnegative: mapMode });
                 if (!result.ok) { fail(result.reason); continue; }
+                if (result.totalCount) {
+                    xExtent[0] = Math.min(xExtent[0], result.xmin); xExtent[1] = Math.max(xExtent[1], result.xmax);
+                    yExtent[0] = Math.min(yExtent[0], result.ymin); yExtent[1] = Math.max(yExtent[1], result.ymax);
+                }
                 const prepared = F.prepareTime(file.timeData);
                 dataFiles.push({ fid, file, x, y, z, offset, prepared, mapMode, range: [...context.range] });
                 summaries.push(`${label(file)}: 有効 ${result.totalCount}点 / 描画 ${result.displayCount}点${result.truncated ? '（間引き）' : ''} / 対象内の欠損・無効 ${result.excludedCount}点${result.invalidTimeCount ? ' / 時刻不正 ' + result.invalidTimeCount + '点' : ''}${prepared.ok ? '' : '。時刻不正のため波形連動不可'}`);
@@ -262,14 +333,21 @@
             }
             series.push(...pointSeries);
             for (const data of dataFiles) series.push({ id: 'xy-cursor-' + data.fid, name: 'カーソル / ' + label(data.file), type: 'scatter', data: [], symbol: 'diamond', symbolSize: 14, z: 6, silent: true, itemStyle: { color: api.fileColor(data.fid) || '#ffbd44', borderColor: '#fff', borderWidth: 2 }, tooltip: { show: false } });
-            const colors = theme(), map = background?.map, visualMap = [];
-            if (map) visualMap.push({ type: 'continuous', min: color.min, max: color.max === color.min ? color.max + Math.max(Math.abs(color.max) * 1e-8, 1) : color.max, dimension: 8, seriesIndex: [0], calculable: false, orient: 'horizontal', left: 'center', bottom: 4, itemHeight: 120, itemWidth: 10, text: [fmt(color.max) + ' g/kWh', fmt(color.min)], textStyle: { color: colors.text, fontSize: 10 }, inRange: { color: ['#32a6a0', '#a4d990', '#f3e89e', '#e89468', '#bd4968'] } });
+            const colors = theme(), visualMap = [], cellSeriesIndex = series.findIndex(item => item.id === 'xy-map-cells');
+            if (map && cellSeriesIndex >= 0) visualMap.push({ type: 'continuous', min: color.min, max: color.max === color.min ? color.max + Math.max(Math.abs(color.max) * 1e-8, 1) : color.max, dimension: 8, seriesIndex: [cellSeriesIndex], calculable: false, orient: 'horizontal', left: 'center', bottom: 4, itemHeight: 120, itemWidth: 10, text: [fmt(color.max) + ' g/kWh', fmt(color.min)], textStyle: { color: colors.text, fontSize: 10 }, inRange: { color: ['#32a6a0', '#a4d990', '#f3e89e', '#e89468', '#bd4968'] } });
             else if (colourSeries.length && Number.isFinite(zmin) && Number.isFinite(zmax)) visualMap.push({ type: 'continuous', min: zmin, max: zmin === zmax ? zmax + 1 : zmax, dimension: 2, seriesIndex: colourSeries, calculable: false, orient: 'horizontal', left: 'center', bottom: 4, itemHeight: 120, itemWidth: 10, text: [fmt(zmax) + (mainZ?.unit ? ' [' + mainZ.unit + ']' : ''), fmt(zmin)], textStyle: { color: colors.text, fontSize: 10 }, inRange: { color: ['#4777cd', '#5ac7c7', '#f2d76b', '#db6559'] } });
             const style = { axisLabel: { color: colors.text, formatter: value => fmt(value), fontSize: 10 }, axisLine: { lineStyle: { color: colors.text } }, nameTextStyle: { color: colors.text, fontSize: 11 }, splitLine: { lineStyle: { color: colors.grid } }, scale: true };
+            const bounds = extent => Number.isFinite(extent[0]) && Number.isFinite(extent[1])
+                ? { min: extent[0] === extent[1] ? Math.max(0, extent[0] - Math.max(1, Math.abs(extent[0]) * .05)) : extent[0], max: extent[0] === extent[1] ? extent[1] + Math.max(1, Math.abs(extent[1]) * .05) : extent[1] } : {};
+            const xBounds = mapMode ? bounds(xExtent) : {}, yBounds = mapMode ? bounds(yExtent) : {};
+            const nextView = JSON.stringify([cfg.mode, cfg.x, cfg.y, idOf(map), xBounds, yBounds]);
+            if (viewSignature !== nextView) { viewSignature = nextView; zoomRanges = [{ start: 0, end: 100 }, { start: 0, end: 100 }]; zoomEnabled = false; }
+            syncZoomButton();
             activeChart.setOption({ animation: false, backgroundColor: 'transparent', legend: { data: pointSeries.map(item => item.name), show: pointSeries.length > 1, type: 'scroll', top: 2, textStyle: { color: colors.text, fontSize: 10 } },
                 grid: { left: 68, right: 20, top: 38, bottom: visualMap.length ? 90 : 52, outerBoundsMode: 'none' },
-                xAxis: { type: 'value', name: mapMode ? 'エンジン回転数 [rpm]' : `${cfg.x}${mainX.unit ? ' [' + mainX.unit + ']' : ''}`, nameLocation: 'middle', nameGap: 28, ...style },
-                yAxis: { type: 'value', name: mapMode ? 'トルク [Nm]' : `${cfg.y}${mainY.unit ? ' [' + mainY.unit + ']' : ''}`, nameLocation: 'middle', nameGap: 47, ...style },
+                xAxis: { type: 'value', name: mapMode ? 'エンジン回転数 [rpm]' : `${cfg.x}${mainX.unit ? ' [' + mainX.unit + ']' : ''}`, nameLocation: 'middle', nameGap: 28, ...style, ...xBounds },
+                yAxis: { type: 'value', name: mapMode ? 'トルク [Nm]' : `${cfg.y}${mainY.unit ? ' [' + mainY.unit + ']' : ''}`, nameLocation: 'middle', nameGap: 47, ...style, ...yBounds },
+                dataZoom: mapMode ? zoomOptions() : [],
                 visualMap, tooltip: { trigger: 'item', confine: true, formatter(event) {
                     const v = event.value;
                     if (event.seriesId === 'xy-map-cells') return `背景の格子値<br>${fmt(v[5])} rpm / ${fmt(v[6])} Nm<br>${fmt(v[4])} g/kWh<br>集計 ${fmt(v[7])}点（格子平均）`;
@@ -279,7 +357,10 @@
                 } }, series }, { notMerge: true });
             preparedFiles = dataFiles; renderCount++; lastSignature = signature(); busy = false; panel.setAttribute('aria-busy', 'false');
             lastResult = { background: background?.map || null, backgroundName: background?.name || '', colorRange: color, files: dataFiles.map(d => d.fid), seriesCount: series.length, context: { ...context }, summaries };
-            dom['data-count'].textContent = summaries.join(' / ') || (pointReason && background?.map ? '背景マップのみ表示しています。' : '対象区間に表示できる動作点がありません。');
+            const backgroundVisible = series.some(item => item.id === 'xy-map-cells' || (item.id.startsWith('xy-contour-') && item.type === 'line' && item.data.length));
+            dom['data-count'].textContent = summaries.join(' / ') || (pointReason && map
+                ? backgroundVisible ? '背景マップのみ表示しています。' : '背景の等高線は表示されていません。上の案内を確認してください。'
+                : '対象区間に表示できる動作点がありません。');
             showMapStatus(background, color);
             if (Number.isFinite(lastCursor)) cursor(lastCursor);
         }
@@ -362,7 +443,7 @@
             return { ...cfg, source: cfg.source === 'external' || cfg.source === 'main' ? cfg.source : 'named', sourceName: source?.name || cfg.sourceName || '', externalMapIdentity: externalMap?.identity || savedExternalIdentity };
         }
         function applySettings(value, options = {}) {
-            importGeneration++; pendingRows = null; pendingFile = null; pendingIdentity = null; pendingImport = false; mapCache = null;
+            importGeneration++; pendingRows = null; pendingFile = null; pendingIdentity = null; pendingImport = false; mapCache = null; contourCache = null; viewSignature = '';
             const saved = value && typeof value === 'object' ? value : {};
             const identity = saved.externalMapIdentity;
             savedExternalIdentity = identity && typeof identity === 'object' && typeof identity.name === 'string' && typeof identity.sha256 === 'string'
@@ -374,9 +455,11 @@
             cfg.source = ['main', 'external', 'named'].includes(saved.source) ? saved.source : 'main';
             for (const key of ['rpmStep', 'torqueStep']) if (typeof saved[key] === 'number' && Number.isFinite(saved[key]) && saved[key] > 0) cfg[key] = saved[key];
             for (const key of ['colorMin', 'colorMax']) if (typeof saved[key] === 'number' && Number.isFinite(saved[key])) cfg[key] = saved[key];
-            cfg.contours = saved.contours === true;
+            cfg.mapStyle = ['fill', 'lines', 'both'].includes(saved.mapStyle) ? saved.mapStyle : typeof saved.contours === 'boolean' ? (saved.contours ? 'both' : 'fill') : defaults.mapStyle;
+            if (typeof saved.contourStep === 'number' && Number.isFinite(saved.contourStep) && saved.contourStep > 0) cfg.contourStep = saved.contourStep;
             dom['map-rpm-step'].value = cfg.rpmStep; dom['map-torque-step'].value = cfg.torqueStep;
             dom['map-color-min'].value = cfg.colorMin ?? ''; dom['map-color-max'].value = cfg.colorMax ?? '';
+            dom['map-contour-step'].value = cfg.contourStep;
             dom['map-file'].value = ''; dom['map-confirm-units'].checked = false; dom['map-apply'].disabled = true; dom['map-clear'].disabled = !externalMap;
             externalStatus = '';
             if (!externalMap && cfg.source === 'external') showImportFeedback('背景CSVのデータは保存しません。ファイルを再度選び、単位を確認して適用してください。');
@@ -384,7 +467,7 @@
             controlsSignature = ''; invalidate(true); syncControls(true); schedule();
         }
         function clear() {
-            importGeneration++; pendingRows = null; pendingFile = null; pendingIdentity = null; pendingImport = false; externalMap = null; savedExternalIdentity = null; mapCache = null; lastCursor = null; externalStatus = '';
+            importGeneration++; pendingRows = null; pendingFile = null; pendingIdentity = null; pendingImport = false; externalMap = null; savedExternalIdentity = null; mapCache = null; contourCache = null; lastCursor = null; externalStatus = ''; viewSignature = '';
             dom['map-file'].value = ''; dom['map-clear'].disabled = true; dom['map-apply'].disabled = true; dom['map-confirm-units'].checked = false;
             updateApplyState();
             invalidate(true); controlsSignature = ''; schedule();
@@ -405,7 +488,10 @@
         dom['map-source'].addEventListener('change', () => { if (pendingImport) { importGeneration++; pendingImport = false; pendingRows = null; pendingFile = null; pendingIdentity = null; showImportFeedback('背景の参照元を変えたため、CSVの読み込みを中止しました。ファイルを選び直してください。'); updateApplyState(); } cfg.source = dom['map-source'].value; cfg.sourceName = sourceFile()?.name || ''; syncControls(true); changed(); });
         for (const [id, key] of [['map-rpm-step', 'rpmStep'], ['map-torque-step', 'torqueStep']]) dom[id].addEventListener('change', () => { cfg[key] = dom[id].value.trim() ? Number(dom[id].value) : NaN; changed(); });
         for (const [id, key] of [['map-color-min', 'colorMin'], ['map-color-max', 'colorMax']]) dom[id].addEventListener('change', () => { cfg[key] = dom[id].validity.badInput ? NaN : dom[id].value.trim() ? Number(dom[id].value) : null; changed(); });
-        dom['map-contours'].addEventListener('change', () => { cfg.contours = dom['map-contours'].checked; changed(); });
+        dom['map-style'].addEventListener('change', () => { cfg.mapStyle = dom['map-style'].value; changed(); });
+        dom['map-contour-step'].addEventListener('change', () => { cfg.contourStep = dom['map-contour-step'].value.trim() ? Number(dom['map-contour-step'].value) : NaN; changed(); });
+        dom['map-zoom-btn'].addEventListener('click', () => { zoomEnabled = !zoomEnabled; syncZoomButton(); if (chart) chart.setOption({ dataZoom: zoomOptions() }); });
+        dom['map-reset-view'].addEventListener('click', resetView);
         dom['map-file'].addEventListener('change', () => readMapFile(dom['map-file'].files[0]));
         dom['map-confirm-units'].addEventListener('change', updateApplyState);
         dom['map-apply'].addEventListener('click', applyMap);
@@ -422,7 +508,7 @@
         const observer = new ResizeObserver(() => { if (!visible || resizeFrame !== null) return; resizeFrame = requestAnimationFrame(() => { resizeFrame = null; chart?.resize(); }); });
         observer.observe($('xy-chart'));
         return { open, close, setVisible, schedule, cursor, collectSettings, applySettings, clear,
-            inspect: () => ({ chart, visible, expanded, mode: cfg.mode, config: { ...cfg }, lastResult, map: lastResult?.background || null, renderCount, cursorUpdateCount, busy, pendingImport }),
+            inspect: () => ({ chart, visible, expanded, mode: cfg.mode, config: { ...cfg }, lastResult, map: lastResult?.background || null, renderCount, cursorUpdateCount, contourBuildCount, busy, pendingImport }),
             destroy() { destroyed = true; generation++; importGeneration++; observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); if (resizeFrame !== null) cancelAnimationFrame(resizeFrame); panel.removeEventListener('keydown', onKey); chart?.dispose(); panel.remove(); } };
     };
 })(window);

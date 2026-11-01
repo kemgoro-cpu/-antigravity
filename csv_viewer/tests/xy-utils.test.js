@@ -249,4 +249,89 @@ function testBilinearZ() {
 
 testBilinearZ();
 
+// Detailed contours preserve the entire value range and original gap topology.
+function testPrepareContoursLevelsAndLimits() {
+    const map = { xs: [0, 1], ys: [0, 1], zz: [[230, 230], [247, 247]] };
+    const original = structuredClone(map);
+    const exact = CSVXYUtils.prepareContours(map, { min: 230, max: 247, step: 2 });
+    assert.equal(exact.ok, true);
+    assert.deepEqual(exact.levels.map(level => level.value), [230, 232, 234, 236, 238, 240, 242, 244, 246], 'The high-value contour must not be silently sliced off');
+    assert.equal(exact.adjusted, false);
+    assert.equal(exact.step, 2);
+    assert.equal(exact.segmentCount, 8);
+    assert.deepEqual(map, original, 'Contour preparation must not modify source axes or values');
+
+    const capped = CSVXYUtils.prepareContours(map, { min: 230, max: 247, step: 0.01, maxLevels: 8 });
+    assert.equal(capped.ok, true);
+    assert.equal(capped.adjusted, true);
+    assert.ok(capped.levels.length <= 8);
+    assert.ok(Math.abs(capped.step / 0.01 - Math.round(capped.step / 0.01)) < 1e-9, 'Adjusted interval remains an integer multiple of the requested interval');
+    assert.ok(capped.levels[0].value - 230 < capped.step + 1e-9);
+    assert.ok(247 - capped.levels.at(-1).value < capped.step + 1e-9, 'The sparse levels cover the high-value end too');
+    assert.match(capped.reason, /調整/);
+
+    const gridLimit = CSVXYUtils.prepareContours(map, { step: 2, maxCells: 3 });
+    assert.equal(gridLimit.ok, false); assert.deepEqual(gridLimit.levels, []); assert.match(gridLimit.reason, /格子/);
+    const segmentLimit = CSVXYUtils.prepareContours(map, { step: 2, maxSegments: 3 });
+    assert.equal(segmentLimit.ok, false); assert.deepEqual(segmentLimit.levels, []); assert.equal(segmentLimit.segmentCount, 0); assert.match(segmentLimit.reason, /線分/);
+    for (const step of [0, -1, NaN, Infinity]) {
+        const invalid = CSVXYUtils.prepareContours(map, { step });
+        assert.equal(invalid.ok, false); assert.deepEqual(invalid.levels, []); assert.match(invalid.reason, /間隔/);
+    }
+    for (const options of [{ min: 250, max: 230 }, { min: NaN }, { max: Infinity }, { maxLevels: 1 }, { maxSegments: 1.5 }, { maxCells: -1 }]) {
+        assert.equal(CSVXYUtils.prepareContours(map, { step: 2, ...options }).ok, false);
+    }
+    assert.equal(CSVXYUtils.prepareContours({ ...map, xs: [1, 1] }, { step: 2 }).ok, false);
+    assert.equal(CSVXYUtils.prepareContours({ ...map, zz: [[230], [247, 247]] }, { step: 2 }).ok, false);
+    assert.equal(CSVXYUtils.prepareContours(map, { step: Number.MIN_VALUE }).ok, false, 'An extreme interval must fail without allocating or looping indefinitely');
+}
+
+function testPrepareContoursEmptyAndConstant() {
+    const constant = { xs: [0, 1], ys: [0, 1], zz: [[250, 250], [250, 250]] };
+    const result = CSVXYUtils.prepareContours(constant, { min: 200, max: 300, step: 5 });
+    assert.equal(result.ok, true); assert.equal(result.segmentCount, 0); assert.deepEqual(result.levels, []); assert.match(result.reason, /一定値/);
+    const limited = CSVXYUtils.prepareContours({ ...constant, zz: [[200, 200], [300, 300]] }, { min: 250, max: 250, step: 5 });
+    assert.equal(limited.ok, true); assert.equal(limited.segmentCount, 0); assert.match(limited.reason, /一定値/);
+    const singleAxis = CSVXYUtils.prepareContours({ xs: [0], ys: [0, 1], zz: [[200], [300]] }, { step: 5 });
+    assert.equal(singleAxis.ok, true); assert.equal(singleAxis.segmentCount, 0); assert.match(singleAxis.reason, /2点/);
+    const unavailable = CSVXYUtils.prepareContours({ ...constant, zz: [[200, NaN], [300, 300]] }, { step: 5 });
+    assert.equal(unavailable.ok, true); assert.equal(unavailable.segmentCount, 0); assert.match(unavailable.reason, /欠損/);
+    const outside = CSVXYUtils.prepareContours({ ...constant, zz: [[200, 200], [300, 300]] }, { min: 400, max: 500, step: 5 });
+    assert.equal(outside.ok, true); assert.equal(outside.segmentCount, 0); assert.match(outside.reason, /描ける等高線がありません/);
+}
+
+function testContourPathTopology() {
+    const chainMap = { xs: [0.1, 1.1], ys: [0.1, 1.1, 2.1], zz: [[0, 10], [1, 9], [2, 8]] };
+    const segments = CSVXYUtils.computeIsoSegments(chainMap.xs, chainMap.ys, chainMap.zz, 2.7);
+    const paths = CSVXYUtils.joinIsoSegments(segments);
+    assert.equal(paths.length, 1, 'Opposite visits to a shared grid edge have identical intersection coordinates');
+    assert.equal(paths[0].length, 3);
+    assert.equal(paths[0][1][1], 1.1);
+    assert.ok(Math.abs(CSVXYUtils.bilinearZ(chainMap.xs, chainMap.ys, chainMap.zz, ...paths[0][1]) - 2.7) < 1e-12);
+
+    const holeMap = { xs: [0, 1, 2, 3, 4], ys: [0, 1], zz: [[0, 0, NaN, 0, 0], [10, 10, NaN, 10, 10]] };
+    const hole = CSVXYUtils.prepareContours(holeMap, { step: 5 });
+    const middle = hole.levels.find(level => level.value === 5);
+    assert.equal(middle.paths.length, 2);
+    assert.deepEqual(middle.paths.map(path => path.map(point => point[0]).sort()).sort(), [[0, 1], [3, 4]], 'Paths do not bridge the missing column');
+
+    const ring = [[[1, 0], [0, 1]], [[0, -1], [1, 0]], [[-1, 0], [0, -1]], [[0, 1], [-1, 0]]];
+    const original = structuredClone(ring);
+    const closed = CSVXYUtils.joinIsoSegments(ring);
+    assert.equal(closed.length, 1); assert.equal(closed[0].length, 5); assert.deepEqual(closed[0][0], closed[0].at(-1));
+    assert.deepEqual(ring, original);
+    assert.equal(CSVXYUtils.joinIsoSegments([[[0, 0], [1, 0]], [[1 + 1e-12, 0], [2, 0]]]).length, 2, 'A small real gap must not be rounded away');
+
+    const saddle = CSVXYUtils.computeIsoSegments([0, 1], [0, 1], [[0, 10], [10, 0]], 5);
+    assert.equal(CSVXYUtils.joinIsoSegments(saddle).length, 2, 'Saddle branches must not be joined through their interior');
+    const branch = CSVXYUtils.joinIsoSegments([[[0, 0], [1, 0]], [[1, 0], [2, 1]], [[1, 0], [2, -1]]]);
+    assert.equal(branch.length, 3, 'An ambiguous vertex splits paths rather than choosing a branch');
+    assert.ok(branch.every(path => path.length === 2));
+    assert.deepEqual(CSVXYUtils.joinIsoSegments([[[0, 0], [0, 0]]]), [], 'A zero-length point is not a contour line');
+}
+
+testPrepareContoursLevelsAndLimits();
+testPrepareContoursEmptyAndConstant();
+testContourPathTopology();
+
 console.log('xy-utils tests passed');

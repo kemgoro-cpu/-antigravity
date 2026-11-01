@@ -40,7 +40,7 @@ const previewDir = path.join(root, 'tests/fixtures/generated/manual-preview');
             anchors: [...document.querySelectorAll('a[href^="#"]')].every(a => document.getElementById(a.hash.slice(1))),
             links: [...document.querySelectorAll('a[href]:not([href^="#"])')].map(a => a.getAttribute('href'))
         }));
-        assert.equal(content.chapters, 25, '14 chapters, with continuation pages including docked XY, fuel map data, and events');
+        assert.equal(content.chapters, 26, '14 chapters, with continuation pages including docked XY, detailed contours, fuel map data, and events');
         assert.match(content.revision, /^\d{4}-\d{2}-\d{2}$/);
         assert.ok(content.images, 'All images must load and have alt text');
         assert.ok(content.anchors, 'All table-of-contents targets must exist');

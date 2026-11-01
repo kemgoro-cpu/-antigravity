@@ -211,6 +211,12 @@
 
     /** 2点(xA,yA,vA)-(xB,yB,vB)を結ぶ辺上でv=levelとなる点を線形補間で求める */
     function edgeCrossPoint(xA, yA, vA, xB, yB, vB, level) {
+        // Adjacent cells visit their shared edge in opposite directions. Use one
+        // direction so the same intersection has exactly the same coordinates;
+        // joining paths then needs no tolerance that could bridge a real gap.
+        if (xA > xB || (xA === xB && yA > yB)) return edgeCrossPoint(xB, yB, vB, xA, yA, vA, level);
+        if (level === vA) return [xA, yA];
+        if (level === vB) return [xB, yB];
         if (vA === vB) return [xA, yA];
         const t = (level - vA) / (vB - vA);
         return [xA + t * (xB - xA), yA + t * (yB - yA)];
@@ -266,6 +272,96 @@
         return segments;
     }
 
+    /** Join only identical endpoints; stop at branches rather than inventing a connection. */
+    function joinIsoSegments(segments) {
+        const nodes = new Map(), edges = [], paths = [], seen = new Set();
+        const nodeAt = point => {
+            const key = point[0] + ',' + point[1];
+            if (!nodes.has(key)) nodes.set(key, { point: [...point], edges: [] });
+            return nodes.get(key);
+        };
+        for (const segment of segments || []) {
+            if (!Array.isArray(segment) || segment.length !== 2 || segment.some(point => !Array.isArray(point) || point.length !== 2 || !point.every(Number.isFinite))) continue;
+            const a = nodeAt(segment[0]), b = nodeAt(segment[1]);
+            if (a === b) continue;
+            const keys = [a.point.join(','), b.point.join(',')].sort();
+            const key = keys.join('|');
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const edge = { a, b, used: false };
+            edges.push(edge); a.edges.push(edge); b.edges.push(edge);
+        }
+        const walk = (start, first) => {
+            const path = [[...start.point]]; let node = start, edge = first;
+            while (edge && !edge.used) {
+                edge.used = true;
+                node = edge.a === node ? edge.b : edge.a;
+                path.push([...node.point]);
+                if (node === start || node.edges.length !== 2) break;
+                edge = node.edges.find(candidate => !candidate.used);
+            }
+            paths.push(path);
+        };
+        // Open ends and ambiguous branch points first; the remaining components
+        // are closed loops. Every original segment is used at most once.
+        for (const node of nodes.values()) if (node.edges.length !== 2) {
+            for (const edge of node.edges) if (!edge.used) walk(node, edge);
+        }
+        for (const edge of edges) if (!edge.used) walk(edge.a, edge);
+        return paths;
+    }
+
+    /**
+     * Build bounded contours for a full value range. Increase the requested step
+     * by an integer multiple when needed; never truncate only the high levels.
+     * Paths contain original linear segments, with no smoothing or gap filling.
+     */
+    function prepareContours(map, options = {}) {
+        const empty = { levels: [], step: options.step ?? 10, adjusted: false, segmentCount: 0 };
+        const fail = reason => ({ ok: false, reason, ...empty });
+        const maxLevels = options.maxLevels ?? 81, maxSegments = options.maxSegments ?? 12000, maxCells = options.maxCells ?? 12000;
+        if (!Number.isSafeInteger(maxLevels) || maxLevels < 2 || !Number.isSafeInteger(maxSegments) || maxSegments < 1 || !Number.isSafeInteger(maxCells) || maxCells < 1) return fail('等高線の上限は有効な整数で指定してください。');
+        const { xs, ys, zz } = map || {};
+        if (!Array.isArray(xs) || !Array.isArray(ys) || !xs.length || !ys.length || !Array.isArray(zz)
+            || xs.some((value, index) => !Number.isFinite(value) || (index && value <= xs[index - 1]))
+            || ys.some((value, index) => !Number.isFinite(value) || (index && value <= ys[index - 1]))
+            || zz.length !== ys.length || zz.some(row => !Array.isArray(row) || row.length !== xs.length)) return fail('等高線の格子・軸が不正です。');
+        if (xs.length * ys.length > maxCells) return fail(`格子が多いため等高線は表示できません（上限${maxCells.toLocaleString('ja-JP')}格子）。塗りつぶしで確認してください。`);
+        const actual = zRangeOf(zz), min = options.min ?? actual.zmin, max = options.max ?? actual.zmax, requestedStep = options.step ?? 10;
+        if (!Number.isFinite(min) || !Number.isFinite(max) || min > max || !Number.isFinite(max - min)) return fail('燃費率の範囲を有限値で指定し、上限を下限以上にしてください。');
+        if (!Number.isFinite(requestedStep) || requestedStep <= 0) return fail('等高線の間隔は0より大きい有限値で指定してください。');
+        if (!Number.isFinite(actual.zmin)) return fail('等高線に使える有効な燃費率がありません。');
+        if (actual.zmin === actual.zmax || min === max) return { ok: true, reason: '燃費率の範囲が一定値のため等高線はありません。塗りつぶしで値を確認できます。', ...empty };
+        if (xs.length < 2 || ys.length < 2) return { ok: true, reason: '等高線には回転数・トルクがそれぞれ2点以上必要です。塗りつぶしで値を確認できます。', ...empty };
+
+        let multiplier = Math.max(1, Math.ceil(((max - min) / (maxLevels - 1)) / requestedStep));
+        let step, start, end;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            step = requestedStep * multiplier;
+            if (!Number.isFinite(multiplier) || !Number.isFinite(step) || step <= 0) return fail('等高線の間隔が範囲に対して小さすぎます。間隔を大きくしてください。');
+            const first = min / step, last = max / step;
+            if (!Number.isFinite(first) || !Number.isFinite(last) || Math.max(Math.abs(first), Math.abs(last)) > Number.MAX_SAFE_INTEGER / 4) return fail('等高線の間隔が値に対して小さすぎます。間隔を大きくしてください。');
+            const epsilon = Number.EPSILON * Math.max(1, Math.abs(first), Math.abs(last)) * 4;
+            start = Math.ceil(first - epsilon); end = Math.floor(last + epsilon);
+            if (end - start + 1 <= maxLevels) break;
+            multiplier = Math.ceil(multiplier * 1.01) + 1;
+        }
+        if (end - start + 1 > maxLevels) return fail('等高線の段階数が上限を超えます。間隔を大きくしてください。');
+        const levels = []; let segmentCount = 0;
+        for (let index = start; index <= end; index++) {
+            const value = Number((index * step).toPrecision(15));
+            if (levels.length && value <= levels[levels.length - 1].value) return fail('等高線の間隔が値に対して小さすぎます。間隔を大きくしてください。');
+            const segments = computeIsoSegments(xs, ys, zz, value).filter(([a, b]) => a[0] !== b[0] || a[1] !== b[1]);
+            segmentCount += segments.length;
+            if (segmentCount > maxSegments) return fail(`線分が多いため等高線は表示できません（上限${maxSegments.toLocaleString('ja-JP')}線分）。間隔を大きくするか、塗りつぶしで確認してください。`);
+            levels.push({ value, segments, paths: joinIsoSegments(segments) });
+        }
+        const adjusted = multiplier > 1;
+        const notice = adjusted ? `全範囲を表示するため、等高線の間隔を${Number(step.toPrecision(7))} g/kWhに調整しました。` : '';
+        const reason = notice + (segmentCount ? '' : '指定した範囲・間隔で描ける等高線がありません。欠損を含む格子は線を引きません。塗りつぶしで値を確認できます。');
+        return { ok: true, reason, levels, step, adjusted, segmentCount };
+    }
+
     /** 昇順配列arrの中でvが属するセルの開始インデックス（[0, arr.length-2]にクランプ）を二分探索で求める */
     function findCellIndex(arr, v) {
         const n = arr.length;
@@ -305,6 +401,8 @@
         parseContourMap,
         niceLevels,
         computeIsoSegments,
+        joinIsoSegments,
+        prepareContours,
         bilinearZ,
     };
 

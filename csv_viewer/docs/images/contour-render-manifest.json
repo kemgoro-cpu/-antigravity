@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-11-01T12:47:56.412Z",
+  "renderer": "ECharts 6.1.0 SVG SSR + sharp",
+  "source": "Actual CSVXYWorkspace chart options on a DOM mock; synthetic background only; not a browser/UI screenshot.",
+  "sample": "docs/samples/練習用_詳細燃費率ﾏｯﾌﾟ.csv",
+  "style": "lines",
+  "contourStep": 5,
+  "theme": "light",
+  "width": 1100,
+  "height": 650,
+  "sourceHashes": {
+    "xy-workspace.js": "f6d28c737773e4bb797c3bcf63b21d1f0e887e6c851a00753e916bdcf3c2b81b",
+    "xy-utils.js": "fe57368937e14cac685a274eb6214a6e8394d7b96b650c33913afdfa324396a4",
+    "fuel-map-utils.js": "286a20686c9158d14abd49322b4029610ce3d54ce2d0257497ec18c5d1bed56c",
+    "tests/xy-workspace.test.js": "c8b803bc84dc471be1479c5a49c8dc6d6b5d994f959ef9f3427b222a795198b9",
+    "tests/xy-workspace-render.test.js": "b3f629bb05aa11e47e893b4ba990a370371070789a7df66ca7db780900005a01",
+    "docs/samples/練習用_詳細燃費率ﾏｯﾌﾟ.csv": "8dda1e3093852fcf81cc4010f08d37a2021bf8cc0f8c4ba8465a37c471d5a798"
+  },
+  "image": "docs/images/fuel-map-detail.png",
+  "imageSha256": "b0d7ace447035ed8c07247bf0e1957469ec761b741bdf7eb4a80795967386422"
+}

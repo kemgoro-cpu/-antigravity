@@ -34,7 +34,7 @@ const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('
         await page.locator('#xy-map-apply').click();
         await page.waitForFunction(() => !!window.__csvViewerDebug.xyWorkspace.inspect().lastResult?.background);
         if (!await page.locator('#xy-map-settings').evaluate(el => el.open)) await page.locator('#xy-map-settings > summary').click();
-        await page.locator('#xy-map-contours').check();
+        await page.locator('#xy-map-style').selectOption('both');
         await page.locator('#xy-map-settings > summary').click();
         await page.waitForFunction(() => window.__csvViewerDebug.xyWorkspace.inspect().chart?.getOption().series.some(series => series.id.startsWith('xy-contour-')));
         const cursor = await page.evaluate(() => {

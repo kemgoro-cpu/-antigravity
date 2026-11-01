@@ -30,7 +30,7 @@ table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;margin:
 </head>
 <body>
 <header class="top"><strong>CSV Chart Viewer · 操作マニュアル</strong><a href="index.html" target="_blank" rel="noopener">ツールを開く</a><a href="docs/CSV-Chart-Viewer-Manual.pdf" download>PDFを保存</a><button id="toc-toggle" type="button" aria-controls="manual-toc" aria-expanded="false">目次</button><button id="print-manual" type="button">印刷</button></header>
-<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモを残す</a><a href="#templates">09 続き：比較条件を再利用</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#xy-map">11 続き：XY・燃費率マップ</a><a href="#map-data">11 続き：マップデータ</a><a href="#events">11 続き：イベントの操作</a><a href="#event-rules">11 続き：時刻と詳細設定</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
+<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモを残す</a><a href="#templates">09 続き：比較条件を再利用</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#xy-map">11 続き：XY・燃費率マップ</a><a href="#map-data">11 続き：マップデータ</a><a href="#map-contours">11 続き：詳細な等高線</a><a href="#events">11 続き：イベントの操作</a><a href="#event-rules">11 続き：時刻と詳細設定</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
 <main>
 <section class="page" id="start">
 <div class="eyebrow">Operation guide / 2026.11.01</div>
@@ -214,9 +214,20 @@ Speed > 30 && State == 1</pre><p>検出した区間は再起動で復元しな�
 40,285,260</pre><p class="small">3列の行列は3列データと紛らわしいため、必要なら形式を明示指定します。</p></div></div>
 <h3>欠損・重複・等高線</h3>
 <p>3列形式の同一座標やログの同一格子内は、有効値を平均します。行列形式の重複した軸は読み込めません。欠損、燃費率0以下、負の回転数／トルクは除外し、背景の穴を埋めません。等高線は隣接する有効格子間の補間線で、追加の実測値ではありません。</p>
-<p>色の下限・上限は空欄で全範囲。大きな値で色が偏る場合は範囲を指定できます。範囲外は端の色で表示し、件数を明示します。元の値とツールチップは変わりません。燃料密度補正は行いません。</p>
+<p>燃費率の下限・上限は色と等高線で共用し、空欄で全範囲。塗りつぶしの範囲外は端の色になり、件数を明示します。等高線は指定範囲内の値で描きます。元の格子値は変更せず、燃料密度補正も行いません。</p>
 <div class="note"><strong>保存と処理の上限</strong>軸・表示条件は設定に保存します。外部CSVの本体は保存しないため、再起動・設定読込後は再読込が必要です。閉じて開き直すだけなら保持します。UTF-8、5 MiB以下、40,000セル以下。背景の集計は元データ全点を使います。</div>
 <p class="small">現行のPNG・HTML出力にはマップを含みません。囲み選択、状態名の色分け、走行ログの燃料流量からの燃費率計算は未実装です。</p>
+</section>
+
+<section class="page" id="map-contours">
+<div class="chapter"><span class="num">11</span><h2>等高線を詳しく読み、注目領域を拡大する</h2></div>
+<p>「背景マップ・表示設定」で、背景の表示と等高線の間隔を選びます。従来の「等高線を重ねる」は、この表示選択に統合しました。</p>
+<table class="table-tight"><thead><tr><th>背景の表示</th><th>使い分け</th></tr></thead><tbody><tr><td>塗りつぶし</td><td>元の格子を色で表示。全体の燃費率分布と欠損セルを確認します。</td></tr><tr><td>等高線のみ</td><td>線で燃費率を表示。走行点を重ねても見分けやすくなります。</td></tr><tr><td>塗りつぶし＋等高線</td><td>分布と等高線を同時に確認します。</td></tr></tbody></table>
+<p>間隔は通常10、詳しく見るときは5、広く見るときは20 g/kWhが目安です。主要線を太くし、数字を最大12箇所に表示します。数字の単位はg/kWhです。古い設定のOFFは塗りつぶし、ONは両方へ移行します。</p>
+<figure><img data-image="fuel-map-detail.png" alt="詳細な架空燃費率マップを5 g/kWh刻みで描画した等高線図。欠損の周囲は線が途切れ、主要線に数値がある"><figcaption>「練習用_詳細燃費率ﾏｯﾌﾟ.csv」による架空データ。現行の描画設定をEChartsで画像化した図で、アプリ画面の撮影ではありません。</figcaption></figure>
+<p><strong>拡大する：</strong>マップの上の「拡大操作」をONにすると、ホイール・ピンチで拡大、ドラッグで移動できます。「全体に戻す」で全範囲に戻り、操作もOFFになります。時系列の範囲は変わりません。</p>
+<div class="note"><strong>詳細データで試す</strong><a href="docs/samples/練習用_詳細燃費率ﾏｯﾌﾟ.csv">詳細練習CSV</a>を「別のマップCSV」から読み込み、3列形式・単位を確認して適用します。100 rpm×2 Nm、6,413座標の架空データです。格子の細かさは実機での精度を保証せず、欠損の補間・外挿も行いません。</div>
+<p class="small">最大81段階。多すぎる場合は間隔を広げて全範囲を保ち、実際の刻みを案内します。等高線は12,000格子／12,000線分まで。一定値・欠損・上限で線を作れない場合は、理由を確認して「塗りつぶし」に切り替えます。</p>
 </section>
 
 <section class="page" id="events">

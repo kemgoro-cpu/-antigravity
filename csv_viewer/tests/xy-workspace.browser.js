@@ -54,7 +54,7 @@ async function ready(page) {
 const inspect = page => page.evaluate(() => {
     const view = __csvViewerDebug.xyWorkspace.inspect();
     return { visible: view.visible, expanded: view.expanded, mode: view.mode,
-        renderCount: view.renderCount, cursorUpdateCount: view.cursorUpdateCount,
+        renderCount: view.renderCount, cursorUpdateCount: view.cursorUpdateCount, contourBuildCount: view.contourBuildCount,
         map: view.map ? { xs: view.map.xs, ys: view.map.ys, zz: view.map.zz, stats: view.map.stats } : null };
 });
 const pointSeries = page => page.evaluate(() => {
@@ -70,6 +70,7 @@ async function choose(page, id, value) {
 }
 async function uploadMap(page, file, format = 'matrix') {
     await mapSettings(page);
+    await page.locator('#xy-map-style').selectOption('fill');
     await page.locator('#xy-map-source').selectOption('external');
     await page.locator('#xy-map-format').selectOption(format);
     await page.locator('#xy-map-file').setInputFiles(file);
@@ -220,7 +221,34 @@ async function clickDataPoint(page, seriesIndex = 0, pointIndex = 3) {
         assert.equal(map.xs.length, 3); assert.equal(map.ys.length, 3);
         assert.equal(map.stats.emptyCells, 1); assert.ok(Number.isNaN(map.zz[0][1]), 'Missing cell remains missing, not zero');
         await mapSettings(page);
-        await page.locator('#xy-map-contours').check(); await settle(page);
+        const mapBounds = () => page.evaluate(() => {
+            const o = __csvViewerDebug.xyWorkspace.inspect().chart.getOption();
+            return [o.xAxis[0].min, o.xAxis[0].max, o.yAxis[0].min, o.yAxis[0].max];
+        });
+        const fullMapBounds = await mapBounds();
+        await choose(page, 'xy-map-style', 'both');
+        await colorLimit(page, 'xy-map-contour-step', '5');
+        assert.ok(await page.evaluate(() => __csvViewerDebug.xyWorkspace.inspect().chart.getOption().series
+            .some(series => String(series.id).startsWith('xy-contour-') && series.type === 'line' && series.data.length)), 'Detailed contour geometry reaches ECharts');
+        const contoursBuilt = (await inspect(page)).contourBuildCount;
+        await choose(page, 'xy-map-style', 'lines');
+        assert.ok(await page.evaluate(() => {
+            const o = __csvViewerDebug.xyWorkspace.inspect().chart.getOption();
+            return !o.series.some(series => series.id === 'xy-map-cells') && o.visualMap.length === 0;
+        }), 'Line-only mode has no cell-color mapping to contaminate point colors');
+        assert.deepEqual(await mapBounds(), fullMapBounds, 'The three background representations use the same map domain');
+        assert.equal((await inspect(page)).contourBuildCount, contoursBuilt, 'Style-only changes reuse contour geometry');
+        assert.ok((await pointSeries(page)).some(series => series.data.length), 'Operating points remain visible over contours');
+        assert.equal(await page.locator('#xy-map-zoom-btn').getAttribute('aria-pressed'), 'false');
+        await page.locator('#xy-map-zoom-btn').click(); await settle(page);
+        assert.equal(await page.locator('#xy-map-zoom-btn').getAttribute('aria-pressed'), 'true');
+        await page.evaluate(() => __csvViewerDebug.xyWorkspace.inspect().chart.dispatchAction({ type: 'dataZoom', batch: [{ dataZoomId: 'xy-x-zoom', start: 20, end: 80 }, { dataZoomId: 'xy-y-zoom', start: 20, end: 80 }] }));
+        await page.locator('#xy-map-reset-view').click(); await settle(page);
+        assert.ok(await page.evaluate(() => __csvViewerDebug.xyWorkspace.inspect().chart.getOption().dataZoom.every(item => item.start === 0 && item.end === 100)), 'Reset restores the complete map after explicit zoom');
+        assert.equal(await page.locator('#xy-map-zoom-btn').getAttribute('aria-pressed'), 'false');
+        await mapSettings(page); await choose(page, 'xy-map-style', 'both');
+        assert.deepEqual(await mapBounds(), fullMapBounds);
+        checks.push('detailed contour interval, consolidated styles, stable bounds, retained points, cache and zoom reset');
         await uploadMap(page, duplicateLong, 'long');
         map = (await inspect(page)).map;
         assert.equal(map.zz[0][0], 250, 'Duplicate map coordinates use all observations');
@@ -425,6 +453,7 @@ async function clickDataPoint(page, seriesIndex = 0, pointIndex = 3) {
             }, null, 2));
             await colorLimit(rp, 'xy-map-color-min', '250');
             await colorLimit(rp, 'xy-map-color-max', '500');
+            await choose(rp, 'xy-map-style', 'fill');
             const realColors = await mapColors(rp);
             assert.equal(realColors.min, 250); assert.equal(realColors.max, 500);
             assert.deepEqual(await rp.evaluate(() => __csvViewerDebug.xyWorkspace.inspect().map), evidence.grid,

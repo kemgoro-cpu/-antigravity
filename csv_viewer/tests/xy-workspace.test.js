@@ -9,6 +9,7 @@ const { webcrypto } = require('node:crypto');
 const Papa = require('../lib/papaparse.min.js');
 const FuelMap = require('../fuel-map-utils.js');
 const Compare = require('../compare-utils.js');
+const XY = require('../xy-utils.js');
 
 function mockDOM() {
     const ids = new Map();
@@ -85,7 +86,8 @@ function harness() {
         colData: { rpm: Float64Array.from([1000, 1200, 1400]), torque: Float64Array.from([20, 30, 40]), throttle: Float64Array.from([10, 15, 20]) } };
     const state = { files: { main: file }, selectedNames: new Set(['Engine_Speed', 'Engine_Torque']), theme: 'light', customRAMs: [], channelAliases: {}, comparison: { matches: {} } };
     let context = { scope: 'all', range: [0, 2], rawTime: false, label: '全体 0–2 s' };
-    const chart = { options: {}, handlers: {}, on(type, fn) { this.handlers[type] = fn; }, clear() { this.options = {}; }, resize() {}, dispose() {},
+    const chart = { options: {}, handlers: {}, actions: [], on(type, fn) { this.handlers[type] = fn; }, clear() { this.options = {}; }, resize() {}, dispose() {},
+        dispatchAction(action) { this.actions.push(action); },
         setOption(options, flags = {}) {
             if (flags.notMerge) { this.options = options; return; }
             const updates = new Map((options.series || []).map(series => [series.id, series]));
@@ -93,9 +95,9 @@ function harness() {
             this.options = { ...this.options, ...options, series: [...series, ...updates.values()] };
         }, getOption() { return this.options; } };
     const globals = { console, document: dom.document, HTMLElement: dom.Element, ResizeObserver: class { observe() {} disconnect() {} },
-        getComputedStyle: () => ({ getPropertyValue: () => '' }), crypto: webcrypto, TextEncoder,
+        getComputedStyle: () => ({ getPropertyValue: name => ({ '--text-secondary': state.theme === 'dark' ? '#b7c7db' : '#536875', '--text-primary': state.theme === 'dark' ? '#edf5ff' : '#172a3b', '--bg-surface': state.theme === 'dark' ? '#171c26' : '#ffffff', '--border': state.theme === 'dark' ? '#354052' : '#d7e1e8' }[name] || '') }), crypto: webcrypto, TextEncoder,
         requestAnimationFrame: callback => { const id = ++nextFrame; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id),
-        CSVFuelMap: FuelMap, CSVCompare: Compare, Papa, echarts: { init: () => chart, graphic: { clipRectByRect: shape => shape } } };
+        CSVFuelMap: FuelMap, CSVCompare: Compare, CSVXYUtils: XY, Papa, echarts: { init: () => chart, graphic: { clipRectByRect: shape => shape } } };
     globals.window = globals;
     vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../xy-workspace.js'), 'utf8'), globals, { filename: 'xy-workspace.js' });
     const api = { state, esc: text => String(text), main: () => state.files.main || null, mainId: () => state.files.main ? 'main' : null, resolve: (f, name) => f.columns.find(column => column.name === name),
@@ -105,9 +107,9 @@ function harness() {
     const flush = async () => { for (let pass = 0; pass < 12; pass++) { const batch = [...frames]; frames.clear(); for (const [, callback] of batch) callback(); await new Promise(resolve => setImmediate(resolve)); } };
     const change = async (id, value) => { const element = dom.get(id); if (typeof value === 'boolean') element.checked = value; else element.value = value; await element.emit('change'); await flush(); };
     const upload = async (text, name = 'map.csv') => { const input = dom.get('xy-map-file'); input.files = [{ name, size: Buffer.byteLength(text), lastModified: 1, text: async () => text }]; await input.emit('change'); await flush(); };
-    return { ...dom, file, state, workspace, chart, flush, change, upload, loadCalls, setContext: value => { context = value; },
+    return { ...dom, file, state, workspace, chart, globals, flush, change, upload, loadCalls, setContext: value => { context = value; },
         async redraw() { workspace.schedule(); await flush(); },
-        async open() { workspace.open(); await flush(); await change('xy-mode', 'map'); await change('xy-map-source', 'external'); },
+        async open() { workspace.open(); await flush(); await change('xy-mode', 'map'); await change('xy-map-source', 'external'); await change('xy-map-style', 'fill'); },
         async apply() { await dom.get('xy-map-apply').click(); await flush(); },
         feedback() { const feedback = dom.get('xy-map-feedback'); assert.ok(feedback, 'Map import feedback must exist beside the apply controls'); return feedback.textContent; } };
 }
@@ -115,6 +117,9 @@ function harness() {
 const long = 'rpm,Nm,g/kWh\n1000,20,300\n1400,20,280\n1000,40,260\n1400,40,250\n';
 const matrix = 'rpm\\Nm,1000,1400\n20,300,280\n40,260,250\n';
 const points = h => (h.chart.getOption().series || []).filter(series => series.id.startsWith('xy-points-'));
+const contourLines = h => (h.chart.getOption().series || []).filter(series => series.id.startsWith('xy-contour-') && series.type === 'line');
+const cells = h => (h.chart.getOption().series || []).find(series => series.id === 'xy-map-cells');
+const axisBounds = h => JSON.stringify(['xAxis', 'yAxis'].map(key => [h.chart.getOption()[key].min, h.chart.getOption()[key].max]));
 const mapSnapshot = h => JSON.stringify(h.workspace.inspect().map);
 function assertBackgroundOnly(h, expectedMap, reason, description) {
     assert.equal(h.workspace.inspect().map?.stats.eligible, 4, `${description}: valid background still renders`);
@@ -129,7 +134,7 @@ function assertBackgroundOnly(h, expectedMap, reason, description) {
     assert.deepEqual(h.loadCalls, [], `${description}: no unavailable operating-point columns are loaded`);
 }
 
-(async () => {
+async function run() {
     const h = harness(); await h.open();
     assert.equal(h.get('xy-map-apply').disabled, true, 'No selected CSV cannot be applied');
     assert.match(h.feedback(), /CSV|ファイル|選|チェック|確認/);
@@ -247,11 +252,121 @@ function assertBackgroundOnly(h, expectedMap, reason, description) {
     withoutTorque.loadCalls.length = 0;
     await withoutTorque.upload(long); await withoutTorque.change('xy-map-confirm-units', true); await withoutTorque.apply();
     assertBackgroundOnly(withoutTorque, mapSnapshot(withoutTorque), /トルク|Nm/, 'Driving log with RPM and throttle but no torque');
+    await withoutTorque.change('xy-map-style', 'lines');
+    assert.ok(contourLines(withoutTorque).some(series => series.data.length), 'A torque-free log can still view a contour-only background');
+    assert.equal(points(withoutTorque).length, 0, 'Contour display does not manufacture operating-point torque');
+    assert.equal(cells(withoutTorque), undefined);
+    assert.match(withoutTorque.get('xy-point-status').textContent, /トルク|Nm/);
     await withoutTorque.change('xy-mode', 'scatter');
     assert.equal(withoutTorque.get('xy-y-select').value, 'Throttle', 'Returning to scatter restores its ordinary Y-axis fallback');
     assert.equal(points(withoutTorque)[0]?.data.length, 3, 'Returning to scatter displays the available RPM/throttle points');
     assert.equal(points(withoutTorque)[0].data[0].value[1], 10);
     assert.equal(withoutTorque.get('xy-point-status').textContent, '', 'Returning to scatter clears the missing-torque notice');
+
+    const detailed = harness(); await detailed.open();
+    await detailed.upload('rpm\\Nm,1000,1400,1800\n20,300,,280\n40,270,250,260\n60,260,240,250\n');
+    await detailed.change('xy-map-confirm-units', true); await detailed.apply();
+    const detailedBackground = mapSnapshot(detailed), fullBounds = axisBounds(detailed);
+    assert.equal(detailed.workspace.inspect().map.stats.emptyCells, 1);
+    assert.ok(Number.isNaN(detailed.workspace.inspect().map.zz[0][1]), 'A missing map value is kept as unavailable');
+    assert.equal(cells(detailed).data.length, 8);
+    assert.equal(contourLines(detailed).length, 0, 'Fill mode does not compute or display contour lines');
+    const fillBuilds = detailed.workspace.inspect().contourBuildCount;
+
+    await detailed.change('xy-map-style', 'lines');
+    assert.equal(cells(detailed), undefined, 'Line-only mode removes the colored cell series');
+    assert.equal(detailed.chart.getOption().visualMap.length, 0, 'A cell-color visualMap must not be applied to contour lines or operating points');
+    assert.ok(contourLines(detailed).some(series => series.data.length > 0), 'Line-only mode draws actual contour geometry');
+    assert.equal(points(detailed)[0].data.length, 3, 'Operating points remain available above the line-only background');
+    assert.equal(mapSnapshot(detailed), detailedBackground, 'Switching representation does not change map values or holes');
+    assert.equal(axisBounds(detailed), fullBounds, 'The line-only view keeps the entire background domain');
+    assert.equal(detailed.workspace.inspect().contourBuildCount, fillBuilds + 1, 'First line view computes its contour geometry once');
+    const tenLines = contourLines(detailed).length;
+    await detailed.change('xy-map-contour-step', '5');
+    assert.ok(contourLines(detailed).length > tenLines, 'A 5 g/kWh interval provides more detail than 10 g/kWh');
+    assert.equal(mapSnapshot(detailed), detailedBackground);
+    assert.equal(axisBounds(detailed), fullBounds);
+    assert.ok(detailed.chart.getOption().series.some(series => String(series.id).includes('label') && series.data.length > 0), 'Major contours have a separate, bounded label series');
+    const built = detailed.workspace.inspect().contourBuildCount;
+    const lineData = JSON.stringify(contourLines(detailed).map(series => series.data));
+    detailed.workspace.cursor(1);
+    assert.equal(detailed.workspace.inspect().contourBuildCount, built, 'Waveform cursor movement does not rebuild contours');
+    detailed.setContext({ scope: 'selection', range: [1, 2], rawTime: false, label: '選択区間 1–2 s' }); await detailed.redraw();
+    assert.equal(points(detailed)[0].data.length, 2);
+    assert.equal(detailed.workspace.inspect().contourBuildCount, built, 'Changing the driving interval reuses background geometry');
+    assert.equal(JSON.stringify(contourLines(detailed).map(series => series.data)), lineData);
+    const lightLine = contourLines(detailed).find(series => series.data.length).lineStyle.color;
+    detailed.state.theme = 'dark'; await detailed.redraw();
+    assert.equal(detailed.workspace.inspect().contourBuildCount, built, 'Theme changes only restyle cached contours');
+    assert.notEqual(contourLines(detailed).find(series => series.data.length).lineStyle.color, lightLine, 'Contour lines adapt to the background theme');
+    await detailed.change('xy-map-style', 'both');
+    assert.equal(cells(detailed).data.length, 8); assert.ok(contourLines(detailed).length > 0);
+    assert.equal(detailed.workspace.inspect().contourBuildCount, built, 'Showing fill alongside existing lines reuses contour geometry');
+    assert.equal(axisBounds(detailed), fullBounds);
+    const mapVisual = detailed.chart.getOption().visualMap[0];
+    assert.ok(mapVisual.seriesIndex.every(index => detailed.chart.getOption().series[index].id === 'xy-map-cells'), 'Color mapping targets only colored map cells');
+    assert.equal(mapVisual.dimension, 8, 'Actual map values stay separate from display-only color values');
+
+    assert.equal(detailed.get('xy-map-zoom-btn').getAttribute('aria-pressed'), 'false', 'Map zoom starts with an explicit opt-in');
+    assert.equal(detailed.chart.getOption().dataZoom.length, 2, 'Map zoom controls both coordinate axes');
+    assert.ok(detailed.chart.getOption().dataZoom.every(item => item.filterMode === 'none' && item.zoomOnMouseWheel === false), 'Page scrolling must not unexpectedly zoom or discard map geometry');
+    await detailed.get('xy-map-zoom-btn').click(); await detailed.flush();
+    assert.equal(detailed.get('xy-map-zoom-btn').getAttribute('aria-pressed'), 'true');
+    assert.ok(detailed.chart.getOption().dataZoom.every(item => item.zoomOnMouseWheel === true), 'Explicit opt-in enables wheel/pinch zoom');
+    for (const item of detailed.chart.getOption().dataZoom) { item.start = 20; item.end = 80; }
+    detailed.chart.handlers.datazoom();
+    await detailed.change('xy-map-style', 'lines');
+    assert.ok(detailed.chart.getOption().dataZoom.every(item => item.start === 20 && item.end === 80), 'Switching representation preserves the chosen coordinate range');
+    detailed.state.theme = 'light'; await detailed.redraw();
+    assert.ok(detailed.chart.getOption().dataZoom.every(item => item.start === 20 && item.end === 80), 'A theme change preserves map zoom');
+    assert.equal(detailed.get('xy-map-zoom-btn').getAttribute('aria-pressed'), 'true');
+    await detailed.change('xy-map-style', 'both');
+    await detailed.get('xy-map-reset-view').click();
+    const reset = detailed.chart.actions.find(action => action.type === 'dataZoom');
+    assert.ok(reset, 'Reset dispatches a chart zoom reset');
+    assert.deepEqual(Array.from(reset.batch, item => item.dataZoomId).sort(), ['xy-x-zoom', 'xy-y-zoom']);
+    assert.ok(reset.batch.every(item => item.start === 0 && item.end === 100), 'Reset covers the full coordinate domain');
+    assert.equal(detailed.get('xy-map-zoom-btn').getAttribute('aria-pressed'), 'false', 'Reset also returns to ordinary page scrolling');
+    assert.equal(detailed.workspace.inspect().contourBuildCount, built, 'Resetting the view does not rebuild the background');
+
+    const savedDetailed = detailed.workspace.collectSettings();
+    assert.equal(savedDetailed.mapStyle, 'both'); assert.equal(savedDetailed.contourStep, 5);
+    assert.equal(Object.hasOwn(savedDetailed, 'contours'), false, 'Only the consolidated display choice is saved');
+    detailed.workspace.applySettings(savedDetailed, { preserveMap: true }); await detailed.flush();
+    assert.equal(detailed.get('xy-map-style').value, 'both'); assert.equal(Number(detailed.get('xy-map-contour-step').value), 5);
+    assert.equal(mapSnapshot(detailed), detailedBackground, 'Restoring settings can retain an explicitly preserved external map');
+    for (const [contours, expectedStyle] of [[false, 'fill'], [true, 'both']]) {
+        const legacy = { ...savedDetailed, contours }; delete legacy.mapStyle; delete legacy.contourStep;
+        detailed.workspace.applySettings(legacy, { preserveMap: true }); await detailed.flush();
+        assert.equal(detailed.workspace.inspect().config.mapStyle, expectedStyle, 'Legacy checkbox settings retain their visual meaning');
+        assert.equal(detailed.get('xy-map-style').value, expectedStyle);
+        assert.equal(detailed.workspace.inspect().config.contourStep, 10);
+    }
+    await detailed.change('xy-map-style', 'lines');
+    await detailed.change('xy-map-contour-step', '0');
+    assert.equal(contourLines(detailed).length, 0, 'An invalid contour interval clears old line geometry');
+    assert.match(detailed.get('xy-map-status').textContent, /間隔|刻み|0より|正/);
+    assert.equal(mapSnapshot(detailed), detailedBackground, 'An invalid display interval does not erase the imported map');
+    await detailed.change('xy-map-style', 'fill');
+    assert.equal(cells(detailed).data.length, 8, 'Fill remains usable when the unused contour interval is invalid');
+    await detailed.change('xy-map-contour-step', '5'); await detailed.change('xy-map-style', 'lines');
+    assert.ok(contourLines(detailed).length > 0, 'Correcting the interval restores contours');
+    await detailed.change('xy-map-contour-step', '0.1');
+    assert.ok(contourLines(detailed).length > 8 && contourLines(detailed).length <= 81, 'A very fine requested interval is bounded without reverting to eight low-end contours');
+    // The 280/300 values border the missing cell, so they must not manufacture lines there.
+    assert.ok(Math.max(...contourLines(detailed).map(series => Number(series.id.slice('xy-contour-'.length)))) >= 265, 'Bounded contours still cover the high end of the fully populated cells');
+    assert.match(detailed.get('xy-map-status').textContent, /調整|変更/, 'Automatic interval adjustment is disclosed');
+
+    const constant = harness(); await constant.open();
+    await constant.upload('rpm\\Nm,1000,1400\n20,250,250\n40,250,250\n');
+    await constant.change('xy-map-confirm-units', true); await constant.apply();
+    const constantBounds = axisBounds(constant); await constant.change('xy-map-style', 'lines');
+    assert.equal(contourLines(constant).length, 0, 'A constant map does not invent contour geometry');
+    assert.match(constant.get('xy-map-status').textContent, /一定|同じ|等高線.*(?:なし|ありません|描け|生成)/, 'No-line maps explain why the background appears empty');
+    assert.equal(axisBounds(constant), constantBounds, 'No contour intersections still retain a meaningful map domain');
+    assert.equal(constant.workspace.inspect().map.stats.eligible, 4);
+    await constant.change('xy-map-style', 'fill');
+    assert.equal(cells(constant).data.length, 4, 'A constant map can still be inspected in fill mode');
 
     const canceled = harness(); await canceled.open();
     let finishRead;
@@ -264,6 +379,9 @@ function assertBackgroundOnly(h, expectedMap, reason, description) {
     assert.match(canceled.feedback(), /変更|選び直/);
     await canceled.upload(long); await canceled.change('xy-map-confirm-units', true); await canceled.apply();
     assert.equal(canceled.workspace.inspect().map?.stats.eligible, 4, 'Reselecting after a canceled import can succeed');
-    h.workspace.destroy(); independent.workspace.destroy(); sampled.workspace.destroy(); standalone.workspace.destroy(); withoutTorque.workspace.destroy(); canceled.workspace.destroy();
-    console.log('xy-workspace: import feedback, explicit unit consent, independent backgrounds, eligible operating points, scatter, visible errors and canceled-read retry passed (DOM/chart mocks)');
-})().catch(error => { console.error(error); process.exitCode = 1; });
+    h.workspace.destroy(); independent.workspace.destroy(); sampled.workspace.destroy(); standalone.workspace.destroy(); withoutTorque.workspace.destroy(); detailed.workspace.destroy(); constant.workspace.destroy(); canceled.workspace.destroy();
+    console.log('xy-workspace: independent backgrounds, detailed contours, style/interval settings, cache, theme, zoom reset, legacy settings, eligible operating points, scatter and import feedback passed (DOM/chart mocks)');
+}
+
+module.exports = { harness };
+if (require.main === module) run().catch(error => { console.error(error); process.exitCode = 1; });
