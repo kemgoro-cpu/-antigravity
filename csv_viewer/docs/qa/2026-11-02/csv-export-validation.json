@@ -1,0 +1,35 @@
+{
+  "file": "基準_ﾛｸﾞ_export_20261102_082445.csv",
+  "sha256": "8d960eaacfddae28dc8b1a1da5ef35db5d6134197441f91c3fdd2681d8c93c3a",
+  "bom_utf8": true,
+  "headers": [
+    "Time",
+    "Speed",
+    "Pressure"
+  ],
+  "units": [
+    "s",
+    "km/h",
+    "kPa"
+  ],
+  "rows": 21,
+  "time_range": [
+    10.0,
+    20.0
+  ],
+  "all_values_match_original_float32": true,
+  "errors": [],
+  "source": "docs/samples/基準_ﾛｸﾞ.csv",
+  "origin": "actual user-triggered application CSV download",
+  "ui_reimport": {
+    "io_sequence": 21,
+    "rows": 21,
+    "channels": [
+      "Speed",
+      "Pressure"
+    ],
+    "all_displayed_values_match_csv": true,
+    "units_preserved": true,
+    "screenshot": "screenshots/046-csv-roundtrip-both-channels.jpg"
+  }
+}

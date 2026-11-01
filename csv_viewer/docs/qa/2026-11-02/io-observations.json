@@ -1,0 +1,360 @@
+[
+  {
+    "sequence": 1,
+    "command": "User enabled file URL permission; normal chooser imported 基準_ﾛｸﾞ.csv",
+    "observed": "M\n基準_ﾛｸﾞ.csv\nAuto:utf-8\n時間\ns\nms\n自動\n開発用・自動保存なし"
+  },
+  {
+    "sequence": 2,
+    "command": "review CSV canceled preserves current log",
+    "observed": {
+      "files": "M\n基準_ﾛｸﾞ.csv\nAuto:utf-8\n時間\ns\nms\n自動\n開発用・自動保存なし",
+      "scope": null
+    }
+  },
+  {
+    "sequence": 3,
+    "command": "C05 invalid explicit name row 0 remains enabled",
+    "observed": {
+      "row": null,
+      "snapshot": "1 / 1 ファイルの取込設定が有効",
+      "confirmEnabled": true,
+      "readOnlyValue": "0"
+    }
+  },
+  {
+    "sequence": 4,
+    "command": "explicit row 9999 beyond preview",
+    "observed": {
+      "disabled": false,
+      "row": "9999",
+      "summary": "名前 1行 / 単位 2行 / データ開始 3行 / 時間列 1 / utf-8"
+    }
+  },
+  {
+    "sequence": 5,
+    "command": "review corrected to automatic and imported second CSV",
+    "observed": "M\n基準_ﾛｸﾞ.csv\nAuto:utf-8\n時間\ns\nms\n自動\n開発用・自動保存なし\ns1\n比較_ﾛｸﾞ.csv\nAuto:utf-8\n時間\ns\nms\n自動\nΔt (s)\n自動\n開発用・自動保存なし"
+  },
+  {
+    "sequence": 6,
+    "command": "CSV export actual coordinate click",
+    "observed": {
+      "toast": "CSVを保存しました 基準_ﾛｸﾞ_export_20261102_081449.csv（121行 × 2チャンネル）",
+      "downloadEvent": "two waits timed out; ordinary Downloads file not found"
+    }
+  },
+  {
+    "sequence": 7,
+    "command": "C05 actual keys only rejects row zero; prior fill sequence is NOT an app bug",
+    "observed": {
+      "disabled": true,
+      "mode": "manual",
+      "row": "0",
+      "summary": "行番号は1〜49の範囲で指定してください。"
+    }
+  },
+  {
+    "sequence": 8,
+    "command": "C05 corrected explicit row1 recovers",
+    "observed": {
+      "disabled": false,
+      "row": "1",
+      "summary": "名前 1行 / 単位 2行 / データ開始 3行 / 時間列 1 / utf-8"
+    }
+  },
+  {
+    "sequence": 9,
+    "command": "wrong settings JSON rejected by template import",
+    "observed": {
+      "offset": "-2",
+      "selected": [
+        "Speed [km/h]",
+        "Pressure [kPa]"
+      ],
+      "text": "目的を選ぶ\n画像・数値・レポートを出力\n今回の作業を再開\n次の試験へ比較条件\nチャンネルの組を再利用\n読込・表示設定を再利用\n\n比較テンプレートで配置・信号・式・対応・許容差を再利用します。適用時は時間差を0へ戻し、現在のメモと表示名は保ちます。適用後に時間合わせと比較をやり直してください。\n\nテンプレート名\n保存\n現在の条件をJSON書き出し\n保存済みテンプレート\n選択してください\n新しいログに適用\n削除\nJSONを読み込んで適用\n\nJSON読込は現在のログへ即時適用します。保存一覧への追加ではありません。JSON書き出しは、選択済みの保存内容ではなく現在の条件です。設定JSONとは別の形式です。"
+    }
+  },
+  {
+    "sequence": 10,
+    "command": "template JSON applied across two logs",
+    "observed": {
+      "selected": [
+        "Pressure [kPa]"
+      ],
+      "offset": "0.000 (was -2.000)"
+    }
+  },
+  {
+    "sequence": 11,
+    "command": "same template file reselected",
+    "observed": {
+      "selected": [
+        "Pressure [kPa]"
+      ]
+    }
+  },
+  {
+    "sequence": 12,
+    "command": "missing CSV quality UI",
+    "observed": "時刻品質はファイル全体、値の品質は表示範囲 -7 – 93 s · 時間合わせ後の選択チャンネルです。重複は非隣接も含む2回目以降、逆転は隣接点を数えます。元レコード番号は空行を除くレコードの番号です。\n\n時刻サンプル\n10,001\n重複（2回目以降）\n0\n隣接時刻の逆転\n0\n長い間隔（候補）\n0\n除外・非有限時刻\n0\n\n長い間隔は正の隣接間隔の中央値 0.01 s × 10（0.1 s超）を目安にした候補です。計測欠落と断定しません。\n\n選択チャンネル\t対象点\t有効点\t欠損合計\n変換不能を含む\t変換不能\nファイル全体\t最小\t最大\t値の状態\nPressure\nkPa\n\t10001\t9900\t101 (1.0%)\t0\t140.0025\t164.9975\t変化あり\nTemperature\ndegC\n\t10001\t9928\t73 (0.7%)\t0\t33.0005\t38\t変化あり\n\n一定値は正常な状態保持でも発生します。欠損は0と扱いません。変換不能の原文と時刻の除外明細は先頭1000件まで保持されるため、区間内の内訳を確定できない場合があります。\n\n問題の詳細 \nすべて\n時刻品質（全体）\n欠損・非有限値（対象区間）\n変換不能の保持明細（対象区間）\n174件表示 / 検出 174件（表示上限1000件）\n種類\tチャンネル\t元レコード\t表示時刻 [s]\t詳細・元文字\t移動\n欠損・非有限値\tPressure\t3\t-7\t\t元データへ\n欠損・非有限値\tPressure\t103\t-6\t\t元データへ\n欠損・非有限値\tPressure\t203\t-5\t\t元データへ\n欠損・非有限値\tPressure\t303\t-4\t\t元データへ\n欠損・非有限値\tPressure\t403\t-3\t\t元データへ\n欠損・非有限値\tPressure\t503\t-2\t\t元データへ\n欠損・非有限値\tPressure\t603\t-1\t\t元データへ\n欠損・非有限値\tPressure\t703\t0\t\t元データへ\n欠損・非有限値\tPressure\t803\t1\t\t元データへ\n欠損・非有限値\tPressure\t903\t2\t\t元データへ\n欠損・非有限値\tPressure\t1003\t3\t\t元データへ\n欠損・非有限値\tPressure\t1103\t4\t\t元データへ\n欠損・非有限値\tPressure\t1203\t5\t\t元データへ\n欠損・非有限値\tPressure\t1303\t6\t\t元データへ\n欠損・非有限値\tPressure\t1403\t7\t\t元データへ\n欠損・非有限値\tPressure\t1503\t8\t\t元データへ\n欠損・非有限値\tPressure\t1603\t9\t\t元データへ\n欠損・非有限値\tPressure\t1703\t10\t\t元データへ\n欠損・非有限値\tPressure\t1803\t11\t\t元データへ\n欠損・非有限値\tPressure\t1903\t12\t\t元データへ\n欠損・非有限値\tPressure\t2003\t13\t\t元データへ\n欠損・非有限値\tPressure\t2103\t14\t\t元データへ\n欠損・非有限値\tPressure\t2203\t15\t\t元データへ\n欠損・非有限値\tPressure\t2303\t16\t\t元データへ\n欠損・非有限値\tPressure\t2403\t17\t\t元データへ\n欠損・非有限値\tPressure\t2503\t18\t\t元データへ\n欠損・非有限値\tPressure\t2603\t19\t\t元データへ\n欠損・非有限値\tPressure\t2703\t20\t\t元データへ\n欠損・非有限値\tPressure\t2803\t21\t\t元データへ\n欠損・非有限値\tPressure\t2903\t22\t\t元データへ\n欠損・非有限値\tPressure\t3003\t23\t\t元データへ\n欠損・非有限値\tPressure\t3103\t24\t\t元データへ\n欠損・非有限値\tPressure\t3203\t25\t\t元データへ\n欠損・非有限値\tPressure\t3303\t26\t\t元データへ\n欠損・非有限値\tPressure\t3403\t27\t\t元データへ\n欠損・非有限値\tPressure\t3503\t28\t\t元データへ\n欠損・非有限値\tPressure\t3603\t29\t\t元データへ\n欠損・非有限値\tPressure\t3703\t30\t\t元データへ\n欠損・非有限値\tPressure\t3803\t31\t\t元データへ\n欠損・非有限値\tPressure\t3903\t32\t\t元データへ\n欠損・非有限値\tPressure\t4003\t33\t\t元データへ\n欠損・非有限値\tPressure\t4103\t34\t\t元データへ\n欠損・非有限値\tPressure\t4203\t35\t\t元データへ\n欠損・非有限値\tPressure\t4303\t36\t\t元データへ\n欠損・非有限値\tPressure\t4403\t37\t\t元データへ\n欠損・非有限値\tPressure\t4503\t38\t\t元データへ\n欠損・非有限値\tPressure\t4603\t39\t\t元データへ\n欠損・非有限値\tPressure\t4703\t40\t\t元データへ\n欠損・非有限値\tPressure\t4803\t41\t\t元データへ\n欠損・非有限値\tPressure\t4903\t42\t\t元データへ\n欠損・非有限値\tPressure\t5003\t43\t\t元データへ\n欠損・非有限値\tPressure\t5103\t44\t\t元データへ\n欠損・非有限値\tPressure\t5203\t45\t\t元データへ\n欠損・非有限値\tPressure\t5303\t46\t\t元データへ\n欠損・非有限値\tPressure\t5403\t47\t\t元データへ\n欠損・非有限値\tPressure\t5503\t48\t\t元データへ\n欠損・非有限値\tPressure\t5603\t49\t\t元データへ\n欠損・非有限値\tPressure\t5703\t50\t\t元データへ\n欠損・非有限値\tPressure\t5803\t51\t\t元データへ\n欠損・非有限値\tPressure\t5903\t52\t\t元データへ\n欠損・非有限値\tPressure\t6003\t53\t\t元データへ\n欠損・非有限値\tPressure\t6103\t54\t\t元データへ\n欠損・非有限値\tPressure\t6203\t55\t\t元データへ\n欠損・非有限値\tPressure\t6303\t56\t\t元データへ\n欠損・非有限値\tPressure\t6403\t57\t\t元データへ\n欠損・非有限値\tPressure\t6503\t58\t\t元データへ\n欠損・非有限値\tPressure\t6603\t59\t\t元データへ\n欠損・非有限値\tPressure\t6703\t60\t\t元データへ\n欠損・非有限値\tPressure\t6803\t61\t\t元データへ\n欠損・非有限値\tPressure\t6903\t62\t\t元データへ\n欠損・非有限値\tPressure\t7003\t63\t\t元データへ\n欠損・非有限値\tPressure\t7103\t64\t\t元データへ\n欠損・非有限値\tPressure\t7203\t65\t\t元データへ\n欠損・非有限値\tPressure\t7303\t66\t\t元データへ\n欠損・非有限値\tPressure\t7403\t67\t\t元データへ\n欠損・非有限値\tPressure\t7503\t68\t\t元データへ\n欠損・非有限値\tPressure\t7603\t69\t\t元データへ\n欠損・非有限値\tPressure\t7703\t70\t\t元データへ\n欠損・非有限値\tPressure\t7803\t71\t\t元データへ\n欠損・非有限値\tPressure\t7903\t72\t\t元データへ\n欠損・非有限値\tPressure\t8003\t73\t\t元データへ\n欠損・非有限値\tPressure\t8103\t74\t\t元データへ\n欠損・非有限値\tPressure\t8203\t75\t\t元データへ\n欠損・非有限値\tPressure\t8303\t76\t\t元データへ\n欠損・非有限値\tPressure\t8403\t77\t\t元データへ\n欠損・非有限値\tPressure\t8503\t78\t\t元データへ\n欠損・非有限値\tPressure\t8603\t79\t\t元データへ\n欠損・非有限値\tPressure\t8703\t80\t\t元データへ\n欠損・非有限値\tPressure\t8803\t81\t\t元データへ\n欠損・非有限値\tPressure\t8903\t82\t\t元データへ\n欠損・非有限値\tPressure\t9003\t83\t\t元データへ\n欠損・非有限値\tPressure\t9103\t84\t\t元データへ\n欠損・非有限値\tPressure\t9203\t85\t\t元データへ\n欠損・非有限値\tPressure\t9303\t86\t\t元データへ\n欠損・非有限値\tPressure\t9403\t87\t\t元データへ\n欠損・非有限値\tPressure\t9503\t88\t\t元データへ\n欠損・非有限値\tPressure\t9603\t89\t\t元データへ\n欠損・非有限値\tPressure\t9703\t90\t\t元データへ\n欠損・非有限値\tPressure\t9803\t91\t\t元データへ\n欠損・非有限値\tPressure\t9903\t92\t\t元データへ\n欠損・非有限値\tPressure\t10003\t93\t\t元データへ\n欠損・非有限値\tTemperature\t3\t-7\t\t元データへ\n欠損・非有限値\tTemperature\t140\t-5.63\t\t元データへ\n欠損・非有限値\tTemperature\t277\t-4.26\t\t元データへ\n欠損・非有限値\tTemperature\t414\t-2.89\t\t元データへ\n欠損・非有限値\tTemperature\t551\t-1.52\t\t元データへ\n欠損・非有限値\tTemperature\t688\t-0.15\t\t元データへ\n欠損・非有限値\tTemperature\t825\t1.22\t\t元データへ\n欠損・非有限値\tTemperature\t962\t2.59\t\t元データへ\n欠損・非有限値\tTemperature\t1099\t3.96\t\t元データへ\n欠損・非有限値\tTemperature\t1236\t5.33\t\t元データへ\n欠損・非有限値\tTemperature\t1373\t6.7\t\t元データへ\n欠損・非有限値\tTemperature\t1510\t8.07\t\t元データへ\n欠損・非有限値\tTemperature\t1647\t9.44\t\t元データへ\n欠損・非有限値\tTemperature\t1784\t10.81\t\t元データへ\n欠損・非有限値\tTemperature\t1921\t12.18\t\t元データへ\n欠損・非有限値\tTemperature\t2058\t13.55\t\t元データへ\n欠損・非有限値\tTemperature\t2195\t14.92\t\t元データへ\n欠損・非有限値\tTemperature\t2332\t16.29\t\t元データへ\n欠損・非有限値\tTemperature\t2469\t17.66\t\t元データへ\n欠損・非有限値\tTemperature\t2606\t19.03\t\t元データへ\n欠損・非有限値\tTemperature\t2743\t20.4\t\t元データへ\n欠損・非有限値\tTemperature\t2880\t21.77\t\t元データへ\n欠損・非有限値\tTemperature\t3017\t23.14\t\t元データへ\n欠損・非有限値\tTemperature\t3154\t24.51\t\t元データへ\n欠損・非有限値\tTemperature\t3291\t25.88\t\t元データへ\n欠損・非有限値\tTemperature\t3428\t27.25\t\t元データへ\n欠損・非有限値\tTemperature\t3565\t28.62\t\t元データへ\n欠損・非有限値\tTemperature\t3702\t29.99\t\t元データへ\n欠損・非有限値\tTemperature\t3839\t31.36\t\t元データへ\n欠損・非有限値\tTemperature\t3976\t32.73\t\t元データへ\n欠損・非有限値\tTemperature\t4113\t34.1\t\t元データへ\n欠損・非有限値\tTemperature\t4250\t35.47\t\t元データへ\n欠損・非有限値\tTemperature\t4387\t36.84\t\t元データへ\n欠損・非有限値\tTemperature\t4524\t38.21\t\t元データへ\n欠損・非有限値\tTemperature\t4661\t39.58\t\t元データへ\n欠損・非有限値\tTemperature\t4798\t40.95\t\t元データへ\n欠損・非有限値\tTemperature\t4935\t42.32\t\t元データへ\n欠損・非有限値\tTemperature\t5072\t43.69\t\t元データへ\n欠損・非有限値\tTemperature\t5209\t45.06\t\t元データへ\n欠損・非有限値\tTemperature\t5346\t46.43\t\t元データへ\n欠損・非有限値\tTemperature\t5483\t47.8\t\t元データへ\n欠損・非有限値\tTemperature\t5620\t49.17\t\t元データへ\n欠損・非有限値\tTemperature\t5757\t50.54\t\t元データへ\n欠損・非有限値\tTemperature\t5894\t51.91\t\t元データへ\n欠損・非有限値\tTemperature\t6031\t53.28\t\t元データへ\n欠損・非有限値\tTemperature\t6168\t54.65\t\t元データへ\n欠損・非有限値\tTemperature\t6305\t56.02\t\t元データへ\n欠損・非有限値\tTemperature\t6442\t57.39\t\t元データへ\n欠損・非有限値\tTemperature\t6579\t58.76\t\t元データへ\n欠損・非有限値\tTemperature\t6716\t60.13\t\t元データへ\n欠損・非有限値\tTemperature\t6853\t61.5\t\t元データへ\n欠損・非有限値\tTemperature\t6990\t62.87\t\t元データへ\n欠損・非有限値\tTemperature\t7127\t64.24\t\t元データへ\n欠損・非有限値\tTemperature\t7264\t65.61\t\t元データへ\n欠損・非有限値\tTemperature\t7401\t66.98\t\t元データへ\n欠損・非有限値\tTemperature\t7538\t68.35\t\t元データへ\n欠損・非有限値\tTemperature\t7675\t69.72\t\t元データへ\n欠損・非有限値\tTemperature\t7812\t71.09\t\t元データへ\n欠損・非有限値\tTemperature\t7949\t72.46\t\t元データへ\n欠損・非有限値\tTemperature\t8086\t73.83\t\t元データへ\n欠損・非有限値\tTemperature\t8223\t75.2\t\t元データへ\n欠損・非有限値\tTemperature\t8360\t76.57\t\t元データへ\n欠損・非有限値\tTemperature\t8497\t77.94\t\t元データへ\n欠損・非有限値\tTemperature\t8634\t79.31\t\t元データへ\n欠損・非有限値\tTemperature\t8771\t80.68\t\t元データへ\n欠損・非有限値\tTemperature\t8908\t82.05\t\t元データへ\n欠損・非有限値\tTemperature\t9045\t83.42\t\t元データへ\n欠損・非有限値\tTemperature\t9182\t84.79\t\t元データへ\n欠損・非有限値\tTemperature\t9319\t86.16\t\t元データへ\n欠損・非有限値\tTemperature\t9456\t87.53\t\t元データへ\n欠損・非有限値\tTemperature\t9593\t88.9\t\t元データへ\n欠損・非有限値\tTemperature\t9730\t90.27\t\t元データへ\n欠損・非有限値\tTemperature\t9867\t91.64\t\t元データへ"
+  },
+  {
+    "sequence": 13,
+    "command": "missing raw sample displayed as 欠損, not zero",
+    "observed": [
+      [
+        "3",
+        "-7",
+        "-7",
+        "欠損",
+        "欠損"
+      ],
+      [
+        "4",
+        "-6.99",
+        "-6.99",
+        "140.00250244140625",
+        "33.0004997253418"
+      ],
+      [
+        "5",
+        "-6.98",
+        "-6.98",
+        "140.0050048828125",
+        "33.000999450683594"
+      ]
+    ]
+  },
+  {
+    "sequence": 14,
+    "command": "external map chosen without units confirmation",
+    "observed": "マップCSVを選ぶ\n\n走行ログとは別に読み込みます。UTF-8、5 MiBまで。行列形式は先頭行が回転数、先頭列がトルク。3列形式は回転数・トルク・燃費率の順です。\n\nCSVの形式\n自動判別\n行列（先頭行X・先頭列Y）\n3列（X・Y・燃費率）\nこのCSVの単位が X＝rpm、Y＝Nm、燃費率＝g/kWh であることを確認した\n背景に適用\n背景を解除\n\n単位確認にチェックを入れると「背景に適用」が押せます。"
+  },
+  {
+    "sequence": 15,
+    "command": "TRN without torque + external detailed map import",
+    "observed": "XY・燃費率マップ\n大きく表示\n×\n表示・軸・背景設定 · 燃費率マップ：X軸・Y軸を選択\n\nこのログにはトルク[Nm]の信号がないため、走行点は表示しません。スロットル開度[%]はトルクの代わりには使えません。 背景マップは単独で表示できます。\n\n拡大操作 OFF\n全体に戻す\nONでホイール・ピンチ拡大、ドラッグ移動\n\n表示範囲 0 – 1180 s · 時間合わせ後（動作点・散布図に適用）\n\n練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 10 g/kWh刻み・22段階。数字は主要線の燃費率[g/kWh]です。\n\n背景マップのみ表示しています。\n\n波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。\n\n左右分割：境界をドラッグして幅を調整できます。境界を選んで左右キーでも調整できます。"
+  },
+  {
+    "sequence": 16,
+    "command": "hand authored settings fixture imported (not export roundtrip)",
+    "observed": {
+      "files": "M\nQA_基準\nAuto:utf-8\n時間\ns\nms\n自動\n開発用・自動保存なし\ns1\nQA_比較\nAuto:utf-8\n時間\ns\nms\n自動\nΔt (s)\n自動\n開発用・自動保存なし",
+      "notes": "発見を残す\n\n上部の解析対象、比較条件、数値と画像を一緒に保存します。\n\nこの区間をメモに保存\n10–20 s ↗\n\nQA設定読込の確認\n\nSpeed / Pressure\n削除",
+      "offset": "-2.000",
+      "scope": "selection",
+      "selected": [
+        "Speed [km/h]",
+        "Pressure [kPa]"
+      ]
+    }
+  },
+  {
+    "sequence": 17,
+    "command": "favorite name prompt cancel",
+    "observed": {
+      "promptSeen": true,
+      "dismissCommand": "reported focus timeout",
+      "followup": "CDP reported no dialog; UI responsive and favorites only placeholder",
+      "options": "お気に入り…"
+    }
+  },
+  {
+    "sequence": 18,
+    "command": "manual download confirmation from user",
+    "observed": {
+      "manualClick": "保存できる",
+      "automation": "toast but no download file/event",
+      "conclusion": "not established app export failure; actual exported contents and roundtrip remain unverified"
+    }
+  },
+  {
+    "sequence": 19,
+    "command": "native favorite save remains unverified after timeout",
+    "observed": {
+      "saveAttempt": "Prompt text was observed: 保存するお気に入り名を入力してください",
+      "confirm": "High level and standard CDP dialog handling timed out during focus emulation; no saved favorite was confirmed.",
+      "cleanup": "Closing this task-created tab also timed out; user asked to cancel any remaining prompt.",
+      "downloadHistory": "chrome://downloads/ was denied by browser URL policy; no alternative access to that browser page was used.",
+      "userCSV": "User confirmed manual CSV save works; exact saved file path requested for contents and reimport."
+    }
+  },
+  {
+    "sequence": 20,
+    "command": "actual manual CSV download reimported through file chooser",
+    "observed": {
+      "files": "M\n基準_ﾛｸﾞ_export_202611…\nAuto:utf-8\n時間\ns\nms\n自動\n開発用・自動保存なし",
+      "raw": "1–21 / 21 サンプル\n前\nページ\n/ 1\n次\n\n元レコードは空行を除く1始まりの番号です（物理行番号ではありません）。元時刻は秒換算済み。表示時刻＝元時刻＋時間補正。値は読込済みの原サンプル／計算列の値で、補間しません。\n\n元レコード\t元時刻 [s]\t表示時刻 [s]\tPressure\nkPa\n\n3\t10\t10\t103.25\n4\t10.5\t10.5\t103.75\n5\t11\t11\t104.375\n6\t11.5\t11.5\t105\n7\t12\t12\t105.625\n8\t12.5\t12.5\t106.375\n9\t13\t13\t107.125\n10\t13.5\t13.5\t108\n11\t14\t14\t108.75\n12\t14.5\t14.5\t109.75\n13\t15\t15\t110.625\n14\t15.5\t15.5\t111.75\n15\t16\t16\t112.75\n16\t16.5\t16.5\t113.875\n17\t17\t17\t115\n18\t17.5\t17.5\t116.25\n19\t18\t18\t117.5\n20\t18.5\t18.5\t118.625\n21\t19\t19\t119.875\n22\t19.5\t19.5\t121.125\n23\t20\t20\t122.375",
+      "selected": [
+        "Pressure [kPa]"
+      ]
+    }
+  },
+  {
+    "sequence": 21,
+    "command": "reimported actual CSV, both output channels displayed in raw table",
+    "observed": {
+      "headers": [
+        "元レコード",
+        "元時刻 [s]",
+        "表示時刻 [s]",
+        "Pressure\nkPa",
+        "Speed\nkm/h"
+      ],
+      "rows": [
+        [
+          "3",
+          "10",
+          "10",
+          "103.25",
+          "8"
+        ],
+        [
+          "4",
+          "10.5",
+          "10.5",
+          "103.75",
+          "10"
+        ],
+        [
+          "5",
+          "11",
+          "11",
+          "104.375",
+          "12"
+        ],
+        [
+          "6",
+          "11.5",
+          "11.5",
+          "105",
+          "14"
+        ],
+        [
+          "7",
+          "12",
+          "12",
+          "105.625",
+          "16"
+        ],
+        [
+          "8",
+          "12.5",
+          "12.5",
+          "106.375",
+          "18"
+        ],
+        [
+          "9",
+          "13",
+          "13",
+          "107.125",
+          "20"
+        ],
+        [
+          "10",
+          "13.5",
+          "13.5",
+          "108",
+          "22"
+        ],
+        [
+          "11",
+          "14",
+          "14",
+          "108.75",
+          "24"
+        ],
+        [
+          "12",
+          "14.5",
+          "14.5",
+          "109.75",
+          "26"
+        ],
+        [
+          "13",
+          "15",
+          "15",
+          "110.625",
+          "28"
+        ],
+        [
+          "14",
+          "15.5",
+          "15.5",
+          "111.75",
+          "30"
+        ],
+        [
+          "15",
+          "16",
+          "16",
+          "112.75",
+          "32"
+        ],
+        [
+          "16",
+          "16.5",
+          "16.5",
+          "113.875",
+          "34"
+        ],
+        [
+          "17",
+          "17",
+          "17",
+          "115",
+          "36"
+        ],
+        [
+          "18",
+          "17.5",
+          "17.5",
+          "116.25",
+          "38"
+        ],
+        [
+          "19",
+          "18",
+          "18",
+          "117.5",
+          "40"
+        ],
+        [
+          "20",
+          "18.5",
+          "18.5",
+          "118.625",
+          "42"
+        ],
+        [
+          "21",
+          "19",
+          "19",
+          "119.875",
+          "44"
+        ],
+        [
+          "22",
+          "19.5",
+          "19.5",
+          "121.125",
+          "46"
+        ],
+        [
+          "23",
+          "20",
+          "20",
+          "122.375",
+          "48"
+        ]
+      ],
+      "selected": [
+        "Speed [km/h]",
+        "Pressure [kPa]"
+      ]
+    }
+  }
+]

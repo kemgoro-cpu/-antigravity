@@ -1,0 +1,212 @@
+{
+  "_format": "CSV Viewer Settings",
+  "_version": 7,
+  "_fixture": {
+    "origin": "hand-authored synthetic input fixture",
+    "purpose": "Verify settings import only; not an application export or an export/import round trip.",
+    "measuredData": false,
+    "createdDate": "2026-11-02"
+  },
+  "fileInfos": [
+    {
+      "name": "基準_ﾛｸﾞ.csv",
+      "role": "main",
+      "offset": 0
+    },
+    {
+      "name": "比較_ﾛｸﾞ.csv",
+      "role": "sub",
+      "offset": -2
+    }
+  ],
+  "selectedNames": [
+    "Speed",
+    "Pressure"
+  ],
+  "customRAMs": [],
+  "chartGroups": [
+    {
+      "id": "qa-settings-speed",
+      "channels": [
+        {
+          "name": "Speed",
+          "axisId": "qa-axis-speed"
+        }
+      ],
+      "axes": [
+        {
+          "id": "qa-axis-speed",
+          "unit": "km/h",
+          "representative": "Speed"
+        }
+      ]
+    },
+    {
+      "id": "qa-settings-pressure",
+      "channels": [
+        {
+          "name": "Pressure",
+          "axisId": "qa-axis-pressure"
+        }
+      ],
+      "axes": [
+        {
+          "id": "qa-axis-pressure",
+          "unit": "kPa",
+          "representative": "Pressure"
+        }
+      ]
+    }
+  ],
+  "comparison": {
+    "view": "overlay",
+    "labels": {
+      "基準_ﾛｸﾞ.csv": "QA_基準",
+      "比較_ﾛｸﾞ.csv": "QA_比較"
+    },
+    "matches": {
+      "比較_ﾛｸﾞ.csv": {
+        "Speed": "Speed",
+        "Pressure": "Pressure"
+      }
+    },
+    "searchAliases": {},
+    "tolerances": {},
+    "align": {
+      "比較_ﾛｸﾞ.csv": {
+        "channel": "Speed",
+        "range": 10,
+        "scope": "all",
+        "offset": -2,
+        "method": "manual"
+      }
+    },
+    "analysis": {
+      "scope": "selection",
+      "range": [
+        10,
+        20
+      ],
+      "mainName": "基準_ﾛｸﾞ.csv",
+      "rawTime": false
+    },
+    "notes": [
+      {
+        "id": "qa-manual-settings-note-20261102",
+        "text": "QA設定読込の確認",
+        "t0": 10,
+        "t1": 20,
+        "created": "2026-11-02T00:00:00+09:00",
+        "channels": [
+          "Speed",
+          "Pressure"
+        ],
+        "files": [
+          {
+            "name": "基準_ﾛｸﾞ.csv",
+            "role": "main",
+            "offset": 0,
+            "label": "QA_基準"
+          },
+          {
+            "name": "比較_ﾛｸﾞ.csv",
+            "role": "sub",
+            "offset": -2,
+            "label": "QA_比較"
+          }
+        ],
+        "image": "",
+        "context": {
+          "settings": {
+            "_version": 7,
+            "fileInfos": [
+              {
+                "name": "基準_ﾛｸﾞ.csv",
+                "role": "main",
+                "offset": 0
+              },
+              {
+                "name": "比較_ﾛｸﾞ.csv",
+                "role": "sub",
+                "offset": -2
+              }
+            ],
+            "selectedNames": [
+              "Speed",
+              "Pressure"
+            ],
+            "customRAMs": [],
+            "chartGroups": [
+              {
+                "id": "qa-settings-speed",
+                "channels": [
+                  {
+                    "name": "Speed",
+                    "axisId": "qa-axis-speed"
+                  }
+                ],
+                "axes": [
+                  {
+                    "id": "qa-axis-speed",
+                    "unit": "km/h",
+                    "representative": "Speed"
+                  }
+                ]
+              },
+              {
+                "id": "qa-settings-pressure",
+                "channels": [
+                  {
+                    "name": "Pressure",
+                    "axisId": "qa-axis-pressure"
+                  }
+                ],
+                "axes": [
+                  {
+                    "id": "qa-axis-pressure",
+                    "unit": "kPa",
+                    "representative": "Pressure"
+                  }
+                ]
+              }
+            ]
+          },
+          "matches": {
+            "比較_ﾛｸﾞ.csv": {
+              "Speed": "Speed",
+              "Pressure": "Pressure"
+            }
+          },
+          "align": {
+            "比較_ﾛｸﾞ.csv": {
+              "channel": "Speed",
+              "range": 10,
+              "scope": "all",
+              "offset": -2,
+              "method": "manual"
+            }
+          },
+          "tolerances": {},
+          "rawTime": false
+        },
+        "results": []
+      }
+    ]
+  },
+  "importSettings": {
+    "nameMode": "auto",
+    "unitMode": "auto",
+    "timeColumn": "auto",
+    "delimiter": "auto",
+    "reviewBeforeLoad": false
+  },
+  "nameRowIdx": "1",
+  "unitRowIdx": "2",
+  "encodingMode": "auto",
+  "inspection": {
+    "open": false,
+    "tab": "data",
+    "fileName": "基準_ﾛｸﾞ.csv",
+    "fileKey": ""
+  }
+}
