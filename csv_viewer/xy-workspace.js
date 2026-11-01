@@ -17,7 +17,8 @@
         panel.innerHTML = `<header class="xy-workspace-header"><h2>XY・燃費率マップ</h2><button id="xy-expand-btn" class="btn-secondary" aria-expanded="false">大きく表示</button><button id="xy-close-btn" class="btn-secondary" aria-label="XY・マップを閉じて比較へ戻る">×</button></header>
           <div class="xy-workspace-scroll"><div class="xy-workspace-controls">
           <label>表示<select id="xy-mode"><option value="scatter">散布図</option><option value="map">燃費率マップ</option></select></label>
-          <div class="xy-field-pair"><label>X軸<select id="xy-x-select" aria-label="X軸チャンネル"></select></label><label>Y軸<select id="xy-y-select" aria-label="Y軸チャンネル"></select></label></div>
+          <div class="xy-field-pair"><label><span id="xy-x-label">X軸</span><select id="xy-x-select" aria-label="X軸チャンネル"></select></label><label><span id="xy-y-label">Y軸</span><select id="xy-y-select" aria-label="Y軸チャンネル"></select></label></div>
+          <p id="xy-point-status" class="xy-help hidden" role="status" aria-live="polite"></p>
           <label id="xy-color-field">点の色<select id="xy-z-select" aria-label="色に使うチャンネル"></select></label>
           <div id="xy-map-controls" class="hidden"><details id="xy-map-settings"><summary>背景マップ・表示設定</summary><label>背景マップのデータ<select id="xy-map-source" aria-label="背景マップのデータ"></select></label>
           <div id="xy-map-log-fields"><details><summary>背景の列・格子幅</summary><p class="xy-help">背景は選んだログのSFC列全体を格子平均します。走行中の燃料流量から燃費率を計算する機能ではありません。</p>
@@ -34,7 +35,7 @@
           </div><p id="xy-analysis-context" class="analysis-result-context"></p><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
           <p id="xy-cursor-status" class="xy-help" role="status"></p><p class="xy-help">波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。</p></div>`;
         document.querySelector('.compare-body').appendChild(panel);
-        const dom = Object.fromEntries(['mode', 'x-select', 'y-select', 'z-select', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-feedback', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-contours', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
+        const dom = Object.fromEntries(['mode', 'x-label', 'y-label', 'x-select', 'y-select', 'z-select', 'point-status', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-feedback', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-contours', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
 
         function showImportFeedback(message, error = false, reveal = false) {
             externalStatus = message;
@@ -81,8 +82,8 @@
                 if (matches.length === 1) cfg.source = matches[0][0];
             }
             const selected = [...s.selectedNames].map(name => columns.find(c => c.name === name)).filter(Boolean);
-            if (!columns.some(c => c.name === cfg.x)) cfg.x = choose(columns, 'rpm', ['engine_speed', 'engine_rpm', 'rpm']) || selected[0]?.name || columns[0]?.name || '';
-            if (!columns.some(c => c.name === cfg.y)) cfg.y = choose(columns, 'torque', ['engine_torque', 'torque']) || selected[1]?.name || columns[1]?.name || columns[0]?.name || '';
+            if (!columns.some(c => c.name === cfg.x)) cfg.x = choose(columns, 'rpm', ['engine_speed', 'engine_rpm', 'rpm']) || (cfg.mode === 'map' ? '' : selected[0]?.name || columns[0]?.name || '');
+            if (!columns.some(c => c.name === cfg.y)) cfg.y = choose(columns, 'torque', ['engine_torque', 'torque']) || (cfg.mode === 'map' ? '' : selected[1]?.name || columns[1]?.name || columns[0]?.name || '');
             if (!columns.some(c => c.name === cfg.z)) cfg.z = '';
             options(dom['x-select'], columns, cfg.x); options(dom['y-select'], columns, cfg.y); options(dom['z-select'], columns, cfg.z, true);
             dom['map-source'].innerHTML = '<option value="main">基準ログのSFC列</option>'
@@ -99,6 +100,11 @@
         }
         function syncMode() {
             dom.mode.value = cfg.mode;
+            dom['x-label'].textContent = cfg.mode === 'map' ? '走行点のX軸' : 'X軸';
+            dom['y-label'].textContent = cfg.mode === 'map' ? '走行点のY軸' : 'Y軸';
+            dom['x-select'].setAttribute('aria-label', cfg.mode === 'map' ? '走行点のX軸チャンネル' : 'X軸チャンネル');
+            dom['y-select'].setAttribute('aria-label', cfg.mode === 'map' ? '走行点のY軸チャンネル' : 'Y軸チャンネル');
+            dom['point-status'].textContent = ''; dom['point-status'].classList.add('hidden');
             $('xy-color-field').classList.toggle('hidden', cfg.mode === 'map');
             $('xy-map-controls').classList.toggle('hidden', cfg.mode !== 'map');
             $('xy-map-log-fields').classList.toggle('hidden', cfg.source === 'external');
@@ -206,13 +212,20 @@
             dom['data-count'].textContent = '読み込み・集計中…'; dom['cursor-status'].textContent = '';
             preparedFiles = []; lastResult = null;
             const activeChart = chartInstance(); activeChart.clear();
-            if (!main || !mainX || !mainY || !context.range) { dom['data-count'].textContent = 'ログを開き、X軸・Y軸と解析対象を選択してください。'; return; }
             const mapMode = cfg.mode === 'map';
-            if (mapMode && (!F.compatibleUnit(mainX.unit, 'rpm') || !F.compatibleUnit(mainY.unit, 'torque'))) {
-                dom['data-count'].textContent = '動作点のX軸は回転数[rpm]、Y軸はトルク[Nm]を選択してください。スロットル開度や単位のない列をトルクとして扱いません。';
-                showMapStatus({ reason: '対応する動作点の軸を選ぶと背景を表示します。' }); return;
+            if (!mapMode && (!main || !mainX || !mainY || !context.range)) { dom['data-count'].textContent = 'ログを開き、X軸・Y軸と解析対象を選択してください。'; return; }
+            let pointReason = '';
+            if (mapMode) {
+                if (!main) pointReason = '走行ログがないため、走行点は表示しません。';
+                else if (!main.columns.some(c => F.compatibleUnit(c.unit, 'torque'))) pointReason = 'このログにはトルク[Nm]の信号がないため、走行点は表示しません。スロットル開度[%]はトルクの代わりには使えません。';
+                else if (!main.columns.some(c => F.compatibleUnit(c.unit, 'rpm'))) pointReason = 'このログには回転数[rpm]の信号がないため、走行点は表示しません。';
+                else if (!F.compatibleUnit(mainX?.unit, 'rpm') || !F.compatibleUnit(mainY?.unit, 'torque')) pointReason = '走行点は表示しません。X軸に回転数[rpm]、Y軸にトルク[Nm]を選んでください。スロットル開度や単位のない列は使えません。';
+                else if (!context.range) pointReason = '解析対象の時間範囲がないため、走行点は表示しません。';
             }
-            const names = [cfg.x, cfg.y, !mapMode && cfg.z].filter(Boolean), files = Object.entries(s.files);
+            dom['point-status'].textContent = pointReason ? pointReason + ' 背景マップは単独で表示できます。' : '';
+            dom['point-status'].classList.toggle('hidden', !pointReason);
+            // A background has its own axes and does not require a running log or time range.
+            const names = [cfg.x, cfg.y, !mapMode && cfg.z].filter(Boolean), files = pointReason ? [] : Object.entries(s.files);
             busy = true; panel.setAttribute('aria-busy', 'true');
             const backgroundPromise = mapMode ? getBackground(token, alive).catch(error => ({ reason: '背景を読み込めませんでした: ' + (error.message || error) })) : Promise.resolve(null);
             await Promise.all(files.map(async ([fid, file]) => {
@@ -266,7 +279,7 @@
                 } }, series }, { notMerge: true });
             preparedFiles = dataFiles; renderCount++; lastSignature = signature(); busy = false; panel.setAttribute('aria-busy', 'false');
             lastResult = { background: background?.map || null, backgroundName: background?.name || '', colorRange: color, files: dataFiles.map(d => d.fid), seriesCount: series.length, context: { ...context }, summaries };
-            dom['data-count'].textContent = summaries.join(' / ') || '対象区間に表示できる動作点がありません。';
+            dom['data-count'].textContent = summaries.join(' / ') || (pointReason && background?.map ? '背景マップのみ表示しています。' : '対象区間に表示できる動作点がありません。');
             showMapStatus(background, color);
             if (Number.isFinite(lastCursor)) cursor(lastCursor);
         }
@@ -276,7 +289,7 @@
         }
         function cursor(time) {
             lastCursor = Number.isFinite(time) ? time : null;
-            if (!visible || !chart || !lastResult) return;
+            if (!visible || !chart || !lastResult || !preparedFiles.length) return;
             const updates = [], labels = [];
             for (const data of preparedFiles) {
                 const nearest = Number.isFinite(time) && data.prepared.ok ? F.nearestPoint(data.prepared, data.x, data.y, data.z, time, { range: data.range, offset: data.offset, nonnegative: data.mapMode }) : null;
@@ -385,7 +398,7 @@
                 if (!columns.some(c => c.name === cfg.mapX)) cfg.source = 'external';
                 syncControls(true);
                 $('xy-map-settings').open = cfg.source === 'external' && !externalMap;
-            }
+            } else syncControls(true);
             changed();
         });
         for (const [id, key] of [['x-select', 'x'], ['y-select', 'y'], ['z-select', 'z'], ['map-x-select', 'mapX'], ['map-y-select', 'mapY'], ['map-z-select', 'mapZ']]) dom[id].addEventListener('change', () => { cfg[key] = dom[id].value; changed(); });

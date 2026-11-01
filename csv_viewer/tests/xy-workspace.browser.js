@@ -292,9 +292,27 @@ async function clickDataPoint(page, seriesIndex = 0, pointIndex = 3) {
         await choose(wp, 'xy-x-select', 'Engine_Speed'); await choose(wp, 'xy-y-select', 'Engine_Torque');
         await choose(wp, 'xy-mode', 'map');
         await choose(wp, 'xy-y-select', 'Engine_Torque');
-        assert.match(await wp.locator('#xy-data-count').innerText(), /単位|Nm|トルク|評価/);
+        assert.match(await wp.locator('#xy-point-status').innerText(), /単位|Nm|トルク|評価/);
+        assert.equal(await wp.locator('#xy-point-status').isVisible(), true);
+        assert.ok((await inspect(wp)).map, 'Valid SFC background survives a percent signal selected for operating-point torque');
         assert.ok((await pointSeries(wp)).every(s => s.data.length === 0));
-        await wrong.context.close(); checks.push('fuel-map axes reject a percent signal used as torque');
+        await uploadMap(wp, matrix);
+        const independentBackground = (await inspect(wp)).map;
+        assert.ok(independentBackground, 'Applying an external map with an incompatible Y axis still draws the background');
+        assert.equal(await wp.locator('#xy-map-settings').evaluate(element => element.open), false);
+        assert.equal(await wp.locator('#xy-point-status').isVisible(), true, 'The missing-torque explanation remains visible after apply closes settings');
+        assert.match(await wp.locator('#xy-point-status').innerText(), /Nm|トルク/);
+        assert.equal((await pointSeries(wp)).length, 0, 'A percent signal is never drawn against the Nm background');
+        assert.ok(await wp.evaluate(() => __csvViewerDebug.xyWorkspace.inspect().chart.getOption().series
+            .some(series => series.id === 'xy-map-cells' && series.data.length > 0)), 'Background cells reach ECharts');
+        await choose(wp, 'xy-y-select', 'sfc_te');
+        assert.ok((await pointSeries(wp))[0].data.length > 0, 'Selecting a real Nm column restores operating points');
+        assert.equal(await wp.locator('#xy-point-status').innerText(), '');
+        assert.deepEqual((await inspect(wp)).map, independentBackground, 'Point-axis changes leave map values unchanged');
+        await choose(wp, 'xy-mode', 'scatter');
+        await choose(wp, 'xy-y-select', 'Engine_Torque');
+        assert.ok((await pointSeries(wp))[0].data.length > 0, 'Scatter mode continues to allow a percent Y axis');
+        await wrong.context.close(); checks.push('fuel-map backgrounds render independently; incompatible points explain requirements and resume with Nm');
 
         const delayed = await open(), dp = delayed.page;
         await setup(dp, false);
