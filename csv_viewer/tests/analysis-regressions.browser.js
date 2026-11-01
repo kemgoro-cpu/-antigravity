@@ -61,9 +61,9 @@ async function openInspector(page, tab) {
         await openInspector(page, 'stats');
         assert.equal(await page.locator('#inspector-statistics tbody tr').count(), 0);
         await page.evaluate(() => window.__csvViewerDebug.showXYPlotModal());
-        await page.waitForFunction(() => document.querySelector('#xy-data-count').textContent.includes('有効 0 点'));
-        assert.deepEqual(await page.evaluate(() => echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.map(s => s.data.length)), [0, 0]);
-        await page.locator('.xy-modal .modal-close-btn').click();
+        await page.waitForFunction(() => document.querySelector('#xy-data-count').textContent.match(/有効\s*0\s*点/));
+        assert.deepEqual(await page.evaluate(() => echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.filter(s => s.id.startsWith('xy-points-')).map(s => s.data.length)), [0, 0]);
+        await page.locator('#xy-close-btn').click();
         let unexpectedDownload = false;
         const markDownload = () => { unexpectedDownload = true; }; page.on('download', markDownload);
         await page.evaluate(() => window.__csvViewerDebug.exportVisibleCSV()); await settled(page);

@@ -8,6 +8,8 @@
 (function () {
 let comparisonWorkspace = null;
 let dataInspector = null;
+let xyWorkspace = null;
+let xyFocusPoint = null;
 
 // ─────────────────────────────────────────────────────────────
 // Error notification system
@@ -1448,6 +1450,10 @@ function initChart() {
         });
     });
     state.chart.on('brushEnd', onBrushEnd);
+    state.chart.on('updateAxisPointer', event => {
+        const time = event.axesInfo?.find(axis => axis.axisDim === 'x')?.value;
+        if (Number.isFinite(time)) xyWorkspace?.cursor(time);
+    });
 
     // ズーム操作に統計サマリパネルを追従させる（rAFで間引き）
     let _statsRafId = null;
@@ -1456,6 +1462,7 @@ function initChart() {
         _statsRafId = requestAnimationFrame(() => {
             _statsRafId = null;
             updateStatsPanel();
+            xyWorkspace?.schedule();
         });
     });
 
@@ -3086,6 +3093,8 @@ dom.clearBtn.addEventListener('click', async () => {
     state.files         = {};
     state.comparison = CSVCompare.cleanSettings();
     comparisonWorkspace?.clear();
+    xyWorkspace?.clear();
+    xyFocusPoint = null;
     dataInspector?.clear();
     state.selectedNames = new Set();
     state.chartGroups   = [];
@@ -6150,6 +6159,7 @@ let _lastAutoRow = null;
 function renderChart() {
     ensureEventsCurrent();
     comparisonWorkspace?.schedule();
+    xyWorkspace?.schedule();
     dataInspector?.schedule();
     if (!state.chart) initChart();
     // notMerge replaces tooltip views; cancel pending tooltip positioning before rebuilding them.
@@ -6406,6 +6416,22 @@ function renderChart() {
                     lineStyle: { color: highlight.lineColor, width: 2, type: 'solid' }, data: pointData },
             });
         });
+    }
+
+    if (xyFocusPoint) {
+        const file = state.files[xyFocusPoint.fileId];
+        if (file !== xyFocusPoint.file || file?.timeData[xyFocusPoint.index] !== xyFocusPoint.time) xyFocusPoint = null;
+        else {
+            const time = xyFocusPoint.time + comparisonWorkspace.effectiveOffset(file);
+            order.forEach((groupId, gi) => {
+                const axisMap = yAxisIndexByGroup.get(groupId);
+                series.push({ id: `xy-focus-${gi}`, type: 'line', data: [], xAxisIndex: gi,
+                    yAxisIndex: axisMap?.values().next().value ?? 0, silent: true, animation: false, z: 9,
+                    markLine: { symbol: 'none', silent: true, animation: false,
+                        label: { show: gi === 0, formatter: 'XYの選択点', color: T.accent },
+                        lineStyle: { color: T.accent, width: 2, type: 'dashed' }, data: [{ xAxis: time }] } });
+            });
+        }
     }
 
     const inspectionTime = dataInspector?.cursorTime();
@@ -8332,6 +8358,7 @@ function collectSettings() {
         // イベント検出の条件式（区間は保存しない。次回は式だけ復元して手動で再検出）
         eventExpr: dom.eventExpr?.value || '',
         eventOptions: collectEventOptions(),
+        xyWorkspace: xyWorkspace?.collectSettings(),
         // Keep the legacy flag for older readers; inspection is the current source of truth.
         statsPanel: !!(dataInspector?.collectSettings().open && dataInspector.collectSettings().tab === 'stats'),
         fontScale: state.fontScale,
@@ -8440,6 +8467,7 @@ function buildPresetSettings() {
         importSettings: window.CSVImportPreview?.collectSettings(),
         eventExpr: dom.eventExpr.value,
         eventOptions: collectEventOptions(),
+        xyWorkspace: xyWorkspace?.collectSettings(),
         selectedNames: [...state.selectedNames],
         customRAMs: state.customRAMs.map(c => ({ name: c.name, unit: c.unit || '', expr: c.expr })),
         chartGroups: serializeChartGroups(),
@@ -8644,141 +8672,15 @@ function showDiffCurvesModal() {
 dom.diffBtn?.addEventListener('click', showDiffCurvesModal);
 
 // ─────────────────────────────────────────────────────────────
-// XYプロット（F7）: 任意チャンネル同士の散布図をモーダルで表示する。
+// XY・燃費率マップ（F7）: 時系列と並べる共通パネル。
 // main/subを重ね描き（ファイル色）。X/Yは同一ファイル内のペアなので
 // タイムシフトは「表示中の時間範囲のみ」の絞り込みにだけ関係する。
 // ─────────────────────────────────────────────────────────────
 
-// 散布図の最大点数。超える場合は等間隔に間引く（描画の固まり防止）
-const XY_MAX_POINTS = 50000;
-
-async function showXYPlotModal() {
-    const mainFile = getMainFile();
-    if (!mainFile) return;
-
-    const colOptions = mainFile.columns
-        .map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.unit ? ` [${esc(c.unit)}]` : ''}</option>`)
-        .join('');
-    // 既定値: 表示中チャンネルの先頭2つ（無ければ列の先頭2つ）
-    const displayed = currentChannelOrder();
-    const defX = displayed[0] || mainFile.columns[0]?.name || '';
-    const defY = displayed[1] || mainFile.columns[1]?.name || defX;
-
-    const html =
-        `<h3 id="xy-modal-title" style="margin:0 0 8px;color:var(--accent-soft);">XYプロット</h3>`
-        + `<div class="xy-controls">`
-        + `<label>X: <select id="xy-x-select" aria-label="X軸チャンネル">${colOptions}</select></label>`
-        + `<label>Y: <select id="xy-y-select" aria-label="Y軸チャンネル">${colOptions}</select></label>`
-        + `</div>`
-        + `<p id="xy-analysis-context" class="analysis-result-context">${esc(getAnalysisContext().label)}（上部の解析対象と共通）</p>`
-        + `<p id="xy-data-count" class="analysis-result-context"></p>`
-        + `<div id="xy-chart" class="xy-chart"></div>`
-        + MODAL_CLOSE_FOOTER;
-
-    const { overlay, modal, close } = createModal(html, { modalClass: 'xy-modal', labelledBy: 'xy-modal-title' });
-    modal.querySelector('.modal-close-btn').addEventListener('click', close);
-
-    const xSel = modal.querySelector('#xy-x-select');
-    const ySel = modal.querySelector('#xy-y-select');
-    if ([...xSel.options].some(o => o.value === defX)) xSel.value = defX;
-    if ([...ySel.options].some(o => o.value === defY)) ySel.value = defY;
-
-    const chart = echarts.init(modal.querySelector('#xy-chart'), 'v5', { renderer: 'canvas' });
-    // モーダルがどの経路で閉じても（Esc・オーバーレイクリック含む）チャートを破棄する
-    const obs = new MutationObserver(() => {
-        if (!document.body.contains(overlay)) {
-            chart.dispose();
-            obs.disconnect();
-        }
-    });
-    obs.observe(document.body, { childList: true });
-
-    let xyGeneration = 0;
-    async function renderXY() {
-        const generation = ++xyGeneration;
-        const xName = xSel.value, yName = ySel.value;
-        if (!xName || !yName) return;
-        const context = getAnalysisContext(), range = context.range;
-        if (!range) return;
-        modal.querySelector('#xy-analysis-context').textContent = `${context.label}（上部の解析対象と共通）`;
-
-        // 対象チャンネルを全ファイルでロードしてから系列を組み立てる
-        const loads = [];
-        for (const [fid, f] of Object.entries(state.files)) {
-            const names = [xName, yName].filter(n => resolveColumnForFile(f, n));
-            if (names.length) loads.push(loadColumnsForFile(fid, names));
-        }
-        try { await Promise.all(loads); } catch (e) { /* 欠けた列は下でスキップされる */ }
-        if (generation !== xyGeneration || !document.body.contains(overlay)) return;
-
-        const series = [];
-        const counts = [];
-        for (const [fid, f] of Object.entries(state.files)) {
-            const xc = resolveColumnForFile(f, xName);
-            const yc = resolveColumnForFile(f, yName);
-            if (!xc || !yc) continue;
-            if (context.rawTime && (xc.isCrossFile || yc.isCrossFile)) { counts.push(`${f.shortName}: 時間合わせに依存する計算のため除外`); continue; }
-            if (!CSVCompare.sameUnit(xc.unit, getMainColumn(xName)?.unit) || !CSVCompare.sameUnit(yc.unit, getMainColumn(yName)?.unit)) { counts.push(`${f.shortName}: 単位不一致で除外`); continue; }
-            const xv = f.colData[xc.id], yv = f.colData[yc.id];
-            if (!xv || !yv) continue;
-
-            const offset = comparisonWorkspace?.effectiveOffset(f) ?? (f.offset || 0);
-            const t = f.timeData;
-            const pts = [];
-            for (let i = 0; i < t.length; i++) {
-                if (range && (t[i] + offset < range[0] || t[i] + offset > range[1])) continue;
-                const x = xv[i], y = yv[i];
-                if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-                pts.push([x, y]);
-            }
-            // 点数上限: 等間隔に間引く
-            let data = pts;
-            if (pts.length > XY_MAX_POINTS) {
-                const stride = Math.ceil(pts.length / XY_MAX_POINTS);
-                data = [];
-                for (let i = 0; i < pts.length; i += stride) data.push(pts[i]);
-            }
-            counts.push(`${f.shortName}: 有効 ${pts.length} 点 / 描画 ${data.length} 点${data.length < pts.length ? '（間引き）' : ''}`);
-            series.push({
-                name: f.shortName, type: 'scatter',
-                data, symbolSize: 2.5, large: true, largeThreshold: 5000,
-                itemStyle: { color: state.fileColors[fid] || undefined, opacity: 0.75 },
-            });
-        }
-
-        modal.querySelector('#xy-data-count').textContent = counts.join(' · ');
-        const axisStyle = {
-            nameMoveOverlap: false,
-            nameTextStyle: { color: T.dim },
-            axisLabel: { color: T.dim, formatter: CSVChartOptions.formatYAxisValue },
-            axisLine: { lineStyle: { color: T.axis } },
-            splitLine: { lineStyle: { color: T.grid } },
-        };
-        const unitOf = n => mainFile.columns.find(c => c.name === n)?.unit || '';
-        chart.setOption({
-            animation: false,
-            backgroundColor: 'transparent',
-            legend: { show: series.length > 1, textStyle: { color: T.dim }, top: 0 },
-            grid: { left: 70, right: 24, top: series.length > 1 ? 30 : 14, bottom: 44, outerBoundsMode: 'none' },
-            tooltip: {
-                trigger: 'item',
-                formatter: p => `${esc(p.seriesName)}<br>${esc(xName)}: ${fmtVal(p.value[0])}<br>${esc(yName)}: ${fmtVal(p.value[1])}`,
-            },
-            xAxis: { type: 'value', name: `${xName}${unitOf(xName) ? ` (${unitOf(xName)})` : ''}`,
-                     nameLocation: 'middle', nameGap: 28, scale: true, ...axisStyle },
-            yAxis: { type: 'value', name: `${yName}${unitOf(yName) ? ` (${unitOf(yName)})` : ''}`,
-                     scale: true, ...axisStyle },
-            dataZoom: [
-                { type: 'inside', xAxisIndex: 0 },
-                { type: 'inside', yAxisIndex: 0 },
-            ],
-            series,
-        }, { notMerge: true });
-    }
-
-    xSel.addEventListener('change', renderXY);
-    ySel.addEventListener('change', renderXY);
-    await renderXY();
+// Existing F7/debug entry now opens the shared dock instead of creating a modal.
+function showXYPlotModal() {
+    if (!getMainFile()) return;
+    xyWorkspace?.open();
 }
 
 dom.xyBtn?.addEventListener('click', showXYPlotModal);
@@ -8993,6 +8895,8 @@ function applySettings(rawSettings) {
     if (s.theme === 'light' || s.theme === 'dark') applyTheme(s.theme);
     if (typeof s.eventExpr === 'string' && dom.eventExpr) dom.eventExpr.value = s.eventExpr;
     applyEventOptions(s.eventOptions);
+    xyWorkspace?.applySettings(s.xyWorkspace, { preserveMap: _restoringHistory });
+    xyFocusPoint = null;
     if (s.fontScale && CSVLayout.FONT_PRESETS[s.fontScale]) {
         state.fontScale = s.fontScale;
         if (dom.fontScale) dom.fontScale.value = s.fontScale;
@@ -9523,7 +9427,9 @@ comparisonWorkspace = CSVWorkspace({
     canArrange: canArrangeCharts,
     clearMeasure: () => exitMeasureMode(),
     stats: () => dataInspector?.setOpen('stats'),
-    analysisChanged: () => { updateStatsPanel(); dataInspector?.schedule(); },
+    analysisChanged: () => { updateStatsPanel(); dataInspector?.schedule(); xyWorkspace?.schedule(); },
+    openXY: () => xyWorkspace?.open(), closeXY: () => xyWorkspace?.close(),
+    panelChanged: kind => xyWorkspace?.setVisible(kind === 'xy'),
     favoriteNames: () => { const favs = loadChannelFavorites(); return Object.values(favs).flatMap(f => Array.isArray(f) ? f : f.names || []); },
     select: async (names, replace) => {
         if (replace) { state.selectedNames.clear(); state.chartGroups = []; }
@@ -9587,6 +9493,29 @@ CSVWorkspaceUI({
     resize: () => { if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); } },
 });
 
+xyWorkspace = CSVXYWorkspace({
+    state, esc, main: getMainFile, mainId: getMainFileId,
+    resolve: resolveColumnForFile, loadColumns: loadColumnsForFile,
+    getContext: getAnalysisContext,
+    effectiveOffset: file => comparisonWorkspace.effectiveOffset(file),
+    fileLabel: file => comparisonWorkspace.label(file),
+    fileColor: id => state.fileColors[id] || '#16b8a6',
+    activatePanel: kind => comparisonWorkspace.setPanel(kind),
+    save: saveSettings, warning: showWarning,
+    resize: () => { state.chart?.dispatchAction({ type: 'hideTip' }); state.chart?.resize(); },
+    focusPoint: point => {
+        const file = state.files[point.fileId];
+        if (!file || !Number.isInteger(point.index) || file.timeData[point.index] !== point.time) return;
+        xyFocusPoint = { ...point, file };
+        const time = point.time + comparisonWorkspace.effectiveOffset(file);
+        comparisonWorkspace.focusTime(time);
+        renderChart();
+    },
+    clearFocus: () => { if (xyFocusPoint) { xyFocusPoint = null; renderChart(); } },
+});
+dom.xyBtn.querySelector('.btn-label').textContent = 'XY・燃費率マップ';
+dom.xyBtn.setAttribute('aria-label', 'XY・燃費率マップを開く');
+
 // 設定エクスポート/インポートボタンのイベント登録
 dom.exportSettings.addEventListener('click', exportSettings);
 dom.importSettings.addEventListener('click', importSettings);
@@ -9646,6 +9575,8 @@ window.__csvViewerDebug = {
     showDiffCurvesModal,
     exportReportHTML,
     showXYPlotModal,
+    get xyWorkspace() { return xyWorkspace; },
+    getXYFocus: () => xyFocusPoint && { fileId: xyFocusPoint.fileId, index: xyFocusPoint.index, time: xyFocusPoint.time, displayTime: xyFocusPoint.time + (comparisonWorkspace?.effectiveOffset(state.files[xyFocusPoint.fileId]) || 0) },
     computeDriveIndex,
     getDriveIndexResultState,
     getDriveIndexInputSignature,

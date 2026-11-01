@@ -96,7 +96,7 @@ const { chromium } = require('playwright');
             await page.keyboard.press('Escape');
             assert.equal((await mode(page)).arrange, false);
         });
-        for (const id of ['drive-index-btn', 'xy-plot-btn', 'diff-curves-btn']) await check(`${id}: modal closes and restores visible tools summary`, async page => {
+        for (const id of ['drive-index-btn', 'diff-curves-btn']) await check(`${id}: modal closes and restores visible tools summary`, async page => {
             for (let pass = 0; pass < 2; pass++) {
                 await launch(page, id, pass === 1);
                 const dialog = page.locator('#app-modal-overlay [role="dialog"]');
@@ -107,6 +107,16 @@ const { chromium } = require('playwright');
                 await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
                 assert.equal(await isSummaryFocused(page), true);
                 assert.equal(await page.locator('.compare-tools').evaluate(el => el.open), false);
+            }
+        });
+        await check('XY dock Escape closes panel and restores its tools trigger', async page => {
+            for (let pass = 0; pass < 2; pass++) {
+                await launch(page, 'xy-plot-btn', pass === 1);
+                await page.locator('#xy-workspace').waitFor({ state: 'visible' });
+                await page.locator('#xy-close-btn').focus();
+                await page.keyboard.press('Escape');
+                await page.locator('#xy-workspace').waitFor({ state: 'hidden' });
+                assert.equal(await isSummaryFocused(page), true);
             }
         });
         await check('Modal Escape preserves background mode; next Escape exits it', async page => {

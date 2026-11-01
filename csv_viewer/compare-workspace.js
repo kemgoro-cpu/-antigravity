@@ -7,7 +7,7 @@
         const fmt = x => Number.isFinite(x) ? Number(x.toPrecision(6)).toString() : '—';
         const label = f => s.comparison.labels[f.name] || f.shortName || f.name;
         const setting = () => s.comparison;
-        let pane = 'prepare', open = true, filter = 'all', raf = null, selectedSub = '', rows = [], selection = null;
+        let pane = 'prepare', open = true, externalPanel = false, filter = 'all', raf = null, selectedSub = '', rows = [], selection = null;
         let rawTime = false, preview = null, generation = 0, busy = false, pick = null, latestCursor = null;
         let selectionMain = null;
         let previewChart = null, pendingMap = null, intervalMode = false, overviewKey = '';
@@ -39,6 +39,11 @@
         heading.className = 'compare-header';
         heading.innerHTML = `<div><span class="compare-eyebrow">CSV CHART VIEWER</span><h1>比較ワークスペース</h1></div><div class="compare-header-actions"><span id="compare-status" role="status"></span><button id="compare-panel-toggle" class="btn-secondary" aria-expanded="true">比較パネル</button></div>`;
         main.prepend(heading);
+        const xyToggle = document.createElement('button'); xyToggle.id = 'xy-panel-toggle';
+        xyToggle.className = 'btn-secondary'; xyToggle.textContent = 'XY・マップ';
+        xyToggle.setAttribute('aria-controls', 'xy-workspace'); xyToggle.setAttribute('aria-expanded', 'false');
+        $('compare-panel-toggle').after(xyToggle);
+        xyToggle.onclick = () => externalPanel ? api.closeXY?.() : api.openXY?.();
         const bar = document.createElement('div'); bar.className = 'compare-bar';
         bar.innerHTML = `<div class="compare-segment" role="group" aria-label="比較の表示方法"><button data-view="overlay">重ね合わせ</button><button data-view="stack">上下比較</button><button data-view="diff">差分</button></div><label class="compare-raw"><input id="compare-raw" type="checkbox">元の時刻で確認</label><button id="compare-select-range" class="btn-secondary" title="ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します">区間を選択・解析</button><span id="compare-view-hint"></span>`;
         heading.after(bar);
@@ -115,12 +120,15 @@
             $('compare-select-range').setAttribute('aria-pressed', 'false');
             $('compare-select-range').textContent = '区間を選択・解析';
         }
-        function setPane(next) { if (pane !== next) { generation++; preview = null; pick = null; busy = false; } pane = next; open = true; renderPanel(); applyLayout(); }
+        function setPane(next) { if (pane !== next) { generation++; preview = null; pick = null; busy = false; } pane = next; open = true; externalPanel = false; renderPanel(); applyLayout(); }
         function applyLayout() {
-            panel.classList.toggle('hidden', !open); $('compare-panel-toggle').setAttribute('aria-expanded', String(open));
-            main.classList.toggle('compare-panel-open', open); requestAnimationFrame(() => api.resize());
+            panel.classList.toggle('hidden', !open || externalPanel); $('compare-panel-toggle').setAttribute('aria-expanded', String(open && !externalPanel));
+            xyToggle.setAttribute('aria-expanded', String(externalPanel));
+            main.classList.toggle('compare-panel-open', open || externalPanel);
+            api.panelChanged?.(externalPanel ? 'xy' : open ? 'compare' : null);
+            requestAnimationFrame(() => api.resize());
         }
-        $('compare-panel-toggle').onclick = () => { open = !open; applyLayout(); };
+        $('compare-panel-toggle').onclick = () => { open = externalPanel || !open; externalPanel = false; applyLayout(); };
         panel.querySelectorAll('[data-pane]').forEach(b => b.onclick = () => setPane(b.dataset.pane));
         bar.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { if (s.arrangeMode) api.exitArrange(); setting().view = b.dataset.view; api.render(); change(); });
         $('compare-raw').onchange = e => { rawTime = e.target.checked; persistAnalysis(); preview = null; generation++; invalidateResults(); api.render(); change(); syncAnalysisContext(); };
@@ -655,6 +663,7 @@
         }
         renderPanel(); applyLayout();
         return { schedule, bindChart, label, effectiveOffset, transformGroups, filterColumn, decorateChannel, reportHTML, exceedanceHighlights, analysisContext, syncAnalysisContext,
+            setPanel: kind => { externalPanel = kind === 'xy'; open = kind === 'compare' || externalPanel; applyLayout(); },
             showAnalysisRange,
             templates: {
                 list: loadTemplates,

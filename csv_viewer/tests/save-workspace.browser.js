@@ -147,8 +147,8 @@ const { chromium } = require('playwright');
         await page.setViewportSize({ width: 1440, height: 1000 });
         await choose('output');
         // Replacing a modal externally must park, not destroy, the shared controls.
-        await page.evaluate(() => window.__csvViewerDebug.showXYPlotModal());
-        await page.waitForFunction(() => document.querySelector('.xy-modal')?.contains(document.activeElement));
+        await page.evaluate(() => document.getElementById('drive-index-btn').click());
+        await page.waitForFunction(() => document.querySelector('#app-modal-overlay')?.contains(document.activeElement));
         await page.keyboard.press('Escape'); await choose('favorite');
         for (const id of ['settings-preset-select', 'channel-fav-select', 'compare-template-name', 'export-settings-btn']) assert.equal(await page.locator('#' + id).count(), 1, id + ' stays unique');
         assert.equal(await page.locator('#channel-fav-select').inputValue(), '新お気に入り');

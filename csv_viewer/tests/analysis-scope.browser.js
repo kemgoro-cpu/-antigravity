@@ -37,8 +37,8 @@ async function openInspector(page, tab) {
   await page.evaluate(()=>window.__csvViewerDebug.showXYPlotModal());
   await page.waitForFunction(()=>document.querySelector('#xy-data-count').textContent.includes('41'));
   assert.match(await page.locator('#xy-analysis-context').innerText(),/選択区間 10 – 30/);
-  assert.deepEqual(await page.evaluate(()=>echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.map(s=>s.data.length)),[41,41]);
-  await page.locator('.xy-modal .modal-close-btn').click();
+  assert.deepEqual(await page.evaluate(()=>echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.filter(s=>s.id.startsWith('xy-points-')).map(s=>s.data.length)),[41,41]);
+  await page.locator('#xy-close-btn').click();
   await page.locator('#analysis-scope').selectOption('visible');await settle();assert.deepEqual((await scope()).range,[40,50]);
   assert.match(await page.locator('#inspector-statistics').innerText(),/40.00.*50.00/);
   dl=page.waitForEvent('download');await page.evaluate(()=>window.__csvViewerDebug.exportVisibleCSV());file=await dl;
@@ -47,11 +47,11 @@ async function openInspector(page, tab) {
   await page.locator('#compare-raw').check();await settle();assert.equal((await scope()).rawTime,true);assert.deepEqual((await scope()).range,[0,62]);
   await page.locator('#analysis-scope').selectOption('selection');await settle();
   await page.evaluate(()=>window.__csvViewerDebug.showXYPlotModal());await page.waitForFunction(()=>document.querySelector('#xy-data-count').textContent.includes('41'));
-  const points=await page.evaluate(()=>echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.map(s=>s.data[0]));
+  const points=await page.evaluate(()=>echarts.getInstanceByDom(document.querySelector('#xy-chart')).getOption().series.filter(s=>s.id.startsWith('xy-points-')).map(s=>s.data[0].value || s.data[0]));
   // Raw basis must take Sub's original 10 seconds (Main's 8 seconds), not shifted 10 seconds.
   assert.notEqual(points[0][0],points[1][0]);
   assert.match(await page.locator('#xy-analysis-context').innerText(),/元の時刻/);
-  await page.locator('.xy-modal .modal-close-btn').click();
+  await page.locator('#xy-close-btn').click();
   dl=page.waitForEvent('download');await page.evaluate(()=>window.__csvViewerDebug.exportReportHTML());file=await dl;
   assert.match(fs.readFileSync(await file.path(),'utf8'),/選択区間 10 – 30 s · 元の時刻/);
   await page.waitForTimeout(650);await page.reload();

@@ -70,6 +70,7 @@
         panel.prepend(panelHead);
         $('workspace-panel-close').onclick = () => { panelToggle.click(); panelToggle.focus(); };
         panelToggle.addEventListener('click', () => { panelChosen = true; });
+        $('xy-panel-toggle')?.addEventListener('click', () => { panelChosen = true; });
         function hidePanel() { if (!panel.classList.contains('hidden')) panelToggle.click(); }
         compact.addEventListener('change', () => {
             if (compact.matches) hidePanel();
@@ -165,7 +166,7 @@
             const loading = api.state.parseJobs.size > 0;
             document.body.classList.toggle('workspace-has-files', hasFiles);
             document.body.classList.toggle('workspace-has-chart', selected > 0);
-            if (!panelChosen && !compact.matches && files.length >= 2 && previousFiles < 2 && panel.classList.contains('hidden')) {
+            if (!panelChosen && !compact.matches && files.length >= 2 && previousFiles < 2 && panel.classList.contains('hidden') && $('xy-panel-toggle')?.getAttribute('aria-expanded') !== 'true') {
                 panelToggle.click(); panelChosen = false;
             }
             previousFiles = files.length;
