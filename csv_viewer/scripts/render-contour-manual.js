@@ -17,7 +17,7 @@ const hash = name => createHash('sha256').update(fs.readFileSync(path.join(root,
         generatedAt: new Date().toISOString(), renderer: 'ECharts ' + require('../lib/echarts.min.js').version + ' SVG SSR + sharp',
         source: 'Actual CSVXYWorkspace chart options on a DOM mock; synthetic background only; not a browser/UI screenshot.',
         sample: 'docs/samples/練習用_詳細燃費率ﾏｯﾌﾟ.csv', style: 'lines', contourStep: 5, theme: 'light', width: 1100, height: 650,
-        sourceHashes: Object.fromEntries(['xy-workspace.js', 'xy-utils.js', 'fuel-map-utils.js', 'tests/xy-workspace.test.js', 'tests/xy-workspace-render.test.js', 'docs/samples/練習用_詳細燃費率ﾏｯﾌﾟ.csv'].map(name => [name, hash(name)])),
+        sourceHashes: Object.fromEntries(['xy-workspace.js', 'xy-layout.js', 'xy-utils.js', 'fuel-map-utils.js', 'tests/xy-workspace.test.js', 'tests/xy-workspace-render.test.js', 'docs/samples/練習用_詳細燃費率ﾏｯﾌﾟ.csv'].map(name => [name, hash(name)])),
         image, imageSha256: hash(image)
     }, null, 2) + '\n');
     console.log(image);

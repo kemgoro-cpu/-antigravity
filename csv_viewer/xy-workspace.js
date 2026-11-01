@@ -5,12 +5,14 @@
         const F = root.CSVFuelMap, U = root.CSVXYUtils, s = api.state;
         const esc = api.esc, $ = id => document.getElementById(id);
         const fmt = value => Number.isFinite(value) ? Number(value.toPrecision(7)).toString() : '—';
-        const defaults = { mode: 'scatter', x: '', y: '', z: '', source: 'main', sourceName: '', mapX: 'sfc_ne', mapY: 'sfc_te', mapZ: 'sfc_g_kwh', rpmStep: 400, torqueStep: 3, colorMin: null, colorMax: null, mapStyle: 'lines', contourStep: 10 };
+        const defaults = { mode: 'scatter', x: '', y: '', z: '', source: 'main', sourceName: '', mapX: 'sfc_ne', mapY: 'sfc_te', mapZ: 'sfc_g_kwh', rpmStep: 400, torqueStep: 3, colorMin: null, colorMax: null, mapStyle: 'lines', contourStep: 10, splitRatio: .5 };
         let cfg = { ...defaults }, visible = false, expanded = false, generation = 0, importGeneration = 0, frame = null;
         let chart = null, destroyed = false, externalMap = null, pendingFile = null, pendingRows = null, pendingIdentity = null, savedExternalIdentity = null, opener = null;
         let lastSignature = '', controlsSignature = '', lastResult = null, mapCache = null, lastCursor = null, contourCache = null, contourBuildCount = 0;
         let zoomEnabled = false, viewSignature = '', zoomRanges = [{ start: 0, end: 100 }, { start: 0, end: 100 }];
         let preparedFiles = [], renderCount = 0, cursorUpdateCount = 0, contourNotice = '', busy = false, pendingImport = false, externalStatus = '';
+        let cursorFrame = null, resizeFrame = null, cursorPoints = [], legendSelected = {}, layout = null;
+        const cursorMarkers = new Map();
         const identities = new WeakMap(); let nextIdentity = 1;
         const idOf = object => { if (!object || typeof object !== 'object') return 0; if (!identities.has(object)) identities.set(object, nextIdentity++); return identities.get(object); };
         const panel = document.createElement('aside');
@@ -35,8 +37,8 @@
           <label>等高線の間隔 [g/kWh]<input id="xy-map-contour-step" type="number" min="0" step="any" value="10" aria-describedby="xy-contour-help"></label>
           <p id="xy-contour-help" class="xy-help">通常10、詳細5、広く見るときは20が目安です。主要線は太線と数値で表示。等高線は有効な格子間の線形補間で、元データの精度を増やしません。欠損セルは埋めません。走行点は回転数とトルクが非負の元サンプルです。</p>
           </details><p id="xy-map-status" class="xy-help" role="status" aria-live="polite"></p></div>
-          </div><p id="xy-analysis-context" class="analysis-result-context"></p><div id="xy-map-navigation" class="xy-map-navigation hidden"><button id="xy-map-zoom-btn" class="btn-secondary" aria-pressed="false">拡大操作 OFF</button><button id="xy-map-reset-view" class="btn-secondary">全体に戻す</button><span class="xy-help">ONでホイール・ピンチ拡大、ドラッグ移動</span></div><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
-          <p id="xy-cursor-status" class="xy-help" role="status"></p><p class="xy-help">波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。</p></div>`;
+          </div><div class="xy-workspace-content"><p id="xy-analysis-context" class="analysis-result-context"></p><div id="xy-map-navigation" class="xy-map-navigation hidden"><button id="xy-map-zoom-btn" class="btn-secondary" aria-pressed="false">拡大操作 OFF</button><button id="xy-map-reset-view" class="btn-secondary">全体に戻す</button><span class="xy-help">ONでホイール・ピンチ拡大、ドラッグ移動</span></div><div id="xy-chart-frame" class="xy-chart-frame"><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><div id="xy-cursor-overlay" class="xy-cursor-overlay" aria-hidden="true"></div></div><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
+          <p id="xy-cursor-status" class="xy-help" role="status"></p><p class="xy-help">波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。</p></div></div>`;
         document.querySelector('.compare-body').appendChild(panel);
         const dom = Object.fromEntries(['mode', 'x-label', 'y-label', 'x-select', 'y-select', 'z-select', 'point-status', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-feedback', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-style', 'map-contour-step', 'map-zoom-btn', 'map-reset-view', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
 
@@ -121,8 +123,14 @@
                 file.headerInfo?.timeScale, file.timeData?.length, file.timeData?.[0], file.timeData?.[file.timeData.length - 1],
                 file.columns.map(c => [c.id, c.name, c.unit, !!c.isCrossFile, c.isCustom ? idOf(file.colData[c.id]) : 0])]).concat([s.customRAMs, s.channelAliases, s.comparison?.matches]));
         }
-        function signature() { return JSON.stringify([cfg, api.getContext(), sourceSignature(), s.theme, idOf(externalMap)]); }
-        function invalidate(clearFocus = false) { generation++; busy = false; panel.setAttribute('aria-busy', 'false'); lastSignature = ''; lastResult = null; preparedFiles = []; if (chart) chart.clear(); dom['cursor-status'].textContent = ''; if (clearFocus) api.clearFocus?.(); }
+        function signature() { const { splitRatio, ...renderConfig } = cfg; return JSON.stringify([renderConfig, api.getContext(), sourceSignature(), s.theme, idOf(externalMap)]); }
+        function clearCursor() {
+            if (cursorFrame !== null) { cancelAnimationFrame(cursorFrame); cursorFrame = null; }
+            for (const marker of cursorMarkers.values()) marker.remove();
+            cursorMarkers.clear(); cursorPoints = [];
+            dom['cursor-status'].textContent = ''; dom['cursor-status'].title = '';
+        }
+        function invalidate(clearFocus = false) { generation++; busy = false; panel.setAttribute('aria-busy', 'false'); lastSignature = ''; lastResult = null; preparedFiles = []; clearCursor(); if (chart) chart.clear(); if (clearFocus) api.clearFocus?.(); }
         function changed() { invalidate(true); syncMode(); api.save(); schedule(); }
         function zoomOptions() {
             return ['x', 'y'].map((axis, i) => ({ id: 'xy-' + axis + '-zoom', type: 'inside', [axis + 'AxisIndex']: 0, filterMode: 'none',
@@ -138,6 +146,7 @@
             if (chart && cfg.mode === 'map') {
                 chart.dispatchAction({ type: 'dataZoom', batch: ['x', 'y'].map(axis => ({ dataZoomId: 'xy-' + axis + '-zoom', start: 0, end: 100 })) });
                 chart.setOption({ dataZoom: zoomOptions() });
+                scheduleCursor();
             }
         }
         function chartInstance() {
@@ -150,13 +159,16 @@
                 api.focusPoint({ fileId: data.fileId, index, time, displayTime });
                 cursor(displayTime);
             });
-            chart.on('datazoom', () => {
-                const items = chart.getOption().dataZoom || [];
-                zoomRanges = ['x', 'y'].map(axis => {
-                    const item = items.find(value => value.id === 'xy-' + axis + '-zoom');
-                    return { start: item?.start ?? 0, end: item?.end ?? 100 };
-                });
+            chart.on('datazoom', event => {
+                // The event already contains the ranges. getOption() would clone the entire
+                // map and every running point for each wheel/drag event.
+                for (const item of event.batch || [event]) {
+                    const index = ['xy-x-zoom', 'xy-y-zoom'].indexOf(item.dataZoomId);
+                    if (index >= 0 && Number.isFinite(item.start) && Number.isFinite(item.end)) zoomRanges[index] = { start: item.start, end: item.end };
+                }
+                scheduleCursor();
             });
+            chart.on('legendselectchanged', event => { legendSelected = event.selected || {}; scheduleCursor(); });
             return chart;
         }
         function axisUnit(column) { return String(column?.unit || '').trim(); }
@@ -273,7 +285,7 @@
             const alive = () => !destroyed && visible && generation === token && source === sourceSignature() && JSON.stringify(context) === JSON.stringify(api.getContext());
             const main = api.main(), mainX = main?.columns.find(c => c.name === cfg.x), mainY = main?.columns.find(c => c.name === cfg.y), mainZ = main?.columns.find(c => c.name === cfg.z);
             dom['analysis-context'].textContent = `${context.label || '解析対象未選択'}（動作点・散布図に適用）`;
-            dom['data-count'].textContent = '読み込み・集計中…'; dom['cursor-status'].textContent = '';
+            dom['data-count'].textContent = '読み込み・集計中…'; clearCursor(); legendSelected = {};
             preparedFiles = []; lastResult = null;
             const activeChart = chartInstance(); activeChart.clear();
             const mapMode = cfg.mode === 'map';
@@ -332,7 +344,6 @@
                 if (zc) { colourSeries.push(index); if (Number.isFinite(result.zmin)) zmin = Math.min(zmin, result.zmin); if (Number.isFinite(result.zmax)) zmax = Math.max(zmax, result.zmax); }
             }
             series.push(...pointSeries);
-            for (const data of dataFiles) series.push({ id: 'xy-cursor-' + data.fid, name: 'カーソル / ' + label(data.file), type: 'scatter', data: [], symbol: 'diamond', symbolSize: 14, z: 6, silent: true, itemStyle: { color: api.fileColor(data.fid) || '#ffbd44', borderColor: '#fff', borderWidth: 2 }, tooltip: { show: false } });
             const colors = theme(), visualMap = [], cellSeriesIndex = series.findIndex(item => item.id === 'xy-map-cells');
             if (map && cellSeriesIndex >= 0) visualMap.push({ type: 'continuous', min: color.min, max: color.max === color.min ? color.max + Math.max(Math.abs(color.max) * 1e-8, 1) : color.max, dimension: 8, seriesIndex: [cellSeriesIndex], calculable: false, orient: 'horizontal', left: 'center', bottom: 4, itemHeight: 120, itemWidth: 10, text: [fmt(color.max) + ' g/kWh', fmt(color.min)], textStyle: { color: colors.text, fontSize: 10 }, inRange: { color: ['#32a6a0', '#a4d990', '#f3e89e', '#e89468', '#bd4968'] } });
             else if (colourSeries.length && Number.isFinite(zmin) && Number.isFinite(zmax)) visualMap.push({ type: 'continuous', min: zmin, max: zmin === zmax ? zmax + 1 : zmax, dimension: 2, seriesIndex: colourSeries, calculable: false, orient: 'horizontal', left: 'center', bottom: 4, itemHeight: 120, itemWidth: 10, text: [fmt(zmax) + (mainZ?.unit ? ' [' + mainZ.unit + ']' : ''), fmt(zmin)], textStyle: { color: colors.text, fontSize: 10 }, inRange: { color: ['#4777cd', '#5ac7c7', '#f2d76b', '#db6559'] } });
@@ -368,26 +379,62 @@
             if (!visible || destroyed || frame !== null) return;
             frame = requestAnimationFrame(() => { frame = null; render().catch(error => { if (!visible || destroyed) return; busy = false; panel.setAttribute('aria-busy', 'false'); dom['data-count'].textContent = '表示できませんでした: ' + (error.message || error); }); });
         }
-        function cursor(time) {
-            lastCursor = Number.isFinite(time) ? time : null;
-            if (!visible || !chart || !lastResult || !preparedFiles.length) return;
-            const updates = [], labels = [];
+        // Cursor movement must not call ECharts.setOption: even a cursor-only series update
+        // reruns every custom background cell. Keep the marker on a separate DOM layer.
+        function drawCursor() {
+            if (!visible || destroyed || !chart || !lastResult) return;
+            const time = lastCursor, labels = [];
+            cursorPoints = [];
             for (const data of preparedFiles) {
                 const nearest = Number.isFinite(time) && data.prepared.ok ? F.nearestPoint(data.prepared, data.x, data.y, data.z, time, { range: data.range, offset: data.offset, nonnegative: data.mapMode }) : null;
                 const p = nearest?.ok && nearest.point;
-                updates.push({ id: 'xy-cursor-' + data.fid, data: p ? [[p.x, p.y]] : [] });
+                let marker = cursorMarkers.get(data.fid);
+                if (!marker) {
+                    marker = document.createElement('span'); marker.id = 'xy-cursor-' + data.fid; marker.className = 'xy-cursor-marker';
+                    marker.style.backgroundColor = api.fileColor(data.fid) || '#ffbd44';
+                    $('xy-cursor-overlay').appendChild(marker); cursorMarkers.set(data.fid, marker);
+                }
+                const pixel = p ? chart.convertToPixel({ gridIndex: 0 }, [p.x, p.y]) : null;
+                const displayed = Array.isArray(pixel) && pixel.every(Number.isFinite) && legendSelected[label(data.file)] !== false && chart.containPixel({ gridIndex: 0 }, pixel);
+                marker.style.display = displayed ? '' : 'none';
+                if (displayed) {
+                    marker.style.left = pixel[0] + 'px'; marker.style.top = pixel[1] + 'px';
+                    cursorPoints.push({ fileId: data.fid, ...p, pixel: [...pixel] });
+                }
                 if (p) labels.push(`${label(data.file)}: 元 ${fmt(p.time)} s / 表示 ${fmt(p.displayTime)} s`);
             }
-            if (updates.length) chart.setOption({ series: updates }, { lazyUpdate: true });
             cursorUpdateCount++;
-            dom['cursor-status'].textContent = Number.isFinite(time) ? `カーソル ${fmt(time)} s · ${labels.join(' / ') || '対象内の有効な元サンプルなし'}（最寄りの観測点。補間なし）` : '';
+            const message = Number.isFinite(time) && preparedFiles.length ? `カーソル ${fmt(time)} s · ${labels.join(' / ') || '対象内の有効な元サンプルなし'}（最寄りの観測点。補間なし）` : '';
+            dom['cursor-status'].textContent = message; dom['cursor-status'].title = message;
+        }
+        function scheduleCursor() {
+            if (!visible || destroyed || !chart || !lastResult || cursorFrame !== null) return;
+            cursorFrame = requestAnimationFrame(() => { cursorFrame = null; drawCursor(); });
+        }
+        function cursor(time) {
+            lastCursor = Number.isFinite(time) ? time : null;
+            scheduleCursor();
+        }
+        function requestChartResize() {
+            if (!visible || destroyed || resizeFrame !== null) return;
+            resizeFrame = requestAnimationFrame(() => {
+                resizeFrame = null;
+                if (!visible || destroyed || !chart) return;
+                const element = $('xy-chart'), width = Math.round(element.clientWidth), height = Math.round(element.clientHeight);
+                // ResizeObserver also fires after visibility/layout changes without a size change.
+                // A redundant ECharts.resize still repaints the full background.
+                if (width > 0 && height > 0 && (width !== chart.getWidth() || height !== chart.getHeight())) {
+                    chart.resize({ width, height, silent: true }); scheduleCursor();
+                }
+            });
         }
         function setVisible(next) {
             next = !!next;
-            if (visible === next) { if (next) { chart?.resize(); schedule(); } return; }
+            if (visible === next) { if (next) { requestChartResize(); schedule(); } return; }
             visible = next; panel.classList.toggle('hidden', !visible);
             if (!visible) { invalidate(true); chart?.dispose(); chart = null; if (pendingImport) { importGeneration++; pendingImport = false; pendingRows = null; pendingFile = null; pendingIdentity = null; showImportFeedback('CSVの読み込みを中止しました。ファイルを選び直してください。'); updateApplyState(); } expanded = false; panel.classList.remove('xy-expanded'); dom['expand-btn'].textContent = '大きく表示'; dom['expand-btn'].setAttribute('aria-expanded', 'false'); }
-            else { requestAnimationFrame(() => { chart?.resize(); schedule(); }); }
+            else { requestChartResize(); schedule(); }
+            layout?.setState({ visible, expanded });
             api.resize();
         }
         function open() {
@@ -402,7 +449,8 @@
         function toggleExpanded() {
             expanded = !expanded; panel.classList.toggle('xy-expanded', expanded);
             dom['expand-btn'].textContent = expanded ? '並べて表示に戻る' : '大きく表示'; dom['expand-btn'].setAttribute('aria-expanded', String(expanded));
-            requestAnimationFrame(() => { chart?.resize(); api.resize(); });
+            layout?.setState({ visible, expanded });
+            requestChartResize(); api.resize();
         }
         async function readMapFile(file) {
             const token = ++importGeneration; pendingRows = null; pendingFile = file || null; pendingIdentity = null; pendingImport = false; externalStatus = ''; savedExternalIdentity = null;
@@ -457,6 +505,8 @@
             for (const key of ['colorMin', 'colorMax']) if (typeof saved[key] === 'number' && Number.isFinite(saved[key])) cfg[key] = saved[key];
             cfg.mapStyle = ['fill', 'lines', 'both'].includes(saved.mapStyle) ? saved.mapStyle : typeof saved.contours === 'boolean' ? (saved.contours ? 'both' : 'fill') : defaults.mapStyle;
             if (typeof saved.contourStep === 'number' && Number.isFinite(saved.contourStep) && saved.contourStep > 0) cfg.contourStep = saved.contourStep;
+            if (typeof saved.splitRatio === 'number' && Number.isFinite(saved.splitRatio)) cfg.splitRatio = Math.max(.2, Math.min(.8, saved.splitRatio));
+            layout?.setRatio(cfg.splitRatio);
             dom['map-rpm-step'].value = cfg.rpmStep; dom['map-torque-step'].value = cfg.torqueStep;
             dom['map-color-min'].value = cfg.colorMin ?? ''; dom['map-color-max'].value = cfg.colorMax ?? '';
             dom['map-contour-step'].value = cfg.contourStep;
@@ -490,7 +540,7 @@
         for (const [id, key] of [['map-color-min', 'colorMin'], ['map-color-max', 'colorMax']]) dom[id].addEventListener('change', () => { cfg[key] = dom[id].validity.badInput ? NaN : dom[id].value.trim() ? Number(dom[id].value) : null; changed(); });
         dom['map-style'].addEventListener('change', () => { cfg.mapStyle = dom['map-style'].value; changed(); });
         dom['map-contour-step'].addEventListener('change', () => { cfg.contourStep = dom['map-contour-step'].value.trim() ? Number(dom['map-contour-step'].value) : NaN; changed(); });
-        dom['map-zoom-btn'].addEventListener('click', () => { zoomEnabled = !zoomEnabled; syncZoomButton(); if (chart) chart.setOption({ dataZoom: zoomOptions() }); });
+        dom['map-zoom-btn'].addEventListener('click', () => { zoomEnabled = !zoomEnabled; syncZoomButton(); if (chart) { chart.setOption({ dataZoom: zoomOptions() }); scheduleCursor(); } });
         dom['map-reset-view'].addEventListener('click', resetView);
         dom['map-file'].addEventListener('change', () => readMapFile(dom['map-file'].files[0]));
         dom['map-confirm-units'].addEventListener('change', updateApplyState);
@@ -504,11 +554,13 @@
             if (expanded) toggleExpanded(); else close();
         };
         panel.addEventListener('keydown', onKey);
-        let resizeFrame = null;
-        const observer = new ResizeObserver(() => { if (!visible || resizeFrame !== null) return; resizeFrame = requestAnimationFrame(() => { resizeFrame = null; chart?.resize(); }); });
+        const observer = new ResizeObserver(requestChartResize);
         observer.observe($('xy-chart'));
+        if (root.CSVXYLayout) layout = root.CSVXYLayout({ panel, ratio: cfg.splitRatio,
+            onResize() { if (!destroyed) { requestChartResize(); api.resize(); } },
+            onCommit(ratio) { cfg.splitRatio = ratio; api.save(); } });
         return { open, close, setVisible, schedule, cursor, collectSettings, applySettings, clear,
-            inspect: () => ({ chart, visible, expanded, mode: cfg.mode, config: { ...cfg }, lastResult, map: lastResult?.background || null, renderCount, cursorUpdateCount, contourBuildCount, busy, pendingImport }),
-            destroy() { destroyed = true; generation++; importGeneration++; observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); if (resizeFrame !== null) cancelAnimationFrame(resizeFrame); panel.removeEventListener('keydown', onKey); chart?.dispose(); panel.remove(); } };
+            inspect: () => ({ chart, visible, expanded, mode: cfg.mode, config: { ...cfg }, lastResult, map: lastResult?.background || null, renderCount, cursorUpdateCount, cursorPoints: cursorPoints.map(point => ({ ...point, pixel: [...point.pixel] })), contourBuildCount, busy, pendingImport }),
+            destroy() { destroyed = true; generation++; importGeneration++; observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); if (resizeFrame !== null) cancelAnimationFrame(resizeFrame); clearCursor(); layout?.destroy(); panel.removeEventListener('keydown', onKey); chart?.dispose(); panel.remove(); } };
     };
 })(window);

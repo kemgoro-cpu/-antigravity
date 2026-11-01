@@ -55,6 +55,7 @@ const inspect = page => page.evaluate(() => {
     const view = __csvViewerDebug.xyWorkspace.inspect();
     return { visible: view.visible, expanded: view.expanded, mode: view.mode,
         renderCount: view.renderCount, cursorUpdateCount: view.cursorUpdateCount, contourBuildCount: view.contourBuildCount,
+        cursorPoints: view.cursorPoints,
         map: view.map ? { xs: view.map.xs, ys: view.map.ys, zz: view.map.zz, stats: view.map.stats } : null };
 });
 const pointSeries = page => page.evaluate(() => {
@@ -193,8 +194,10 @@ async function clickDataPoint(page, seriesIndex = 0, pointIndex = 3) {
         const afterCursor = await inspect(page);
         assert.equal(afterCursor.renderCount, beforeCursor.renderCount, 'Pointer movement must not rebuild the whole scatter/map');
         assert.ok(afterCursor.cursorUpdateCount > beforeCursor.cursorUpdateCount);
+        assert.ok(afterCursor.cursorPoints.length > 0, 'Waveform linking displays the independent cursor overlay');
+        assert.ok(await page.locator('#xy-cursor-overlay .xy-cursor-marker:visible').count() > 0);
         assert.match(await page.locator('#xy-cursor-status').innerText(), /5(?:\.0+)?\s*s/);
-        checks.push('actual scatter click links to time and waveform cursor updates only marker series');
+        checks.push('actual scatter click links to time and waveform cursor updates the independent DOM overlay');
 
         await choose(page, 'xy-mode', 'map');
         await page.waitForFunction(() => !!__csvViewerDebug.xyWorkspace.inspect().map);
@@ -242,13 +245,37 @@ async function clickDataPoint(page, seriesIndex = 0, pointIndex = 3) {
         assert.equal(await page.locator('#xy-map-zoom-btn').getAttribute('aria-pressed'), 'false');
         await page.locator('#xy-map-zoom-btn').click(); await settle(page);
         assert.equal(await page.locator('#xy-map-zoom-btn').getAttribute('aria-pressed'), 'true');
-        await page.evaluate(() => __csvViewerDebug.xyWorkspace.inspect().chart.dispatchAction({ type: 'dataZoom', batch: [{ dataZoomId: 'xy-x-zoom', start: 20, end: 80 }, { dataZoomId: 'xy-y-zoom', start: 20, end: 80 }] }));
+        const zoomProbe = await page.evaluate(() => {
+            const chart = __csvViewerDebug.xyWorkspace.inspect().chart, option = chart.getOption();
+            const center = [option.xAxis[0], option.yAxis[0]].map(axis => (axis.min + axis.max) / 2);
+            const value = [option.xAxis[0], option.yAxis[0]].map(axis => axis.min + (axis.max - axis.min) * 0.75);
+            const pixel = chart.convertToPixel({ gridIndex: 0 }, center), box = document.getElementById('xy-chart').getBoundingClientRect();
+            return { x: box.x + pixel[0], y: box.y + pixel[1], value, before: chart.convertToPixel({ gridIndex: 0 }, value) };
+        });
+        await page.mouse.move(zoomProbe.x, zoomProbe.y); await page.mouse.wheel(0, -400); await settle(page);
+        const wheelZoom = await page.evaluate(value => {
+            const chart = __csvViewerDebug.xyWorkspace.inspect().chart;
+            return { ranges: chart.getOption().dataZoom.map(item => [item.start, item.end]), pixel: chart.convertToPixel({ gridIndex: 0 }, value) };
+        }, zoomProbe.value);
+        assert.ok(wheelZoom.ranges.every(([start, end]) => end - start < 100), 'Actual wheel input zooms both axes after enabling zoom');
+        assert.ok(wheelZoom.pixel.every((pixel, index) => Math.abs(pixel - zoomProbe.before[index]) > 0.5), 'Wheel input changes the displayed coordinate transforms');
         await page.locator('#xy-map-reset-view').click(); await settle(page);
         assert.ok(await page.evaluate(() => __csvViewerDebug.xyWorkspace.inspect().chart.getOption().dataZoom.every(item => item.start === 0 && item.end === 100)), 'Reset restores the complete map after explicit zoom');
         assert.equal(await page.locator('#xy-map-zoom-btn').getAttribute('aria-pressed'), 'false');
         await mapSettings(page); await choose(page, 'xy-map-style', 'both');
         assert.deepEqual(await mapBounds(), fullMapBounds);
-        checks.push('detailed contour interval, consolidated styles, stable bounds, retained points, cache and zoom reset');
+        const mapWave = await page.evaluate(() => {
+            const chart = __csvViewerDebug.xyWorkspace.inspect().chart;
+            const cells = chart.getOption().series.find(series => series.id === 'xy-map-cells'), original = cells.renderItem;
+            window.__xyBackgroundPaints = 0;
+            chart.setOption({ series: [{ id: cells.id, renderItem(...args) { window.__xyBackgroundPaints++; return original(...args); } }] });
+            window.__xyBackgroundPaints = 0;
+            const { state } = __csvViewerDebug, box = document.querySelector('#chart canvas').getBoundingClientRect();
+            return { x: box.x + state.chart.convertToPixel({ xAxisIndex: 0 }, 5), y: box.y + state.gridRegions[0].top + 50 };
+        });
+        await page.mouse.move(mapWave.x - 1, mapWave.y); await page.mouse.move(mapWave.x, mapWave.y); await settle(page);
+        assert.equal(await page.evaluate(() => window.__xyBackgroundPaints), 0, 'Waveform pointer movement does not rerun background cell renderers');
+        checks.push('detailed contours, stable bounds, retained points, real wheel zoom/reset and zero background paints on waveform pointer movement');
         await uploadMap(page, duplicateLong, 'long');
         map = (await inspect(page)).map;
         assert.equal(map.zz[0][0], 250, 'Duplicate map coordinates use all observations');
