@@ -1,0 +1,7 @@
+.dev-preview-panel { flex:none; padding:10px 14px; border-bottom:1px solid var(--border); background:var(--accent-dim); color:var(--text-primary); font-size:11px; }
+.dev-preview-heading { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
+.dev-preview-heading strong { font-size:12px; }
+.dev-preview-heading button { min-height:30px; font-size:11px; }
+.dev-preview-panel p { margin:5px 0 0; line-height:1.6; overflow-wrap:anywhere; }
+.dev-preview-panel p:first-of-type { color:var(--text-secondary); }
+.dev-preview-panel button:disabled { opacity:.55; cursor:default; }

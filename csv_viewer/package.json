@@ -4,6 +4,8 @@
   "private": true,
   "description": "CSV / TRN ファイルをブラウザだけで可視化する Web アプリ（ビルド不要）",
   "scripts": {
-    "test": "node scripts/run-tests.js"
+    "test": "node scripts/run-tests.js",
+    "dev": "node scripts/dev-server.js",
+    "dev:open": "node scripts/dev-server.js --open"
   }
 }

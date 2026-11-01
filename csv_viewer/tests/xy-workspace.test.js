@@ -425,6 +425,57 @@ async function run() {
     await canceled.upload(long); await canceled.change('xy-map-confirm-units', true); await canceled.apply();
     assert.equal(canceled.workspace.inspect().map?.stats.eligible, 4, 'Reselecting after a canceled import can succeed');
 
+    // The development demo uses the same external-map validation pipeline without
+    // manipulating a file input. A caller must explicitly confirm the known units.
+    const imported = harness(); await imported.open();
+    const sampleName = '練習用_詳細燃費率ﾏｯﾌﾟ.csv';
+    const sampleText = fs.readFileSync(path.resolve(__dirname, '../docs/samples', sampleName), 'utf8');
+    const mapFile = (text, name = 'map.csv') => ({ name, size: Buffer.byteLength(text), lastModified: 1, text: async () => text });
+    const identity = await imported.workspace.importExternalMap(mapFile(sampleText, sampleName), { format: 'long', unitsConfirmed: true });
+    await imported.flush();
+    assert.equal(identity.name, sampleName, 'Programmatic import retains the halfwidth-katakana filename');
+    assert.match(identity.sha256, /^[a-f0-9]{64}$/);
+    assert.equal(imported.workspace.inspect().map.xs.length, 53);
+    assert.equal(imported.workspace.inspect().map.ys.length, 121);
+    assert.equal(imported.workspace.inspect().map.stats.eligible, 5743, 'The bundled detailed map follows the real parser and render pipeline');
+    assert.equal(cells(imported).data.length, 5743);
+    assert.equal(imported.workspace.collectSettings().externalMapIdentity.sha256, identity.sha256);
+    const importedSnapshot = mapSnapshot(imported);
+    const importedSettings = JSON.stringify(imported.workspace.collectSettings());
+    await assert.rejects(imported.workspace.importExternalMap(mapFile(long), { format: 'long' }), /単位|確認/);
+    await assert.rejects(imported.workspace.importExternalMap(mapFile(long), { format: 'long', unitsConfirmed: false }), /単位|確認/);
+    assert.equal(mapSnapshot(imported), importedSnapshot, 'An unconfirmed API call leaves the displayed map untouched');
+    assert.equal(JSON.stringify(imported.workspace.collectSettings()), importedSettings, 'An unconfirmed API call leaves the settings untouched');
+    const alreadyAborted = new AbortController(); alreadyAborted.abort();
+    await assert.rejects(imported.workspace.importExternalMap(mapFile(long), { format: 'long', unitsConfirmed: true, signal: alreadyAborted.signal }));
+    assert.equal(mapSnapshot(imported), importedSnapshot, 'An already-aborted request does not replace the current background');
+    assert.equal(JSON.stringify(imported.workspace.collectSettings()), importedSettings, 'An already-aborted request does not mutate map settings');
+    await assert.rejects(imported.workspace.importExternalMap(mapFile('rpm,lb-ft,g/kWh\n1000,20,300\n1400,20,280\n1000,40,260\n1400,40,250\n'), { format: 'long', unitsConfirmed: true }), /単位|Nm|トルク/);
+    await imported.flush();
+    assert.equal(imported.workspace.inspect().map, null, 'Declared incompatible torque units cannot produce a demo background');
+    await assert.rejects(imported.workspace.importExternalMap(mapFile('broken,csv\n1,2\n'), { format: 'long', unitsConfirmed: true }));
+    await imported.flush();
+    assert.equal(imported.workspace.inspect().map, null, 'Malformed map input is reported rather than claimed as a completed import');
+    let finishApiRead;
+    const delayedMap = { name: 'delayed-map.csv', size: long.length, lastModified: 1,
+        text: () => new Promise(resolve => { finishApiRead = resolve; }) };
+    const canceledApiRead = assert.rejects(imported.workspace.importExternalMap(delayedMap, { format: 'long', unitsConfirmed: true }));
+    await imported.flush(); imported.workspace.clear(); finishApiRead(long);
+    await canceledApiRead; await imported.flush();
+    assert.equal(imported.workspace.inspect().map, null, 'Clear cancels a pending programmatic import before it can replace the background');
+    const contextChangedRead = assert.rejects(imported.workspace.importExternalMap(delayedMap, { format: 'long', unitsConfirmed: true }));
+    await imported.flush();
+    imported.setContext({ scope: 'selection', range: [1, 2], rawTime: false, label: '選択区間 1–2 s' });
+    finishApiRead(long); await contextChangedRead; await imported.flush();
+    assert.equal(imported.workspace.inspect().map, null, 'Changing the analysis context cancels a pending programmatic map import');
+    const signalAbort = new AbortController();
+    const signalCanceledRead = assert.rejects(imported.workspace.importExternalMap(delayedMap, { format: 'long', unitsConfirmed: true, signal: signalAbort.signal }));
+    await imported.flush(); signalAbort.abort(); finishApiRead(long); await signalCanceledRead; await imported.flush();
+    assert.equal(imported.workspace.inspect().map, null, 'A canceled demo cannot apply its background before a later normal log finishes parsing');
+    assert.equal(imported.get('xy-map-apply').disabled, true, 'Aborted map data is not left ready for manual application');
+    await imported.workspace.importExternalMap(mapFile(long), { format: 'long', unitsConfirmed: true }); await imported.flush();
+    assert.equal(imported.workspace.inspect().map?.stats.eligible, 4, 'Retry after cancellation succeeds without a stuck import state');
+
     const split = harness();
     split.resize('compare-body', 1200, 700); await split.open();
     const body = split.get('compare-body'), divider = split.get('xy-split-handle');
@@ -463,7 +514,7 @@ async function run() {
     split.workspace.destroy();
     assert.equal(body.classList.contains('xy-layout-active'), false, 'Destroy cleans up the integrated layout state');
     assert.equal(body.children.includes(divider), false);
-    h.workspace.destroy(); independent.workspace.destroy(); sampled.workspace.destroy(); standalone.workspace.destroy(); withoutTorque.workspace.destroy(); detailed.workspace.destroy(); constant.workspace.destroy(); canceled.workspace.destroy();
+    h.workspace.destroy(); independent.workspace.destroy(); sampled.workspace.destroy(); standalone.workspace.destroy(); withoutTorque.workspace.destroy(); detailed.workspace.destroy(); constant.workspace.destroy(); canceled.workspace.destroy(); imported.workspace.destroy();
     console.log('xy-workspace: independent backgrounds, detailed contours, style/interval settings, cache, theme, zoom reset, legacy settings, eligible operating points, scatter and import feedback passed (DOM/chart mocks)');
 }
 

@@ -10,6 +10,15 @@ let comparisonWorkspace = null;
 let dataInspector = null;
 let xyWorkspace = null;
 let xyFocusPoint = null;
+let devPreview = null;
+const isDevPreview = !!window.CSVDevPreview?.enabled(window.location);
+// Keep preview work in memory, including presets/favorites/comparison templates.
+// Wrapping normal storage preserves the existing error handling for blocked storage.
+const localStorage = isDevPreview ? window.CSVDevPreview.memoryStorage() : {
+    getItem: key => window.localStorage.getItem(key),
+    setItem: (key, value) => window.localStorage.setItem(key, value),
+    removeItem: key => window.localStorage.removeItem(key),
+};
 
 // ─────────────────────────────────────────────────────────────
 // Error notification system
@@ -1927,6 +1936,7 @@ function handleFiles(files, options = {}) {
         else showError(`未対応の形式です: ${f.name}`, 'CSV または TRN ファイルをアップロードしてください。');
     });
     if (!supported.length) return;
+    devPreview?.cancel('通常のファイル読み込みを開始したため、デモの読み込みを中止しました。');
     clearEvents();
     // Capture defaults once; concurrent reads cannot change another file's settings.
     const defaults = window.CSVImportPreview?.getOptions();
@@ -1960,6 +1970,7 @@ function updateParseJob(job, detail, rows) {
 
 function finishParseJob(job) {
     if (!job) return;
+    if (!job.completing) job.complete?.(null);
     state.parseJobs.delete(job.id);
     renderParseJobs();
     dataInspector?.schedule();
@@ -1978,6 +1989,7 @@ function finishParseJob(job) {
 }
 
 function renderParseJobs() {
+    devPreview?.refresh();
     if (!dom.parseStatusList) return;
     dom.parseStatusList.innerHTML = '';
     for (const job of state.parseJobs.values()) {
@@ -2067,7 +2079,7 @@ const _origFileById = new Map();
 const _restoreOrderById = new Map();
 let _nextSessionOrder = 0;
 
-async function parseCSV(file, restoreOrder = null, importOptions = null) {
+async function parseCSV(file, restoreOrder = null, importOptions = null, completion = null) {
     const fileId = 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     _origFileById.set(fileId, file);
     if (Number.isInteger(restoreOrder) && restoreOrder >= 0) {
@@ -2085,6 +2097,18 @@ async function parseCSV(file, restoreOrder = null, importOptions = null) {
     const headerHints = options;
     const requestedDelimiter = options.delimiter === 'auto' ? undefined : options.delimiter;
     const parseJob = createParseJob(file.name, 'Detecting encoding...');
+    if (completion) {
+        let settled = false;
+        const abort = () => { parseJob.cancelled = true; parseJob.complete?.(null); finishParseJob(parseJob); };
+        parseJob.complete = id => {
+            if (settled) return;
+            settled = true; completion.signal?.removeEventListener('abort', abort);
+            if (!id) { _origFileById.delete(fileId); _restoreOrderById.delete(fileId); }
+            completion.done(id);
+        };
+        completion.signal?.addEventListener('abort', abort, { once: true });
+        if (completion.signal?.aborted) { abort(); return; }
+    }
     let encoding = 'utf-8';
     try {
         encoding = requestedEncoding === 'auto'
@@ -2304,14 +2328,18 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                 }
                 try {
                     console.log(`[CSV Viewer] Time data loaded: ${timeChunks.length} points for ${fileName}`);
-                    finishParseJob(parseJob);
                     if (timeChunks.length === 0) {
+                        finishParseJob(parseJob);
                         showError(
                             `時間データが見つかりません: ${fileName}`,
                             `Time列 (${timeIdx + 1}列目) に数値として読めるデータがありません。データ開始行、区切り文字、時間列を確認してください。`
                         );
                         return;
                     }
+                    // A preview caller waits until the accepted file and its UI work are ready.
+                    // Error/cancel paths settle through finishParseJob instead.
+                    if (parseJob) parseJob.completing = true;
+                    finishParseJob(parseJob);
                     const timeData = new Float64Array(timeChunks.length);
                     for (let i = 0; i < timeChunks.length; i++) timeData[i] = timeChunks[i];
 
@@ -2391,7 +2419,9 @@ function onHeaderParsed(fileId, fileName, file, raw, delimiter, encoding, encodi
                     resetHistoryBaseline();
                     // モード走行データ（目標・実測車速あり）ならドライビングインデックスを自動計算
                     computeDriveIndex().catch(e => console.warn('[DriveIndex] auto compute failed:', e));
+                    parseJob?.complete?.(state.files[fileId] ? fileId : null);
                 } catch (e) {
+                    parseJob?.complete?.(null);
                     showError(`時間データの処理に失敗しました: ${fileName}`, e.stack || e.message);
                 }
             },
@@ -3087,6 +3117,7 @@ dom.clearBtn.addEventListener('click', async () => {
     const noteCount = state.comparison.notes.length;
     if (!await confirmDestructiveAction('作業をすべてクリアしますか？',
         `${count}件のファイル、${state.selectedNames.size}件の表示チャンネル${noteCount ? `、${noteCount}件の比較メモ` : ''}と操作履歴・自動復元データをクリアします。この操作は元に戻せません。元のCSV / TRNファイルは削除されません。`, 'すべてクリア')) return;
+    devPreview?.cancel('作業をクリアしたため、デモの読み込みを中止しました。');
     for (const job of state.parseJobs.values()) job.cancelled = true;
     state.parseJobs.clear();
     _origFileById.clear(); // キャンセルされたパースの控えFileも破棄
@@ -3133,6 +3164,7 @@ dom.clearBtn.addEventListener('click', async () => {
 // ─────────────────────────────────────────────────────────────
 
 function updateUI() {
+    devPreview?.refresh();
     renderFileList();
     renderColumnList();
 
@@ -9301,7 +9333,9 @@ const sessionStatus = CSVSessionStatus.create({
 function renderSessionStatus() {
     if (!dom.fileList) return;
     for (const row of dom.fileList.querySelectorAll('[data-session-file]')) {
-        const id = row.dataset.sessionFile, description = CSVSessionStatus.describe(sessionStatus.get(id));
+        const id = row.dataset.sessionFile, description = isDevPreview
+            ? { status: 'temporary', label: '開発用・自動保存なし', detail: 'この画面を再読み込みするとログと設定は消えます。' }
+            : CSVSessionStatus.describe(sessionStatus.get(id));
         row.replaceChildren();
         const badge = document.createElement('span');
         badge.className = 'file-session-badge'; badge.dataset.status = description.status;
@@ -9335,6 +9369,7 @@ function renderSessionStatus() {
 
 /** Keep the original Blob for retry (especially TRN before its CSV conversion). */
 function sessionSaveFile(fileId, file, name) {
+    if (isDevPreview) return;
     if (!(file instanceof Blob) || !state.files[fileId]) return;
     return sessionStatus.save(fileId, file, name || file.name || 'restored.csv', {
         order: state.files[fileId].sessionOrder,
@@ -9342,14 +9377,15 @@ function sessionSaveFile(fileId, file, name) {
     }, _restoredSessionFiles.get(file));
 }
 
-function sessionDeleteFile(fileId) { return sessionStatus.remove(fileId); }
-function sessionClearFiles() { return sessionStatus.clear(); }
+function sessionDeleteFile(fileId) { return isDevPreview ? Promise.resolve(true) : sessionStatus.remove(fileId); }
+function sessionClearFiles() { return isDevPreview ? Promise.resolve(true) : sessionStatus.clear(); }
 
 /**
  * 起動時に前回セッションのファイルを自動復元する。
  * 復元元の保存IDを維持し、復元の途中でログを消さない。
  */
 async function restoreSessionFiles() {
+    if (isDevPreview) return;
     const generation = sessionStatus.generation();
     let records;
     try { records = await sessionStatus.read(); }
@@ -9389,7 +9425,7 @@ async function restoreSessionFiles() {
 // ─────────────────────────────────────────────────────────────
 
 comparisonWorkspace = CSVWorkspace({
-    state, esc, main: getMainFile, mainId: getMainFileId, subIds: getSubFileIds,
+    state, esc, storage: localStorage, main: getMainFile, mainId: getMainFileId, subIds: getSubFileIds,
     resolve: resolveColumnForFile, load: loadColumnsForFile, ensure: ensureColumnsAndRender,
     render: renderChart, renderColumns: renderColumnList, renderFiles: renderFileList,
     save: saveSettings, collect: collectSettings, apply: applySettings,
@@ -9539,7 +9575,32 @@ if (_savedSettings) {
 
 // 設定適用後に前回セッションのファイルを自動復元する
 // （ロール等はapplySettingsが積んだ保留設定がパース完了時に適用する）
-restoreSessionFiles().finally(() => { _sessionRestorePending = false; dataInspector?.schedule(); });
+restoreSessionFiles().finally(() => { _sessionRestorePending = false; dataInspector?.schedule(); devPreview?.refresh(); });
+
+devPreview = window.CSVDevPreview?.create({
+    host: document.querySelector('.main-content'),
+    state: () => ({ fileCount: Object.keys(state.files).length, loading: state.parseJobs.size > 0, restoring: _sessionRestorePending }),
+    isOnlyFile: id => Object.keys(state.files).length === 1 && !!state.files[id],
+    loadLog: (file, options, signal) => new Promise(resolve => {
+        parseCSV(file, null, options, { signal, done: resolve }).catch(error => { showError('デモの解析を開始できませんでした', error.message); resolve(null); });
+    }),
+    configure: async (id, map, current, signal) => {
+        await loadColumnsForFile(id, ['Engine_Speed', 'Engine_Torque', 'sfc_ne', 'sfc_te', 'sfc_g_kwh']);
+        if (!current()) return false;
+        state.selectedNames = new Set(['Engine_Speed', 'Engine_Torque']); state.chartGroups = [];
+        for (const name of state.selectedNames) addStandaloneChart(name);
+        state.comparison.analysis.scope = 'all';
+        comparisonWorkspace.syncAnalysisContext();
+        await ensureColumnsAndRender();
+        if (!current()) return false;
+        xyWorkspace.applySettings({ mode: 'map', x: 'Engine_Speed', y: 'Engine_Torque', source: 'external', mapStyle: 'both', contourStep: 5, splitRatio: .5 });
+        xyWorkspace.open();
+        const applied = await xyWorkspace.importExternalMap(map, { format: 'long', unitsConfirmed: true, signal });
+        if (!current() || !applied) return false;
+        updateUI(); resetHistoryBaseline();
+        return true;
+    },
+});
 
 // ─────────────────────────────────────────────────────────────
 // テスト/デバッグ用の公開面（M9）

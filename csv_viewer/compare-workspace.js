@@ -3,6 +3,7 @@
     'use strict';
     root.CSVWorkspace = function (api) {
         const C = root.CSVCompare, s = api.state, esc = api.esc;
+        const storage = () => api.storage || root.localStorage;
         const $ = id => document.getElementById(id);
         const fmt = x => Number.isFinite(x) ? Number(x.toPrecision(6)).toString() : '—';
         const label = f => s.comparison.labels[f.name] || f.shortName || f.name;
@@ -472,8 +473,8 @@
             }
             $('compare-cursor-table').innerHTML = html + '</tbody></table>';
         }
-        function loadTemplates() { try { const a = JSON.parse(localStorage.getItem('csv-compare-templates') || '[]'); return Array.isArray(a) ? a.filter(t => t?.format === 'CSV Comparison Template' && t.version === 1 && t.settings) : []; } catch { return []; } }
-        function storeTemplates(list) { try { localStorage.setItem('csv-compare-templates', JSON.stringify(list)); } catch { throw new Error('テンプレートの保存容量が不足しています。JSONへ書き出してください。'); } }
+        function loadTemplates() { try { const a = JSON.parse(storage().getItem('csv-compare-templates') || '[]'); return Array.isArray(a) ? a.filter(t => t?.format === 'CSV Comparison Template' && t.version === 1 && t.settings) : []; } catch { return []; } }
+        function storeTemplates(list) { try { storage().setItem('csv-compare-templates', JSON.stringify(list)); } catch { throw new Error('テンプレートの保存容量が不足しています。JSONへ書き出してください。'); } }
         function template(name) {
             const settings = JSON.parse(JSON.stringify(api.collect()));
             delete settings.fileInfos; delete settings.fileColors; delete settings.timeUnitOverrides;
@@ -527,7 +528,7 @@
                 if (!unchanged()) throw new Error('保存中に区間または比較条件が変わりました。入力したメモは残っています。条件を確認して保存し直してください。');
                 const note = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, text, t0: noteRange[0], t1: noteRange[1], created: new Date().toISOString(), channels: noteChannels, files: noteFiles, image, context: noteContext, results: result.map(({ exceedanceIntervals, ...summary }) => summary) };
                 const updated = [...setting().notes, note];
-                try { localStorage.setItem('csv-compare-storage-probe', JSON.stringify({ ...api.collect(), comparison: { ...setting(), notes: updated } })); localStorage.removeItem('csv-compare-storage-probe'); } catch { localStorage.removeItem('csv-compare-storage-probe'); throw new Error('メモの保存容量が不足しています。レポートへ保存してから古いメモを削除してください。'); }
+                try { storage().setItem('csv-compare-storage-probe', JSON.stringify({ ...api.collect(), comparison: { ...setting(), notes: updated } })); storage().removeItem('csv-compare-storage-probe'); } catch { try { storage().removeItem('csv-compare-storage-probe'); } catch {} throw new Error('メモの保存容量が不足しています。レポートへ保存してから古いメモを削除してください。'); }
                 setting().notes = updated;
                 // Keep any additional text typed while the snapshot was being prepared.
                 if (noteDraft.trim() === text) noteDraft = '';

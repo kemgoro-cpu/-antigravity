@@ -452,11 +452,11 @@
             layout?.setState({ visible, expanded });
             requestChartResize(); api.resize();
         }
-        async function readMapFile(file) {
+        async function readMapFile(file, signal) {
             const token = ++importGeneration; pendingRows = null; pendingFile = file || null; pendingIdentity = null; pendingImport = false; externalStatus = ''; savedExternalIdentity = null;
             const source = sourceSignature(), context = JSON.stringify(api.getContext()), selectedMode = cfg.mode, selectedSource = cfg.source, format = dom['map-format'].value;
-            const currentImport = () => token === importGeneration && !destroyed && source === sourceSignature() && context === JSON.stringify(api.getContext()) && selectedMode === cfg.mode && selectedSource === cfg.source && format === dom['map-format'].value;
-            const changedImport = () => { if (token === importGeneration) { pendingRows = null; pendingFile = null; pendingIdentity = null; showImportFeedback('読み込み中に対象や条件が変わりました。マップCSVを選び直してください。'); } };
+            const currentImport = () => !signal?.aborted && token === importGeneration && !destroyed && source === sourceSignature() && context === JSON.stringify(api.getContext()) && selectedMode === cfg.mode && selectedSource === cfg.source && format === dom['map-format'].value;
+            const changedImport = () => { if (token === importGeneration) { pendingRows = null; pendingFile = null; pendingIdentity = null; showImportFeedback(signal?.aborted ? 'マップの読み込みを中止しました。' : '読み込み中に対象や条件が変わりました。マップCSVを選び直してください。'); } };
             dom['map-confirm-units'].checked = false; dom['map-apply'].disabled = true;
             externalMap = null; dom['map-clear'].disabled = !file; invalidate(true);
             if (!file) { updateApplyState(); schedule(); return; }
@@ -477,14 +477,33 @@
             finally { if (token === importGeneration) { pendingImport = false; updateApplyState(); } }
         }
         function applyMap() {
-            if (!pendingRows || !pendingFile || pendingImport || !dom['map-confirm-units'].checked) { updateApplyState(); return; }
+            if (!pendingRows || !pendingFile || pendingImport || !dom['map-confirm-units'].checked) { updateApplyState(); return false; }
             const result = F.parseMap(pendingRows, { format: dom['map-format'].value });
-            if (!result.ok) { showImportFeedback(result.reason, true, true); return; }
+            if (!result.ok) { showImportFeedback(result.reason, true, true); return false; }
             if (Object.entries(result.unitHints || {}).some(([key, unit]) => unit && !F.compatibleUnit(unit, { x: 'rpm', y: 'torque', z: 'sfc' }[key]))) {
-                showImportFeedback('CSVの見出しに異なる単位が指定されています。rpm・Nm・g/kWhのマップを使用してください。', true, true); return;
+                showImportFeedback('CSVの見出しに異なる単位が指定されています。rpm・Nm・g/kWhのマップを使用してください。', true, true); return false;
             }
             externalMap = { ...result, name: pendingFile.name, identity: pendingIdentity }; savedExternalIdentity = pendingIdentity; cfg.source = 'external';
             showImportFeedback(`${pendingFile.name} を背景に適用しました。`); $('xy-map-settings').open = false; dom['map-clear'].disabled = false; changed();
+            return true;
+        }
+        // The bundled demo has known units. Reuse the normal parser and stale-read
+        // guards; callers must explicitly acknowledge the same unit contract.
+        async function importExternalMap(file, options = {}) {
+            if (options.signal?.aborted) throw new Error('マップの読み込みを中止しました。');
+            if (options.unitsConfirmed !== true) throw new Error('回転数rpm・トルクNm・燃費率g/kWhの単位確認が必要です。');
+            const format = options.format || 'auto';
+            if (!['auto', 'long', 'matrix'].includes(format)) throw new Error('マップCSVの形式が不正です。');
+            if (destroyed || !visible) throw new Error('マップを開いてから読み込んでください。');
+            if (!file || typeof file.text !== 'function' || !Number.isFinite(file.size) || file.size > 5 * 1024 * 1024) throw new Error('5 MiB以下のマップCSVを指定してください。');
+            dom['map-format'].value = format;
+            const token = importGeneration + 1;
+            await readMapFile(file, options.signal);
+            if (options.signal?.aborted || destroyed || !visible || token !== importGeneration) throw new Error('マップの読み込みを中止しました。');
+            if (pendingFile !== file || !pendingRows || pendingImport) throw new Error(dom['map-feedback'].textContent || 'マップCSVを読み込めませんでした。');
+            dom['map-confirm-units'].checked = true; updateApplyState();
+            if (!applyMap()) throw new Error(dom['map-feedback'].textContent || 'マップCSVを適用できませんでした。');
+            return { ...externalMap.identity };
         }
         function collectSettings() {
             const source = sourceFile();
@@ -559,7 +578,7 @@
         if (root.CSVXYLayout) layout = root.CSVXYLayout({ panel, ratio: cfg.splitRatio,
             onResize() { if (!destroyed) { requestChartResize(); api.resize(); } },
             onCommit(ratio) { cfg.splitRatio = ratio; api.save(); } });
-        return { open, close, setVisible, schedule, cursor, collectSettings, applySettings, clear,
+        return { open, close, setVisible, schedule, cursor, collectSettings, applySettings, clear, importExternalMap,
             inspect: () => ({ chart, visible, expanded, mode: cfg.mode, config: { ...cfg }, lastResult, map: lastResult?.background || null, renderCount, cursorUpdateCount, cursorPoints: cursorPoints.map(point => ({ ...point, pixel: [...point.pixel] })), contourBuildCount, busy, pendingImport }),
             destroy() { destroyed = true; generation++; importGeneration++; observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); if (resizeFrame !== null) cancelAnimationFrame(resizeFrame); clearCursor(); layout?.destroy(); panel.removeEventListener('keydown', onKey); chart?.dispose(); panel.remove(); } };
     };
