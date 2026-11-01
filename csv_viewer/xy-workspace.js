@@ -26,7 +26,7 @@
           <div id="xy-map-external-fields" class="hidden"><label>マップCSVを選ぶ<input id="xy-map-file" type="file" accept=".csv,.txt,.tsv"></label><p class="xy-help">走行ログとは別に読み込みます。UTF-8、5 MiBまで。行列形式は先頭行が回転数、先頭列がトルク。3列形式は回転数・トルク・燃費率の順です。</p>
           <label>CSVの形式<select id="xy-map-format"><option value="auto">自動判別</option><option value="matrix">行列（先頭行X・先頭列Y）</option><option value="long">3列（X・Y・燃費率）</option></select></label>
           <label class="xy-checkbox"><input id="xy-map-confirm-units" type="checkbox">このCSVの単位が X＝rpm、Y＝Nm、燃費率＝g/kWh であることを確認した</label>
-          <div class="xy-field-pair"><button id="xy-map-apply" class="btn-primary" disabled>背景に適用</button><button id="xy-map-clear" class="btn-secondary" disabled>背景を解除</button></div></div>
+          <div class="xy-field-pair"><button id="xy-map-apply" class="btn-primary" aria-describedby="xy-map-feedback" disabled>背景に適用</button><button id="xy-map-clear" class="btn-secondary" disabled>背景を解除</button></div><p id="xy-map-feedback" class="xy-help xy-map-feedback" role="status" aria-live="polite">CSVを選び、単位確認にチェックを入れてください。</p></div>
           <div class="xy-field-pair"><label>色の下限 [g/kWh]<input id="xy-map-color-min" type="number" step="any" placeholder="空欄＝自動"></label><label>色の上限 [g/kWh]<input id="xy-map-color-max" type="number" step="any" placeholder="空欄＝自動"></label></div>
           <p class="xy-help">空欄は全有効値の範囲です。範囲外は端の色で表示し、元の値は保持します。例：200〜500 g/kWh。</p>
           <label class="xy-checkbox"><input id="xy-map-contours" type="checkbox">等高線を重ねる</label><p class="xy-help">色面は元の格子の値、等高線は隣り合う有効な格子間の補間線です。欠損セルを埋めません。動作点は燃料カット・停車も含み、回転数とトルクが非負の点を表示します。</p>
@@ -34,7 +34,23 @@
           </div><p id="xy-analysis-context" class="analysis-result-context"></p><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
           <p id="xy-cursor-status" class="xy-help" role="status"></p><p class="xy-help">波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。</p></div>`;
         document.querySelector('.compare-body').appendChild(panel);
-        const dom = Object.fromEntries(['mode', 'x-select', 'y-select', 'z-select', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-contours', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
+        const dom = Object.fromEntries(['mode', 'x-select', 'y-select', 'z-select', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-feedback', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-contours', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
+
+        function showImportFeedback(message, error = false, reveal = false) {
+            externalStatus = message;
+            dom['map-status'].textContent = message;
+            dom['map-feedback'].textContent = message;
+            dom['map-feedback'].classList.toggle('xy-feedback-error', error);
+            if (reveal) { $('xy-map-settings').open = true; dom['map-feedback'].scrollIntoView({ block: 'nearest' }); }
+        }
+        function updateApplyState() {
+            dom['map-apply'].disabled = !pendingRows || !pendingFile || pendingImport || !dom['map-confirm-units'].checked;
+            if (pendingImport) showImportFeedback('CSVを読み込んでいます。完了後に単位を確認してください。');
+            else if (pendingRows && pendingFile) showImportFeedback(dom['map-confirm-units'].checked
+                ? `${pendingFile.name} の準備ができました。「背景に適用」を押してください。`
+                : '単位確認にチェックを入れると「背景に適用」が押せます。');
+            else if (!externalStatus) showImportFeedback('CSVを選び、単位確認にチェックを入れてください。');
+        }
 
         function sourceFile() {
             if (cfg.source === 'external') return null;
@@ -276,7 +292,7 @@
             next = !!next;
             if (visible === next) { if (next) { chart?.resize(); schedule(); } return; }
             visible = next; panel.classList.toggle('hidden', !visible);
-            if (!visible) { invalidate(true); chart?.dispose(); chart = null; if (pendingImport) { importGeneration++; pendingImport = false; pendingRows = null; pendingFile = null; pendingIdentity = null; externalStatus = 'CSVの読み込みを中止しました。ファイルを選び直してください。'; } expanded = false; panel.classList.remove('xy-expanded'); dom['expand-btn'].textContent = '大きく表示'; dom['expand-btn'].setAttribute('aria-expanded', 'false'); }
+            if (!visible) { invalidate(true); chart?.dispose(); chart = null; if (pendingImport) { importGeneration++; pendingImport = false; pendingRows = null; pendingFile = null; pendingIdentity = null; showImportFeedback('CSVの読み込みを中止しました。ファイルを選び直してください。'); updateApplyState(); } expanded = false; panel.classList.remove('xy-expanded'); dom['expand-btn'].textContent = '大きく表示'; dom['expand-btn'].setAttribute('aria-expanded', 'false'); }
             else { requestAnimationFrame(() => { chart?.resize(); schedule(); }); }
             api.resize();
         }
@@ -298,12 +314,12 @@
             const token = ++importGeneration; pendingRows = null; pendingFile = file || null; pendingIdentity = null; pendingImport = false; externalStatus = ''; savedExternalIdentity = null;
             const source = sourceSignature(), context = JSON.stringify(api.getContext()), selectedMode = cfg.mode, selectedSource = cfg.source, format = dom['map-format'].value;
             const currentImport = () => token === importGeneration && !destroyed && source === sourceSignature() && context === JSON.stringify(api.getContext()) && selectedMode === cfg.mode && selectedSource === cfg.source && format === dom['map-format'].value;
-            const changedImport = () => { if (token === importGeneration) { pendingRows = null; pendingFile = null; pendingIdentity = null; externalStatus = '読み込み中に対象や条件が変わりました。マップCSVを選び直してください。'; if (cfg.mode === 'map' && cfg.source === 'external') dom['map-status'].textContent = externalStatus; } };
+            const changedImport = () => { if (token === importGeneration) { pendingRows = null; pendingFile = null; pendingIdentity = null; showImportFeedback('読み込み中に対象や条件が変わりました。マップCSVを選び直してください。'); } };
             dom['map-confirm-units'].checked = false; dom['map-apply'].disabled = true;
             externalMap = null; dom['map-clear'].disabled = !file; invalidate(true);
-            if (!file) { schedule(); return; }
-            if (file.size > 5 * 1024 * 1024) { externalStatus = dom['map-status'].textContent = 'マップCSVは5 MiB以下にしてください。'; pendingFile = null; schedule(); return; }
-            pendingImport = true; externalStatus = dom['map-status'].textContent = 'CSVを読み込んでいます。'; schedule();
+            if (!file) { updateApplyState(); schedule(); return; }
+            if (file.size > 5 * 1024 * 1024) { showImportFeedback('マップCSVは5 MiB以下にしてください。', true); pendingFile = null; schedule(); return; }
+            pendingImport = true; updateApplyState(); schedule();
             try {
                 const text = await file.text();
                 if (!currentImport()) { changedImport(); return; }
@@ -315,20 +331,18 @@
                 const first = (parsed.data[0] || []).join(' ');
                 if (/throttle|スロットル/i.test(first)) throw new Error('このCSVの軸はスロットル開度です。トルク[Nm]の背景マップを選んでください。');
                 pendingRows = parsed.data;
-                externalStatus = dom['map-status'].textContent = `${file.name} を選択しました。形式と単位を確認して「背景に適用」を押してください。`;
-                dom['map-apply'].disabled = !dom['map-confirm-units'].checked;
-            } catch (error) { if (token === importGeneration) { pendingRows = null; pendingFile = null; externalStatus = dom['map-status'].textContent = 'CSVを読み込めませんでした: ' + (error.message || error); } }
-            finally { if (token === importGeneration) pendingImport = false; }
+            } catch (error) { if (token === importGeneration) { pendingRows = null; pendingFile = null; showImportFeedback('CSVを読み込めませんでした: ' + (error.message || error), true); } }
+            finally { if (token === importGeneration) { pendingImport = false; updateApplyState(); } }
         }
         function applyMap() {
-            if (!pendingRows || !pendingFile || !dom['map-confirm-units'].checked) return;
+            if (!pendingRows || !pendingFile || pendingImport || !dom['map-confirm-units'].checked) { updateApplyState(); return; }
             const result = F.parseMap(pendingRows, { format: dom['map-format'].value });
-            if (!result.ok) { externalStatus = dom['map-status'].textContent = result.reason; return; }
+            if (!result.ok) { showImportFeedback(result.reason, true, true); return; }
             if (Object.entries(result.unitHints || {}).some(([key, unit]) => unit && !F.compatibleUnit(unit, { x: 'rpm', y: 'torque', z: 'sfc' }[key]))) {
-                externalStatus = dom['map-status'].textContent = 'CSVの見出しに異なる単位が指定されています。rpm・Nm・g/kWhのマップを使用してください。'; return;
+                showImportFeedback('CSVの見出しに異なる単位が指定されています。rpm・Nm・g/kWhのマップを使用してください。', true, true); return;
             }
             externalMap = { ...result, name: pendingFile.name, identity: pendingIdentity }; savedExternalIdentity = pendingIdentity; cfg.source = 'external';
-            externalStatus = ''; $('xy-map-settings').open = false; dom['map-clear'].disabled = false; changed();
+            showImportFeedback(`${pendingFile.name} を背景に適用しました。`); $('xy-map-settings').open = false; dom['map-clear'].disabled = false; changed();
         }
         function collectSettings() {
             const source = sourceFile();
@@ -351,12 +365,15 @@
             dom['map-rpm-step'].value = cfg.rpmStep; dom['map-torque-step'].value = cfg.torqueStep;
             dom['map-color-min'].value = cfg.colorMin ?? ''; dom['map-color-max'].value = cfg.colorMax ?? '';
             dom['map-file'].value = ''; dom['map-confirm-units'].checked = false; dom['map-apply'].disabled = true; dom['map-clear'].disabled = !externalMap;
-            if (!externalMap && cfg.source === 'external') externalStatus = '背景CSVのデータは保存しません。ファイルを再度選び、単位を確認して適用してください。';
+            externalStatus = '';
+            if (!externalMap && cfg.source === 'external') showImportFeedback('背景CSVのデータは保存しません。ファイルを再度選び、単位を確認して適用してください。');
+            else showImportFeedback(externalMap ? `${externalMap.name} を背景に適用しています。` : 'CSVを選び、単位確認にチェックを入れてください。');
             controlsSignature = ''; invalidate(true); syncControls(true); schedule();
         }
         function clear() {
             importGeneration++; pendingRows = null; pendingFile = null; pendingIdentity = null; pendingImport = false; externalMap = null; savedExternalIdentity = null; mapCache = null; lastCursor = null; externalStatus = '';
             dom['map-file'].value = ''; dom['map-clear'].disabled = true; dom['map-apply'].disabled = true; dom['map-confirm-units'].checked = false;
+            updateApplyState();
             invalidate(true); controlsSignature = ''; schedule();
         }
         dom.mode.addEventListener('change', () => {
@@ -372,14 +389,14 @@
             changed();
         });
         for (const [id, key] of [['x-select', 'x'], ['y-select', 'y'], ['z-select', 'z'], ['map-x-select', 'mapX'], ['map-y-select', 'mapY'], ['map-z-select', 'mapZ']]) dom[id].addEventListener('change', () => { cfg[key] = dom[id].value; changed(); });
-        dom['map-source'].addEventListener('change', () => { if (pendingImport) { importGeneration++; pendingImport = false; pendingRows = null; pendingFile = null; pendingIdentity = null; } cfg.source = dom['map-source'].value; cfg.sourceName = sourceFile()?.name || ''; syncControls(true); changed(); });
+        dom['map-source'].addEventListener('change', () => { if (pendingImport) { importGeneration++; pendingImport = false; pendingRows = null; pendingFile = null; pendingIdentity = null; showImportFeedback('背景の参照元を変えたため、CSVの読み込みを中止しました。ファイルを選び直してください。'); updateApplyState(); } cfg.source = dom['map-source'].value; cfg.sourceName = sourceFile()?.name || ''; syncControls(true); changed(); });
         for (const [id, key] of [['map-rpm-step', 'rpmStep'], ['map-torque-step', 'torqueStep']]) dom[id].addEventListener('change', () => { cfg[key] = dom[id].value.trim() ? Number(dom[id].value) : NaN; changed(); });
         for (const [id, key] of [['map-color-min', 'colorMin'], ['map-color-max', 'colorMax']]) dom[id].addEventListener('change', () => { cfg[key] = dom[id].validity.badInput ? NaN : dom[id].value.trim() ? Number(dom[id].value) : null; changed(); });
         dom['map-contours'].addEventListener('change', () => { cfg.contours = dom['map-contours'].checked; changed(); });
         dom['map-file'].addEventListener('change', () => readMapFile(dom['map-file'].files[0]));
-        dom['map-confirm-units'].addEventListener('change', () => { dom['map-apply'].disabled = !pendingRows || !dom['map-confirm-units'].checked; });
+        dom['map-confirm-units'].addEventListener('change', updateApplyState);
         dom['map-apply'].addEventListener('click', applyMap);
-        dom['map-clear'].addEventListener('click', () => { clear(); externalStatus = dom['map-status'].textContent = '背景を解除しました。走行ログと軸の設定は残しています。'; api.save(); });
+        dom['map-clear'].addEventListener('click', () => { clear(); showImportFeedback('背景を解除しました。走行ログと軸の設定は残しています。'); api.save(); });
         dom['expand-btn'].addEventListener('click', toggleExpanded); dom['close-btn'].addEventListener('click', close);
         const onKey = event => {
             if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || !visible || !panel.contains(document.activeElement)) return;

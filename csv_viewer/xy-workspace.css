@@ -17,6 +17,9 @@
 .xy-workspace details > label,.xy-workspace details > .xy-field-pair { margin-top:8px; }
 .xy-workspace summary { cursor:pointer; color:var(--text-secondary); font-size:11px; }
 .xy-help { font-size:10px; color:var(--text-secondary); line-height:1.7; overflow-wrap:anywhere; margin:8px 0; }
+.xy-map-feedback { font-size:11px; }
+.xy-map-feedback.xy-feedback-error { color:var(--danger); }
+.xy-workspace button:disabled { opacity:.45; cursor:not-allowed; }
 .xy-workspace .analysis-result-context { margin:10px 0 5px; font-size:11px; line-height:1.6; overflow-wrap:anywhere; }
 .xy-workspace-chart { width:100%; height:370px; min-height:300px; }
 .xy-workspace .btn-primary,.xy-workspace .btn-secondary { font-size:11px; justify-content:center; min-height:32px; white-space:normal; }
