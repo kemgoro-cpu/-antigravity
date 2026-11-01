@@ -1,0 +1,68 @@
+{
+  "revision": "2026-11-01",
+  "generatedAt": "2026-11-01T09:58:14.123Z",
+  "source": "Real screenshots in isolated Edge, unchanged synthetic tutorial data; no image editing.",
+  "sampleHashes": [
+    "2b6f18841c4cd27e7135863434bdc92597187bcfa58068a850f094089a7b39f9",
+    "9df7ab67be86b0ce4808aff5e537a821036317e3540307e34d34903f70087fd5"
+  ],
+  "sourceHashes": {
+    "index.html": "1c657424ba07fe94c17ea8db6f02c50dd5d392a6a90920251ffe9e70a8fb14c4",
+    "app.js": "e44212cd2c50d156f4d53ce81645e9ef745803c3f722d0ba41b9da1b4dcd7aca",
+    "compare-workspace.js": "5089d9f7177f2f9466a855ad67e4c0bd27d1bb470d08d9e71d9273a907df9cd2",
+    "workspace-ui.js": "0ca23ce7a684960d4fcc2821ebad27c567b805b04c2ff1650f95c858535aa06c",
+    "xy-workspace.js": "17ab7ae781c03022247e3bf54a606b058df4e156c176562cebbaaf377c77e5b6",
+    "xy-workspace.css": "7e84dd77c485935de8688de56c9e8d907833a5ed81a2ff56ea5f221e9a32f3f4",
+    "fuel-map-utils.js": "286a20686c9158d14abd49322b4029610ce3d54ce2d0257497ec18c5d1bed56c",
+    "xy-utils.js": "ce0f4b9d05974f20ff3468ae236ae81386c548ed6e14fbe3c6c7dbaceedcba95"
+  },
+  "screenshot": "fuel-map.png",
+  "evidence": {
+    "context": {
+      "scope": "selection",
+      "range": [
+        10,
+        30
+      ],
+      "rawTime": false,
+      "timeLabel": "時間合わせ後",
+      "label": "選択区間 10 – 30 s · 時間合わせ後"
+    },
+    "map": {
+      "xs": [
+        800,
+        1200,
+        1600,
+        2000,
+        2400,
+        2800,
+        3200
+      ],
+      "ys": [
+        0,
+        20,
+        40,
+        60,
+        80,
+        100,
+        120
+      ],
+      "stats": {
+        "inputRows": 49,
+        "eligible": 48,
+        "excluded": 1,
+        "invalidCoordinates": 0,
+        "invalidValues": 1,
+        "duplicatePoints": 0,
+        "emptyCells": 1
+      }
+    },
+    "cursorUpdates": 1,
+    "renderCount": 5,
+    "pointCounts": [
+      41
+    ]
+  },
+  "errors": [],
+  "requests": []
+}

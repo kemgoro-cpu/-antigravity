@@ -45,9 +45,9 @@ const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('
         assert.deepEqual(errors, []); assert.deepEqual(requests, []);
         assert.equal(hash(sample), originalHash);
         fs.writeFileSync(path.join(images, 'events-capture-manifest.json'), JSON.stringify({
-            revision: '2026-10-31', generatedAt: new Date().toISOString(),
+            revision: '2026-11-01', generatedAt: new Date().toISOString(),
             source: 'Real app screenshot in isolated Edge; unchanged bundled synthetic log; no image editing.',
-            sampleHash: originalHash, sourceHashes: Object.fromEntries(['index.html', 'app.js', 'styles.css', 'event-utils.js', 'settings-utils.js', 'compare-workspace.js'].map(file => [file, hash(path.join(root, file))])),
+            sampleHash: originalHash, sourceHashes: Object.fromEntries(['index.html', 'app.js', 'styles.css', 'event-utils.js', 'fuel-map-utils.js', 'xy-utils.js', 'xy-workspace.js', 'xy-workspace.css', 'settings-utils.js', 'compare-workspace.js'].map(file => [file, hash(path.join(root, file))])),
             screenshot: 'events-panel.png', result, errors, requests,
         }, null, 2) + '\n');
         console.log(JSON.stringify({ events: result.totalCount, screenshot: 'events-panel.png', samplesUnchanged: true, offline: true }));

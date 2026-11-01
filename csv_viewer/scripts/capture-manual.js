@@ -45,7 +45,7 @@ function writeSamples() {
     });
     const page = await context.newPage();
     const errors = [], shots = [], facts = { sampleCount: 121, samplePeriodSeconds: 0.5, comparisonTimeDelaySeconds: 2, comparisonPressureIncreaseKPa: 5 };
-    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'event-utils.js', 'settings-utils.js', 'styles.css', 'parser-utils.js', 'compare-utils.js', 'chart-options-utils.js', 'layout-utils.js', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css', 'save-workspace.js', 'save-workspace.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
+    const sourceHashes = Object.fromEntries(['index.html', 'app.js', 'event-utils.js', 'fuel-map-utils.js', 'xy-utils.js', 'xy-workspace.js', 'xy-workspace.css', 'settings-utils.js', 'styles.css', 'parser-utils.js', 'compare-utils.js', 'chart-options-utils.js', 'layout-utils.js', 'compare-workspace.js', 'compare-workspace.css', 'workspace-ui.js', 'workspace-ui.css', 'save-workspace.js', 'save-workspace.css'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')]));
     page.on('pageerror', error => errors.push(error.stack || error.message));
     async function settle() {
         await page.mouse.move(750, 25);
@@ -163,11 +163,11 @@ function writeSamples() {
         await page.locator('#xy-x-select').selectOption('Speed');
         await page.locator('#xy-y-select').selectOption('Pressure');
         await page.waitForFunction(() => !!document.querySelector('#xy-chart canvas'));
-        await capture('xy', 'XYプロット。X=Speed、Y=Pressureで2本の関係を確認。', '.xy-modal');
+        await capture('xy', '同じ画面のXYパネル。X=Speed、Y=Pressureで2本の関係を確認。', '#xy-workspace');
         assert.deepEqual(errors, []);
         const browserErrors = await page.evaluate(() => window.__manualBrowserErrors);
         assert.deepEqual(browserErrors, []);
-        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ revision: '2026-10-31', generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png', 'navigator-panel.png', 'tolerance-nav.png'], errors, browserErrors }, null, 2) + '\n');
+        fs.writeFileSync(path.join(images, 'capture-manifest.json'), JSON.stringify({ revision: '2026-11-01', generatedAt: new Date().toISOString(), viewport: { width: 1400, height: 1000 }, theme: 'light', source: 'Real application screenshots through Playwright, isolated Edge context and file:// with native scrollbars. No screenshot content was edited.', sourceHashes, facts, shots, additionalImages: ['align-controls.png', 'sidebar.png', 'selection-strip.png', 'navigator-panel.png', 'tolerance-nav.png'], errors, browserErrors }, null, 2) + '\n');
         console.log(JSON.stringify({ images, facts, screenshots: shots.length }, null, 2));
     } catch (error) {
         const out = path.join(root, 'tests/fixtures/generated/manual-capture');

@@ -1,15 +1,19 @@
 {
-  "revision": "2026-10-31",
-  "generatedAt": "2026-10-31T00:25:37.463Z",
+  "revision": "2026-11-01",
+  "generatedAt": "2026-11-01T09:58:07.657Z",
   "source": "Real app screenshot in isolated Edge; unchanged bundled synthetic log; no image editing.",
   "sampleHash": "8b9d170a15f3dd257ce75b488b97fe9721b7540da7e34576a2bd5a45428438e8",
   "sourceHashes": {
-    "index.html": "307a8764821ae8ee3a72b1639ea42443680b6bab34fe23ada2746830b7bac42c",
-    "app.js": "31599b0f74f810978c1925ffb63fbbc37f5e45092ba8133d4cb39d01cf662ecd",
-    "styles.css": "1d97aa2b1ca9d67d80a12af1d410623fb1032659536db1179c9d2f576eaa51ef",
+    "index.html": "1c657424ba07fe94c17ea8db6f02c50dd5d392a6a90920251ffe9e70a8fb14c4",
+    "app.js": "e44212cd2c50d156f4d53ce81645e9ef745803c3f722d0ba41b9da1b4dcd7aca",
+    "styles.css": "d8b625f95a0a06936aa31ea789f2f66ba5208568655503d4d07746ddcc55aadc",
     "event-utils.js": "2bb17ba95cc07f980ec672ead03dc881bafca465461cb061b37583169230a770",
-    "settings-utils.js": "ad59228cd476c16b784725c9306303368a5136e5f5a363c328a30f73c55ccf77",
-    "compare-workspace.js": "a53c6018b9d009352deff4a493b6d6d323a26c2488f2d9b3cdfb72b024c7de7b"
+    "fuel-map-utils.js": "286a20686c9158d14abd49322b4029610ce3d54ce2d0257497ec18c5d1bed56c",
+    "xy-utils.js": "ce0f4b9d05974f20ff3468ae236ae81386c548ed6e14fbe3c6c7dbaceedcba95",
+    "xy-workspace.js": "17ab7ae781c03022247e3bf54a606b058df4e156c176562cebbaaf377c77e5b6",
+    "xy-workspace.css": "7e84dd77c485935de8688de56c9e8d907833a5ed81a2ff56ea5f221e9a32f3f4",
+    "settings-utils.js": "7967bccf087568a82042289c0123094c2fd7c48df7fc1a292d5ac176c074d188",
+    "compare-workspace.js": "5089d9f7177f2f9466a855ad67e4c0bd27d1bb470d08d9e71d9273a907df9cd2"
   },
   "screenshot": "events-panel.png",
   "result": {

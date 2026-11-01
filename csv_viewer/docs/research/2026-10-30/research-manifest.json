@@ -1,9 +1,15 @@
 {
   "date": "2026-10-30",
   "enginePriorities": {
-    "updatedDate": "2026-10-31",
+    "updatedDate": "2026-11-01",
     "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
     "status": "partially-implemented",
+    "completedRanks": [
+      3
+    ],
+    "partialRanks": [
+      6
+    ],
     "runtimeAssessment": {
       "updatedDate": "2026-10-31",
       "basis": "qualitative code review",
@@ -94,12 +100,12 @@
           13
         ],
         "title": "XYの色分けと元波形への移動",
-        "status": "proposal",
-        "reviewedRevision": "752ca8c96767563e496e13d9a2b411eb65a6fd00",
+        "status": "partial",
+        "reviewedRevision": "fc694db3c6081d699cf5bab1089ef47ffd9c8495",
         "runtime": {
           "overall": "中〜大",
           "compute": "中",
-          "interaction": "中〜大",
+          "interaction": "小〜中",
           "memory": "中"
         }
       },
@@ -210,12 +216,12 @@
     "inPlaceCount": 36,
     "status": "proposal"
   },
-  "progressUpdated": "2026-10-31",
-  "implementationCommit": "d9103873f2cf79d9e66bcf0ae5ef8b14b93e9b14",
+  "progressUpdated": "2026-11-01",
+  "implementationCommit": "fc694db3c6081d699cf5bab1089ef47ffd9c8495",
   "statusCounts": {
     "complete": 6,
-    "partial": 1,
-    "pending": 48
+    "partial": 3,
+    "pending": 46
   },
   "remainingCount": 49,
   "productCount": 37,

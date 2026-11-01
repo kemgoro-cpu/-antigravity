@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="manual-revision" content="2026-10-31">
+<meta name="manual-revision" content="2026-11-01">
 <title>CSV Chart Viewer 操作マニュアル</title>
 <style>
 :root{--ink:#182b38;--muted:#536875;--teal:#08786e;--line:#d5e1e5;--paper:#fff;--soft:#eff7f6}
@@ -30,10 +30,10 @@ table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;margin:
 </head>
 <body>
 <header class="top"><strong>CSV Chart Viewer · 操作マニュアル</strong><a href="index.html" target="_blank" rel="noopener">ツールを開く</a><a href="docs/CSV-Chart-Viewer-Manual.pdf" download>PDFを保存</a><button id="toc-toggle" type="button" aria-controls="manual-toc" aria-expanded="false">目次</button><button id="print-manual" type="button">印刷</button></header>
-<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモを残す</a><a href="#templates">09 続き：比較条件を再利用</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#events">11 続き：イベントの操作</a><a href="#event-rules">11 続き：時刻と詳細設定</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
+<nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモを残す</a><a href="#templates">09 続き：比較条件を再利用</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#xy-map">11 続き：XY・燃費率マップ</a><a href="#map-data">11 続き：マップデータ</a><a href="#events">11 続き：イベントの操作</a><a href="#event-rules">11 続き：時刻と詳細設定</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
 <main>
 <section class="page" id="start">
-<div class="eyebrow">Operation guide / 2026.10.31</div>
+<div class="eyebrow">Operation guide / 2026.11.01</div>
 <h1>波形を開く。<br>違いを見つけて、記録する。</h1>
 <p class="lead">CSV Chart Viewer 操作マニュアル</p>
 <span class="tag">初めて使う人から、日常の比較作業まで</span><span class="tag">図・実画面・練習用データ付き</span>
@@ -185,11 +185,38 @@ s,km/h,kPa,
 <div class="chapter"><span class="num">11</span><h2>計算・イベント・XYを使う</h2></div>
 <div class="two"><div><h3>Custom RAM：計算チャンネル</h3><p>左の「読み込み設定・計算・イベント」で名前・単位・式を入力して「追加」。作成名には<code>@</code>が付きます。</p><pre>Pressure * 1000
 Speed / 3.6
-Pressure - s1:Pressure</pre><p class="small">例の単位は順にPa、m/s、kPa。単位欄は表示用なので、換算は式で行います。s1は比較ファイルの番号です。現在のファイル順と実際の信号名を確認します。</p><p>「式に挿入」で信号名を挿入できます。「?」で関数一覧、鉛筆で式・単位の編集、×で削除。編集時の名前は固定です。</p><p class="small">ファイル間の式は基準時刻に固定した1本を作ります。比較結果では基準固定の計算チャンネルとして比較不可になります。</p></div><div><h3>イベント：条件を満たす区間</h3><p>開始条件・最低継続時間・解除条件を指定して「検出」。基準ログ全体の該当区間を探し、先頭300件までを一覧と赤い帯で表示します。<a href="#events">次ページで操作と解除方法</a>を説明します。</p><pre>Pressure > 120
+Pressure - s1:Pressure</pre><p class="small">例の単位は順にPa、m/s、kPa。単位欄は表示用なので、換算は式で行います。s1は比較ファイルの番号です。現在のファイル順と実際の信号名を確認します。</p><p>「式に挿入」で信号名を挿入できます。「?」で関数一覧、鉛筆で式・単位の編集、×で削除。編集時の名前は固定です。</p><p class="small">ファイル間の式は基準時刻に固定した1本を作ります。比較結果では基準固定の計算チャンネルとして比較不可になります。</p></div><div><h3>イベント：条件を満たす区間</h3><p>開始条件・最低継続時間・解除条件を指定して「検出」。基準ログ全体の該当区間を探し、先頭300件までを一覧と赤い帯で表示します。操作と解除方法は<a href="#events">「イベントの操作」のページ</a>で説明します。</p><pre>Pressure > 120
 Speed > 30 && State == 1</pre><p>検出した区間は再起動で復元しないため、次回は再検出します。条件に該当することと、異常かどうかの判断は分けてください。</p><div class="note"><strong>3つの区間の違い</strong>対象区間は自分で指定。イベントは基準ログの条件式で抽出。許容差超過は基準と比較の差から抽出します。</div></div></div>
 <h3>XY：時間以外の軸で関係を見る</h3>
-<p>「解析ツール → XYプロット」でX・Yを指定します。各ファイル内の同じ時刻のX/Yを組にして描く散布図で、上下比較や差分表示の見た目をそのまま変換する機能ではありません。</p>
-<figure><img data-image="xy-panel.png" alt="XにSpeed、YにPressureを指定し、共通の解析区間を描くXYプロット"><figcaption>対象区間と元時刻／時間合わせ後は、上部の解析対象に連動します。有効点数・描画点数と間引きの有無を確認できます。単位不一致等は理由を表示します。未対応・欠損ペアは描かず、欠損数の内訳は表示しません。各ファイル最大50,000点へ間引きます。</figcaption></figure>
+<p>「解析ツール → XY・燃費率マップ」または右上の「XY・マップ」で開きます。X・Yと色の信号を選び、波形と並べて確認します。旧ポップアップは同じ画面のパネルに置き換えました。</p>
+<figure><img data-image="xy.png" alt="波形と同じ画面に、XにSpeed、YにPressureを指定したXYパネルを表示"><figcaption>対象区間と時間基準は上部の解析対象に連動。各ファイルの有効点・描画点・除外数を確認します。描画は各ファイル最大10,000点。クリックした点には元の行と時刻が残り、その時刻の波形へ戻れます。</figcaption></figure>
+</section>
+
+<section class="page" id="xy-map">
+<div class="chapter"><span class="num">11</span><h2>波形と燃費率マップを並べて見る</h2></div>
+<p>右上の「XY・マップ」でパネルを開き、「燃費率マップ」へ切り替えます。Xに回転数、Yにトルクを指定。背景に燃費率のマップ、手前に各ログの走行点を重ねます。「比較パネル」で比較へ戻れます。</p>
+<figure class="data-screen"><img data-image="fuel-map.png" alt="時系列波形と燃費率マップを同じ画面に表示。マップには選択区間の動作点とカーソル位置を重ねている"><figcaption>同梱の「練習用_エンジン.csv」「練習用_燃費率ﾏｯﾌﾟ.csv」による合成例です。実測のエンジン特性ではありません。</figcaption></figure>
+<table class="table-tight"><thead><tr><th>操作</th><th>連動する表示</th></tr></thead><tbody><tr><td>波形で区間を選択</td><td>上部の解析対象を使い、その区間の走行点を描きます。背景マップは全体のままです。</td></tr><tr><td>波形のカーソルを移動</td><td>各ログの最寄りの実測サンプルをマップ上で強調します。補間した動作点は作りません。</td></tr><tr><td>走行点をクリック</td><td>元の時刻へ波形を移動し、「XYの選択点」の縦線を表示します。背景の格子は走行点ではありません。</td></tr><tr><td>拡大表示／閉じる</td><td>同じ画面内でマップを大きく表示できます。閉じると比較パネルへ戻ります。別のタブは開きません。</td></tr></tbody></table>
+<div class="note"><strong>燃費率の背景と、走行中の点は別のデータ</strong>背景は回転数[rpm]×トルク[Nm]に対する燃費率[g/kWh]です。走行点は各ログの回転数とトルク。体積燃料流量だけから背景を自動作成する機能ではありません。</div>
+</section>
+
+<section class="page" id="map-data">
+<div class="chapter"><span class="num">11</span><h2>背景マップを読み込み、値を確かめる</h2></div>
+<h3>背景の読み込み方法</h3>
+<table class="table-tight"><thead><tr><th>マップの参照元</th><th>使うデータ</th></tr></thead><tbody><tr><td>ログのSFC列</td><td>読み込み済みログの <code>sfc_ne</code>・<code>sfc_te</code>・<code>sfc_g_kwh</code> を使います。全行を既定400 rpm×3 Nmで格子平均します。格子幅は変更できます。</td></tr><tr><td>外部CSV</td><td>X・Y・燃費率の3列、または先頭行がX・先頭列がYの行列形式です。通常の「開く」とは別に、マップ欄でファイルを選びます。時刻列は不要です。</td></tr></tbody></table>
+<p>外部CSVは形式と単位を確認して適用します。回転数rpm、トルクNm、燃費率g/kWhにそろえます。スロットル開度[%]をトルク[Nm]として読ませないでください。既存の <code>sample_fuel_map_BSFC.csv</code> は縦軸がThrottleのため、このトルクマップの練習には使いません。</p>
+<div class="two"><div><h3>3列形式の例</h3><pre>rpm,Nm,g/kWh
+1000,20,340
+1500,20,315
+1000,40,285
+1500,40,260</pre></div><div><h3>行列形式の例</h3><pre>rpm / Nm,1000,1500
+20,340,315
+40,285,260</pre><p class="small">3列の行列は3列データと紛らわしいため、必要なら形式を明示指定します。</p></div></div>
+<h3>欠損・重複・等高線</h3>
+<p>3列形式の同一座標やログの同一格子内は、有効値を平均します。行列形式の重複した軸は読み込めません。欠損、燃費率0以下、負の回転数／トルクは除外し、背景の穴を埋めません。等高線は隣接する有効格子間の補間線で、追加の実測値ではありません。</p>
+<p>色の下限・上限は空欄で全範囲。大きな値で色が偏る場合は範囲を指定できます。範囲外は端の色で表示し、件数を明示します。元の値とツールチップは変わりません。燃料密度補正は行いません。</p>
+<div class="note"><strong>保存と処理の上限</strong>軸・表示条件は設定に保存します。外部CSVの本体は保存しないため、再起動・設定読込後は再読込が必要です。閉じて開き直すだけなら保持します。UTF-8、5 MiB以下、40,000セル以下。背景の集計は元データ全点を使います。</div>
+<p class="small">現行のPNG・HTML出力にはマップを含みません。囲み選択、状態名の色分け、走行ログの燃料流量からの燃費率計算は未実装です。</p>
 </section>
 
 <section class="page" id="events">

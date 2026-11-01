@@ -2,7 +2,7 @@
   "products": 37,
   "proposals": 55,
   "enginePriorities": {
-    "updatedDate": "2026-10-31",
+    "updatedDate": "2026-11-01",
     "count": 10,
     "oldRanks": [
       [
@@ -41,6 +41,9 @@
     "completedRanks": [
       3
     ],
+    "partialRanks": [
+      6
+    ],
     "runtimeAssessment": {
       "updatedDate": "2026-10-31",
       "basis": "qualitative code review",
@@ -55,8 +58,8 @@
   },
   "implementationStatus": {
     "complete": 6,
-    "partial": 1,
-    "pending": 48,
+    "partial": 3,
+    "pending": 46,
     "remaining": 49
   },
   "consolidation": [

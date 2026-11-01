@@ -1,16 +1,20 @@
 {
-  "revision": "2026-10-31",
-  "generatedAt": "2026-10-31T00:25:34.982Z",
+  "revision": "2026-11-01",
+  "generatedAt": "2026-11-01T09:58:01.603Z",
   "source": "Real application screenshots, isolated Edge, synthetic bundled logs, no image editing.",
   "sampleHashes": [
     "8b9d170a15f3dd257ce75b488b97fe9721b7540da7e34576a2bd5a45428438e8",
     "a5ca99a4870b962f71cd4b2b147bee508c2a1a2d6f606b3cdcc2c9342afde5f4"
   ],
   "sourceHashes": {
-    "app.js": "31599b0f74f810978c1925ffb63fbbc37f5e45092ba8133d4cb39d01cf662ecd",
-    "index.html": "307a8764821ae8ee3a72b1639ea42443680b6bab34fe23ada2746830b7bac42c",
+    "app.js": "e44212cd2c50d156f4d53ce81645e9ef745803c3f722d0ba41b9da1b4dcd7aca",
+    "index.html": "1c657424ba07fe94c17ea8db6f02c50dd5d392a6a90920251ffe9e70a8fb14c4",
     "event-utils.js": "2bb17ba95cc07f980ec672ead03dc881bafca465461cb061b37583169230a770",
-    "settings-utils.js": "ad59228cd476c16b784725c9306303368a5136e5f5a363c328a30f73c55ccf77",
+    "fuel-map-utils.js": "286a20686c9158d14abd49322b4029610ce3d54ce2d0257497ec18c5d1bed56c",
+    "xy-utils.js": "ce0f4b9d05974f20ff3468ae236ae81386c548ed6e14fbe3c6c7dbaceedcba95",
+    "xy-workspace.js": "17ab7ae781c03022247e3bf54a606b058df4e156c176562cebbaaf377c77e5b6",
+    "xy-workspace.css": "7e84dd77c485935de8688de56c9e8d907833a5ed81a2ff56ea5f221e9a32f3f4",
+    "settings-utils.js": "7967bccf087568a82042289c0123094c2fd7c48df7fc1a292d5ac176c074d188",
     "data-inspector.js": "14de806ef024ce4b0c3828983fe581532036995b51211ce178174783be5e25a4",
     "data-quality-utils.js": "3dd866f365276bb16a64ef4935980de1f4a76f3eb01f31fb6372dc13c2d7cf3a",
     "import-preview.js": "4f5ee80f64e5dfafde9a5a0a1646e98a8282399d2688acf7257ceaefa2c3a345",
