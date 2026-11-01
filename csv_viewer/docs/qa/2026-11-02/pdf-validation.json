@@ -1,16 +1,321 @@
 {
+  "validated_at": "2026-11-01T16:55:30.841866+00:00",
+  "integrity": "pass: strict pypdf load, all page content streams, destinations, and all 26 PDFium renders",
   "pages": 26,
   "bookmarks": 54,
   "a4": true,
+  "page_size_points": [
+    594.95996,
+    841.91998
+  ],
   "all_page_numbers": true,
   "all_revision_dates": true,
+  "cover_date": "2026-11-02",
+  "cover_target_date": "2026-11-02",
+  "cover_provenance_searchable": true,
   "machine_local_uri_links": 0,
+  "links_resolved": true,
+  "links": [
+    {
+      "page": 5,
+      "destination": "/save",
+      "target_page": 15
+    },
+    {
+      "page": 5,
+      "destination": "/save",
+      "target_page": 15
+    },
+    {
+      "page": 17,
+      "destination": "/events",
+      "target_page": 21
+    }
+  ],
+  "link_note": "The PDF builder intentionally removes non-fragment local href attributes; the HTML retains local document links. The PDF retains three valid intra-document link annotations and 54 bookmarks.",
   "changed_text_searchable": true,
   "text_normalization": "Unicode NFKC and whitespace removal",
-  "pdf_sha256": "9a724e62f08d8cf028d43f06cdcf5c2ae5f007bb8b8862906e3f1145820b0e16",
-  "render_dir": "tests\\fixtures\\generated\\qa-manual-20261102",
+  "pdf_sha256": "febfd7a08eddf6722d35d4a0afca33b975ad1253481959fed11d5bbd0fbff889",
+  "previous_validated_pdf_sha256": "9a724e62f08d8cf028d43f06cdcf5c2ae5f007bb8b8862906e3f1145820b0e16",
+  "render_dir": "tests/fixtures/generated/qa-manual-20261102/cover-revision",
+  "baseline_render_dir": "tests/fixtures/generated/qa-manual-20261102",
+  "pixel_comparison_scale": 0.6,
+  "pixels_changed_since_previous_visual_review": [
+    1
+  ],
+  "pixel_identical_pages": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+  ],
+  "pixel_comparison": [
+    {
+      "page": 1,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": false,
+      "difference_bounds": [
+        23,
+        26,
+        333,
+        440
+      ]
+    },
+    {
+      "page": 2,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 3,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 4,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 5,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 6,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 7,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 8,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 9,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 10,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 11,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 12,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 13,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 14,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 15,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 16,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 17,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 18,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 19,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 20,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 21,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 22,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 23,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 24,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 25,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    },
+    {
+      "page": 26,
+      "dimensions": [
+        357,
+        506
+      ],
+      "pixel_identical": true,
+      "difference_bounds": null
+    }
+  ],
+  "previous_visual_review": "pass: all26 contact sheet; detailed8,17,18,21,22; shortened caption17 rechecked; other25 pages pixel-identical",
+  "visual_review": "pass: cover-detail.png inspected after the date/provenance correction; cover date and target date both 2026-11-02; no clipping, overlap, or footer collision. Other 25 pages are pixel-identical to the previously reviewed renders.",
   "pixels_changed_since_first_visual_review": [
+    1,
     17
   ],
-  "visual_review": "pass: all26 contact sheet; detailed8,17,18,21,22; shortened caption17 rechecked; other25 pages pixel-identical"
+  "cover_detail": "tests/fixtures/generated/qa-manual-20261102/cover-revision/cover-detail.png"
 }

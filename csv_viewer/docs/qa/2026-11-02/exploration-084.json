@@ -1,0 +1,39 @@
+{
+  "observationCommand": "zoom OFF scroll container result",
+  "observed": [
+    {
+      "clientHeight": 470,
+      "id": "xy-workspace",
+      "rect": {
+        "bottom": 785.7000122070312,
+        "height": 470.3000183105469,
+        "left": 956,
+        "right": 1600,
+        "top": 315.3999938964844,
+        "width": 644,
+        "x": 956,
+        "y": 315.3999938964844
+      },
+      "scrollHeight": 470,
+      "scrollTop": 0
+    },
+    {
+      "clientHeight": 305,
+      "id": "xy-chart",
+      "rect": {
+        "bottom": 572.8000183105469,
+        "height": 305,
+        "left": 966.7999877929688,
+        "right": 1584.4000244140625,
+        "top": 267.8000183105469,
+        "width": 617.6000366210938,
+        "x": 966.7999877929688,
+        "y": 267.8000183105469
+      },
+      "scrollHeight": 305,
+      "scrollTop": 0
+    }
+  ],
+  "hypothesis": "表示メニューはキーで閉じられ、手順のマニュアルはHTTPで開く",
+  "nextCommand": "view menu then Escape;manual link"
+}

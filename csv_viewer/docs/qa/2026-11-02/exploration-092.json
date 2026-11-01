@@ -1,0 +1,35 @@
+{
+  "observationCommand": "Custom RAM correct to Engine_Speed * 2, Add, raw inspector",
+  "observed": {
+    "rows": 100,
+    "allDouble": true,
+    "firstRows": [
+      [
+        "3",
+        "0",
+        "0",
+        "2200",
+        "84.76200103759766",
+        "4400"
+      ],
+      [
+        "4",
+        "0.1",
+        "0.1",
+        "2224.81103515625",
+        "85.37699890136719",
+        "4449.6220703125"
+      ],
+      [
+        "5",
+        "0.2",
+        "0.2",
+        "2249.60107421875",
+        "85.98999786376953",
+        "4499.2021484375"
+      ]
+    ]
+  },
+  "hypothesis": "Custom RAM input error and corrected calculation both work; remaining normal CSV import depends on browser file access.",
+  "nextCommand": "Reload disposable preview and select bundled synthetic 基準_ﾛｸﾞ.csv through documented chooser; record exact permission result."
+}

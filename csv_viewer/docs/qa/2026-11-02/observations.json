@@ -1471,5 +1471,327 @@
       "action": "clicked save favorite, prompt appeared, accepted QA_回転数とトルク",
       "result": "Subsequent prompt accept, state and screenshot commands timed out in browser focus emulation; persistence/application not verified. No app fix inferred."
     }
+  },
+  {
+    "sequence": 72,
+    "command": "new authorized HTTP tab responds while previous remains unresponsive",
+    "observed": {
+      "oldTab": "888813752",
+      "oldRead": "Emulation.setFocusEmulationEnabled timeout",
+      "newTab": "888813755",
+      "url": "http://127.0.0.1:8765/?preview=1",
+      "state": "empty preview controls available; no browser or security settings changed"
+    }
+  },
+  {
+    "sequence": 73,
+    "command": "template save page-only",
+    "observed": "保存・再利用\n閉じる\n目的を選ぶ\n画像・数値・レポートを出力\n今回の作業を再開\n次の試験へ比較条件\nチャンネルの組を再利用\n読込・表示設定を再利用\n\n比較テンプレートで配置・信号・式・対応・許容差を再利用します。適用時は時間差を0へ戻し、現在のメモと表示名は保ちます。適用後に時間合わせと比較をやり直してください。\n\nテンプレート名\n保存\n現在の条件をJSON書き出し\n保存済みテンプレート\n選択してください\nQA_mbr_回転数とトルク\n新しいログに適用\n削除\nJSONを読み込んで適用\n\nJSON読込は現在のログへ即時適用します。保存一覧への追加ではありません。JSON書き出しは、選択済みの保存内容ではなく現在の条件です。設定JSONとは別の形式です。"
+  },
+  {
+    "sequence": 74,
+    "command": "save modal keyboard input and Tab wrap",
+    "observed": {
+      "active": "save-workspace-close",
+      "measure": "btn-secondary",
+      "name": "mbr",
+      "selection": "false",
+      "zoom": "btn-secondary"
+    }
+  },
+  {
+    "sequence": 75,
+    "command": "save modal Escape focus return",
+    "observed": {
+      "active": "export-menu-btn",
+      "dialog": []
+    }
+  },
+  {
+    "sequence": 76,
+    "command": "before template apply: three channels and saved note",
+    "observed": {
+      "channels": [
+        "Engine_Speed [rpm]",
+        "Engine_Torque [Nm]",
+        "Coolant_Temp [degC]"
+      ],
+      "header": "発見を残す\n\n上部の解析対象、比較条件、数値と画像を一緒に保存します。\n\nこの区間をメモに保存\n0–120 s ↗\n\nQA保持確認：テンプレートを適用してもこのメモを残す\n\nEngine_Speed / Engine_Torque / Coolant_Temp\n削除"
+    }
+  },
+  {
+    "sequence": 77,
+    "command": "template applied restores two signals and preserves note",
+    "observed": {
+      "channels": [
+        "Engine_Speed [rpm]",
+        "Engine_Torque [Nm]"
+      ],
+      "note": "発見を残す\n\n上部の解析対象、比較条件、数値と画像を一緒に保存します。\n\nこの区間をメモに保存\n0–120 s ↗\n\nQA保持確認：テンプレートを適用してもこのメモを残す\n\nEngine_Speed / Engine_Torque / Coolant_Temp\n削除"
+    }
+  },
+  {
+    "sequence": 78,
+    "command": "display name committed by real keyboard input",
+    "observed": {
+      "name": "QA_DISPLAY_A"
+    }
+  },
+  {
+    "sequence": 79,
+    "command": "template preserves committed display name",
+    "observed": {
+      "name": "QA_DISPLAY_A"
+    }
+  },
+  {
+    "sequence": 80,
+    "command": "delete test template preserves loadedlog",
+    "observed": {
+      "applyDisabled": true,
+      "deleteDisabled": true,
+      "files": "M\nQA_DISPLAY_A\nutf-8\n時間\ns\nms\n自動\n開発用・自動保存なし",
+      "templates": [
+        "選択してください"
+      ]
+    }
+  },
+  {
+    "sequence": 81,
+    "command": "split keyboard limits and reset",
+    "observed": [
+      {
+        "key": "Home",
+        "value": "25"
+      },
+      {
+        "key": "End",
+        "value": "75"
+      },
+      {
+        "key": "ShiftLeft from50",
+        "value": "55"
+      }
+    ]
+  },
+  {
+    "sequence": 82,
+    "command": "inspector keyboard tab navigation",
+    "observed": [
+      {
+        "key": "End",
+        "state": {
+          "active": "inspector-tab-stats",
+          "panel": "inspector-tab-stats",
+          "scope": "visible",
+          "selected": "inspector-tab-stats"
+        }
+      },
+      {
+        "key": "ArrowRight",
+        "state": {
+          "active": "inspector-tab-data",
+          "panel": "inspector-tab-data",
+          "scope": "visible",
+          "selected": "inspector-tab-data"
+        }
+      },
+      {
+        "key": "ArrowLeft",
+        "state": {
+          "active": "inspector-tab-stats",
+          "panel": "inspector-tab-stats",
+          "scope": "visible",
+          "selected": "inspector-tab-stats"
+        }
+      },
+      {
+        "key": "Home",
+        "state": {
+          "active": "inspector-tab-data",
+          "panel": "inspector-tab-data",
+          "scope": "visible",
+          "selected": "inspector-tab-data"
+        }
+      }
+    ]
+  },
+  {
+    "sequence": 83,
+    "command": "zoom OFF actual scroll preserves ranges",
+    "observed": {
+      "before": {
+        "result": {
+          "type": "string",
+          "value": "{\"zoom\":[{\"start\":0,\"end\":100,\"disabled\":true},{\"start\":0,\"end\":100,\"disabled\":true}],\"scroll\":0}"
+        }
+      },
+      "after": {
+        "result": {
+          "type": "string",
+          "value": "{\"zoom\":[{\"start\":0,\"end\":100,\"disabled\":true},{\"start\":0,\"end\":100,\"disabled\":true}],\"scroll\":0}"
+        }
+      },
+      "demoExistingLogDisabled": true
+    }
+  },
+  {
+    "sequence": 84,
+    "command": "zoom OFF scroll container result",
+    "observed": [
+      {
+        "clientHeight": 470,
+        "id": "xy-workspace",
+        "rect": {
+          "bottom": 785.7000122070312,
+          "height": 470.3000183105469,
+          "left": 956,
+          "right": 1600,
+          "top": 315.3999938964844,
+          "width": 644,
+          "x": 956,
+          "y": 315.3999938964844
+        },
+        "scrollHeight": 470,
+        "scrollTop": 0
+      },
+      {
+        "clientHeight": 305,
+        "id": "xy-chart",
+        "rect": {
+          "bottom": 572.8000183105469,
+          "height": 305,
+          "left": 966.7999877929688,
+          "right": 1584.4000244140625,
+          "top": 267.8000183105469,
+          "width": 617.6000366210938,
+          "x": 966.7999877929688,
+          "y": 267.8000183105469
+        },
+        "scrollHeight": 305,
+        "scrollTop": 0
+      }
+    ]
+  },
+  {
+    "sequence": 85,
+    "command": "display menu changes reach real waveform chart",
+    "observed": {
+      "result": {
+        "type": "string",
+        "value": "{\"series\":[{\"sampling\":false,\"showSymbol\":true},{\"sampling\":false,\"showSymbol\":true}],\"font\":12}"
+      }
+    }
+  },
+  {
+    "sequence": 86,
+    "command": "manual opens from application; visible cover date differs from revision metadata",
+    "observed": {
+      "cover": "OPERATION GUIDE / 2026.11.01\n波形を開く。\n違いを見つけて、記録する。\n\nCSV Chart Viewer 操作マニュアル\n\n初めて使う人から、日常の比較作業まで図・実画面・練習用データ付き\n同じ信号の波形を重ね、時間差と値の差を確認します。画面例は同梱する練習用CSVの合成データです。\nファイルを開く\n→\nチャンネルを選ぶ\n→\n時間を合わせる\n→\n区間を比較・記録\nこのツールでできること\n\nCSV / TRNの時系列を表示し、複数ログを比較します。差・統計・状態の切り替わり、許容差を超えた区間を確認し、メモやレポートに残せます。\n\n最初に覚える2つの言葉\n\nチャンネルは車速・圧力などの1つの信号。基準ファイル（Main / M）は比較の起点、比較ファイル（Sub / s1…）は重ねる相手です。\n\n読む順番：初めての操作 02〜05 ／ 比較と記録 06〜10 ／ 応用 11〜13 ／ 困ったとき 14。\n対象：2026-10-30の比較ワークスペース。Windows / Microsoft Edgeで画面・操作を確認。表示幅・テーマ・ログによって配置や数値は変わります。第04・05・08・09・10・12章は続きのページがあります。\nこの手順は現在利用できる機能の説明です。改善案・実装状況レポートでは、完了した整理と未実装の案を区別しています。",
+      "revision": "2026-11-02",
+      "title": "CSV Chart Viewer 操作マニュアル",
+      "url": "http://127.0.0.1:8765/manual.html"
+    }
+  },
+  {
+    "sequence": 87,
+    "command": "manual table of contents navigates to current map chapter",
+    "observed": {
+      "hash": "#xy-map",
+      "heading": "波形と燃費率マップを並べて見る",
+      "images": [
+        {
+          "complete": true,
+          "width": 1600
+        }
+      ]
+    }
+  },
+  {
+    "sequence": 88,
+    "command": "channel search multi-term and keyboard focus",
+    "observed": {
+      "activeLabel": "Engine_Speed [rpm]",
+      "list": "Engine_Speed\nrpm\nY\n~\n太さ\n1.0\n⟲",
+      "scope": "visible"
+    }
+  },
+  {
+    "sequence": 89,
+    "command": "keyboard channel toggle and undo",
+    "observed": {
+      "scope": "visible",
+      "selected": "true"
+    }
+  },
+  {
+    "sequence": 90,
+    "command": "manual reload + cover TOC",
+    "observed": "QA-005: visible OPERATION GUIDE / 2026.11.02 and target 2026-11-02 now agree; cover distinguishes Edge/Chrome screenshots, Chrome preview and recorded unverified scope."
+  },
+  {
+    "sequence": 91,
+    "command": "Custom RAM actual keyboard incomplete Engine_Speed *",
+    "observed": "Syntax error shown: 式の末尾に数値・チャンネル名・関数が必要です. Add disabled. fill alone had not triggered live input; actual key did."
+  },
+  {
+    "sequence": 92,
+    "command": "Custom RAM correct to Engine_Speed * 2, Add, raw inspector",
+    "observed": {
+      "rows": 100,
+      "allDouble": true,
+      "firstRows": [
+        [
+          "3",
+          "0",
+          "0",
+          "2200",
+          "84.76200103759766",
+          "4400"
+        ],
+        [
+          "4",
+          "0.1",
+          "0.1",
+          "2224.81103515625",
+          "85.37699890136719",
+          "4449.6220703125"
+        ],
+        [
+          "5",
+          "0.2",
+          "0.2",
+          "2249.60107421875",
+          "85.98999786376953",
+          "4499.2021484375"
+        ]
+      ]
+    }
+  },
+  {
+    "sequence": 93,
+    "command": "Final normal CSV chooser attempt after empty preview reload",
+    "observed": {
+      "result": "blocked",
+      "reason": "ChatGPT Chrome extension still requires Allow access to file URLs; fileChooser.setFiles failed. No setting was changed.",
+      "selected_path": "docs/samples/基準_ﾛｸﾞ.csv",
+      "app_after_first_attempt": "Empty workspace remains; no imported file.",
+      "diagnostic_note": "First attempt diagnostic write via CUA node fs failed (UNKNOWN open observations.json), so a second documented chooser attempt captured the original permission error. No native picker or alternate browser bypass was used."
+    }
+  },
+  {
+    "sequence": 94,
+    "command": "manual final PDF structural and rendered validation",
+    "observed": {
+      "pages": 26,
+      "bookmarks": 54,
+      "changed_rendered_pages": [
+        1
+      ],
+      "unchanged_rendered_pages": 25,
+      "cover_visual": "2026.11.02 and target 2026-11-02 agree; no clipping or overlap",
+      "sha256": "febfd7a08eddf6722d35d4a0afca33b975ad1253481959fed11d5bbd0fbff889",
+      "details": "pdf-validation.json"
+    }
   }
 ]

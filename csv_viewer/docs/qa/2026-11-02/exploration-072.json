@@ -1,0 +1,12 @@
+{
+  "observationCommand": "new authorized HTTP tab responds while previous remains unresponsive",
+  "observed": {
+    "oldTab": "888813752",
+    "oldRead": "Emulation.setFocusEmulationEnabled timeout",
+    "newTab": "888813755",
+    "url": "http://127.0.0.1:8765/?preview=1",
+    "state": "empty preview controls available; no browser or security settings changed"
+  },
+  "hypothesis": "比較テンプレートはページ内入力だけで保存・適用できる",
+  "nextCommand": "save menu → template"
+}

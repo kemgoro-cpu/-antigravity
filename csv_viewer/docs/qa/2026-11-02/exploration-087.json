@@ -1,0 +1,15 @@
+{
+  "observationCommand": "manual table of contents navigates to current map chapter",
+  "observed": {
+    "hash": "#xy-map",
+    "heading": "波形と燃費率マップを並べて見る",
+    "images": [
+      {
+        "complete": true,
+        "width": 1600
+      }
+    ]
+  },
+  "hypothesis": "チャンネル検索とキーボード選択・Undoで表示を復元できる",
+  "nextCommand": "search Engine rpm;Down;Space;CtrlZ"
+}

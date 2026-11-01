@@ -1,0 +1,13 @@
+{
+  "observationCommand": "delete test template preserves loadedlog",
+  "observed": {
+    "applyDisabled": true,
+    "deleteDisabled": true,
+    "files": "M\nQA_DISPLAY_A\nutf-8\n時間\ns\nms\n自動\n開発用・自動保存なし",
+    "templates": [
+      "選択してください"
+    ]
+  },
+  "hypothesis": "境界のHome/EndとShift矢印は範囲内で幅を変更する",
+  "nextCommand": "close save;XY;Home End ShiftLeft reset"
+}

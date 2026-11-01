@@ -33,14 +33,14 @@ table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;margin:
 <nav id="manual-toc" aria-label="目次"><strong>このマニュアルの使い方</strong><a href="#start">01 できること</a><a href="#quickstart">02 はじめの3操作</a><a href="#workspace">03 画面の見方</a><a href="#files">04 読み込みと検索</a><a href="#import-review">04 続き：適用前の確認</a><a href="#range">05 区間・ズーム・計測</a><a href="#navigation">05 続き：全体図と計測</a><a href="#data-quality">05 続き：元データと品質</a><a href="#compare">06 比較の準備と表示</a><a href="#align">07 時間を合わせる</a><a href="#results">08 比較結果を読む</a><a href="#tolerance">08 続き：許容差と移動</a><a href="#notes">09 メモを残す</a><a href="#templates">09 続き：比較条件を再利用</a><a href="#save">10 保存と共有</a><a href="#restore">10 続き：次回の復元</a><a href="#analysis">11 計算・イベント・XY</a><a href="#xy-map">11 続き：XY・燃費率マップ</a><a href="#map-data">11 続き：マップデータ</a><a href="#map-contours">11 続き：詳細な等高線</a><a href="#events">11 続き：イベントの操作</a><a href="#event-rules">11 続き：時刻と詳細設定</a><a href="#advanced">12 波形の配置</a><a href="#drive">12 続き：走行モード評価</a><a href="#shortcuts">13 操作早見表</a><a href="#trouble">14 困ったとき</a></nav>
 <main>
 <section class="page" id="start">
-<div class="eyebrow">Operation guide / 2026.11.01</div>
+<div class="eyebrow">Operation guide / 2026.11.02</div>
 <h1>波形を開く。<br>違いを見つけて、記録する。</h1>
 <p class="lead">CSV Chart Viewer 操作マニュアル</p>
 <span class="tag">初めて使う人から、日常の比較作業まで</span><span class="tag">図・実画面・練習用データ付き</span>
 <figure><img data-image="overview.png" alt="2つのログを開き、同じチャンネルの波形を重ねているCSV Chart Viewerの画面"><figcaption>同じ信号の波形を重ね、時間差と値の差を確認します。画面例は同梱する練習用CSVの合成データです。</figcaption></figure>
 <div class="flow"><span>ファイルを開く</span><b>→</b><span>チャンネルを選ぶ</span><b>→</b><span>時間を合わせる</span><b>→</b><span>区間を比較・記録</span></div>
 <div class="two"><div><h3>このツールでできること</h3><p>CSV / TRNの時系列を表示し、複数ログを比較します。差・統計・状態の切り替わり、許容差を超えた区間を確認し、メモやレポートに残せます。</p></div><div><h3>最初に覚える2つの言葉</h3><p><strong>チャンネル</strong>は車速・圧力などの1つの信号。<strong>基準ファイル（Main / M）</strong>は比較の起点、比較ファイル（Sub / s1…）は重ねる相手です。</p></div></div>
-<div class="meta">読む順番：初めての操作 02〜05 ／ 比較と記録 06〜10 ／ 応用 11〜13 ／ 困ったとき 14。<br>対象：2026-10-30の比較ワークスペース。Windows / Microsoft Edgeで画面・操作を確認。表示幅・テーマ・ログによって配置や数値は変わります。第04・05・08・09・10・12章は続きのページがあります。<br>この手順は現在利用できる機能の説明です。<a href="docs/research/2026-10-30/report.html">改善案・実装状況レポート</a>では、完了した整理と未実装の案を区別しています。</div>
+<div class="meta">読む順番：初めての操作 02〜05 ／ 比較と記録 06〜10 ／ 応用 11〜13 ／ 困ったとき 14。<br>対象：2026-11-02の比較ワークスペース。画面画像はWindowsのMicrosoft Edge／Chromeで撮影。XY・燃費率マップは2026-11-02のChrome開発プレビューです。<a href="docs/qa/2026-11-02/report.md">確認範囲・未確認項目</a>を別途記録しています。表示幅・テーマ・ログによって配置や数値は変わります。第04・05・08・09・10・12章は続きのページがあります。<br>この手順は現在利用できる機能の説明です。<a href="docs/research/2026-10-30/report.html">改善案・実装状況レポート</a>では、完了した整理と未実装の案を区別しています。</div>
 </section>
 
 <section class="page" id="quickstart">
