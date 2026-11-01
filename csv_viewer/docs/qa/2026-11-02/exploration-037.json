@@ -1,0 +1,29 @@
+{
+  "observationCommand": "read settled map geometry; screenshot",
+  "observed": {
+    "chart": {
+      "bottom": 795.7999877929688,
+      "height": 260,
+      "left": 966.7999877929688,
+      "right": 1584.4000244140625,
+      "top": 535.7999877929688,
+      "width": 617.6000366210938,
+      "x": 966.7999877929688,
+      "y": 535.7999877929688
+    },
+    "pane": {
+      "bottom": 785.7000122070312,
+      "height": 470.3000183105469,
+      "left": 956,
+      "right": 1600,
+      "top": 315.3999938964844,
+      "width": 644,
+      "x": 956,
+      "y": 315.3999938964844
+    },
+    "settingsOpen": false,
+    "summary": "表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque"
+  },
+  "hypothesis": "Verify map settings remain discoverable and validation messages survive consolidation.",
+  "nextCommand": "open xy-settings-summary; DOM"
+}

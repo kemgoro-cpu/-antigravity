@@ -1,0 +1,19 @@
+{
+  "observationCommand": "click button 拡大操作 OFF; DOM; screenshot",
+  "observed": {
+    "chart": {
+      "bottom": 1031.6000366210938,
+      "height": 440,
+      "left": 277,
+      "right": 940.7999877929688,
+      "top": 591.6000366210938,
+      "width": 663.7999877929688,
+      "x": 277,
+      "y": 591.6000366210938
+    },
+    "scroll": 0,
+    "zoom": "拡大操作 ON"
+  },
+  "hypothesis": "Zoom ON is active; send wheel over visible map plot.",
+  "nextCommand": "CDP wheel at600,680 deltaY-300; DOM; screenshot"
+}

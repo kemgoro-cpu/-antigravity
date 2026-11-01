@@ -1,0 +1,69 @@
+CSV Viewer final Node validation
+Started: 2026-11-02T01:21:19.4563630+09:00
+Command: node scripts/run-tests.js
+Source HEAD: 9351864ed4203e9c61d33ccfdfbbdbd00446624d
+Tracked working tree: dirty (current QA changes included)
+Exit code: 0
+Test files: 25; passed: 25; failed: 0
+Elapsed seconds: 4.872
+Browser scripts: not run by this command
+
+New coverage in existing suites:
+- event-utils.test.js: invalid start/release syntax, correction recovery, unknown channel versus real missing/non-finite samples; production validation and detection functions.
+- xy-workspace-render.test.js: raw row -> app inspector bridge -> XY observed cursor with time offset; real ECharts SVG; zero background setOption calls.
+
+Final app.js diff review: no additional findings. Strict syntax is input validation only; legacy formula execution remains tolerant. Inspector navigation forwards the existing display time to the lightweight XY cursor update.
+
+Output:
+analysis-utils tests passed (scope, original/aligned time, validation, immutable ranges)
+PASS analysis-utils.test.js
+chart-options-utils tests passed
+PASS chart-options-utils.test.js
+compare-utils tests passed
+PASS compare-utils.test.js
+data-quality-utils: full-scan duplicates/reversals/gaps, raw rows, non-finite values, range/offset, constant, caps and 250k samples passed
+PASS data-quality-utils.test.js
+dev-preview: local gate, temporary storage, bundled data, empty-only load, retry/cancel/races and actual parser completion passed
+PASS dev-preview.test.js
+dev-server: loopback, Unicode paths, GET/HEAD, traversal/link/Host/Origin rejection, reuse and port conflicts passed (isolated fixtures only)
+PASS dev-server.test.js
+drive-index-excel tests passed (independent arithmetic, filtering, edges, threshold, phases, immutable sources, sampling, diagnostics, raw fuel)
+PASS drive-index-excel.test.js
+Drive Index method tests passed (defaults, phases, manual ranges, freshness, diagnostics, zero coefficients, immutable settings migration)
+PASS drive-index-method.test.js
+Drive Index precision tests passed (Float64 source reads, untouched signed display, row mapping, cache invalidation, concurrent queues, cancellation, parse failures, computed provenance)
+PASS drive-index-precision.test.js
+drive-index-utils tests passed
+PASS drive-index-utils.test.js
+event-utils tests passed (event state machine, syntax validation, recovery, missing-data distinction)
+PASS event-utils.test.js
+fuel-map-utils: strict maps, all-sample means, bounds, original-point identity and cursor tests passed
+PASS fuel-map-utils.test.js
+history-utils tests passed
+PASS history-utils.test.js
+import layout regressions passed
+PASS import-layout.test.js
+layout-utils tests passed
+PASS layout-utils.test.js
+parser-utils tests passed
+PASS parser-utils.test.js
+session-status: committed state, capacity, retry, original Blob, import settings, restore ID, delete/clear races passed
+PASS session-status.test.js
+settings-utils tests passed
+PASS settings-utils.test.js
+trn-loading tests passed (TRN, CSV, lazy loading, bounded source-row diagnostics)
+PASS trn-loading.test.js
+unit-validation-utils: correct, missing and mismatched units; time normalization; stale-result contracts passed
+PASS unit-validation-utils.test.js
+vendor-libraries tests passed (versions, integrity, parser streaming, v5 theme, LTTB, axes, zoom, scatter, SVG)
+PASS vendor-libraries.test.js
+xy-layout: bounded split, preferred ratio, keyboard, coalesced drag, same-size resize suppression, reopen, expanded return, 719/720px transitions and cleanup passed
+PASS xy-layout.test.js
+xy-utils tests passed
+PASS xy-utils.test.js
+xy-workspace-render: real ECharts SVG, labels/gaps, wheel opt-in/reset and zero background repaints during cursor movement passed (no browser)
+PASS xy-workspace-render.test.js
+xy-workspace: independent backgrounds, detailed contours, style/interval settings, cache, theme, zoom reset, legacy settings, eligible operating points, scatter and import feedback passed (DOM/chart mocks)
+PASS xy-workspace.test.js
+
+25本中 25本成功 / 0本失敗

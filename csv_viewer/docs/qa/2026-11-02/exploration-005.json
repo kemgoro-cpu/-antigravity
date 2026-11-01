@@ -1,0 +1,9 @@
+{
+  "observationCommand": "scroll map pane down once; DOM; screenshot",
+  "observed": {
+    "state": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThere has been no change in the accessibility tree.\nThe focused UI element is 151 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn",
+    "logs": []
+  },
+  "hypothesis": "Wheel did not visibly reveal map; inspect rendered geometry and scrollable ancestors.",
+  "nextCommand": "read DOM geometry xy-chart ancestor chain"
+}

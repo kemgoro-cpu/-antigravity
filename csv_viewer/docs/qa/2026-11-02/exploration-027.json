@@ -1,0 +1,23 @@
+{
+  "observationCommand": "press ArrowRight on 元データ tab; DOM inspector summary",
+  "observed": {
+    "active": "inspector-tab-quality",
+    "summary": "時刻品質はファイル全体、値の品質は選択区間 17.938144 – 41.134021 s · 時間合わせ後の選択チャンネルです。重複は非隣接も含む2回目以降、逆転は隣接点を数えます。元レコード番号は空行を除くレコードの番号です。\n\n時刻サンプル\n1,201\n重複（2回目以降）\n0\n隣接時刻の逆転\n0\n長い間隔（候補）\n0\n除外・非有限時刻\n0\n\n長い間隔は正の隣接間隔の中央値 0.10000000000000053 s × 10（1.0000000000000053 s超）を目安にした候補です。計測欠落と断定しません。\n\n選択チャンネル\t対象点\t有効点\t欠損合計\n変換不能を含む\t変換不能\nファイル全体\t最小\t最大\t値の状態\nEngine_Speed\nrpm\n\t232\t232\t0 (0.0%)\t0\t1496.2840576171875\t3276.512939453125\t変化あり\nEngine_Torque\nNm\n\t232\t232\t0 (0.0%)\t0\t24.801000595092773\t85.85700225830078\t変化あり\n\n一定値は正常な状態保持でも発生します。欠損は0と扱いません。変換不能の原文と時刻の除外明細は先頭1000件まで保持されるため、区間内の内訳を確定できない場合があります。\n\n問題の詳細 \nすべて\n時刻品質（全体）\n欠損・非有限値（対象区間）\n変換不能の保持明細（対象区間）\n0件表示 / 検出 0件（表示上限1000件）\n種類\tチャンネル\t元レコード\t表示時刻 [s]\t詳細・元文字\t移動\n表示できる問題の明細はありません。上の件数と対象範囲も確認してください。",
+    "tabs": [
+      {
+        "id": "inspector-tab-data",
+        "selected": "false"
+      },
+      {
+        "id": "inspector-tab-quality",
+        "selected": "true"
+      },
+      {
+        "id": "inspector-tab-stats",
+        "selected": "false"
+      }
+    ]
+  },
+  "hypothesis": "Inspector keyboard switching works; Escape should close only inspector.",
+  "nextCommand": "Escape; open 読み込み設定・計算・イベント; DOM"
+}

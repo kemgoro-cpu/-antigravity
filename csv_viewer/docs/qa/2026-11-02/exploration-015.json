@@ -1,0 +1,24 @@
+{
+  "observationCommand": "CDP wheel at600,680 deltaY-300; DOM; screenshot",
+  "observed": {
+    "observation": {
+      "chart": {
+        "bottom": 1031.6000366210938,
+        "height": 440,
+        "left": 277,
+        "right": 940.7999877929688,
+        "top": 591.6000366210938,
+        "width": 663.7999877929688,
+        "x": 277,
+        "y": 591.6000366210938
+      },
+      "marker": [
+        "background-color: rgb(230, 76, 76); left: 149.106px; top: 315.144px; display: none;"
+      ],
+      "zoom": "拡大操作 ON"
+    },
+    "logs": []
+  },
+  "hypothesis": "Confirm map coordinate ranges after actual wheel instead of inferring from a clipped image.",
+  "nextCommand": "read ECharts dataZoom via CDP; screenshot"
+}

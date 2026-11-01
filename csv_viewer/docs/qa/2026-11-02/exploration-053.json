@@ -1,0 +1,6 @@
+{
+  "observationCommand": "divider keyboard left settled",
+  "observed": "40",
+  "hypothesis": "構文エラーを欠損と区別し訂正して再検出できる",
+  "nextCommand": "open event controls;invalid start"
+}

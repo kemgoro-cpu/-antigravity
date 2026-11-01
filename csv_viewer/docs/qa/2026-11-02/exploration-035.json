@@ -1,0 +1,6 @@
+{
+  "observationCommand": "valid detect then invalid Engine_Speed > detect; DOM",
+  "observed": "イベント検出\n\n条件が続いた区間を、基準ログ全体から探します。\n\n開始条件\n最低継続 [s]\n解除条件（任意）\n\n例は説明用です。開始「油圧 < 250」、最低継続「2秒」、解除「油圧 >= 270」なら、低下が2秒続いて確定し、270に戻るまで追います。実際の信号名・単位に合わせて入力してください。解除条件が空欄なら開始条件が偽になった時点で終了します。\n\n詳細条件・移動時の余白\n検出\n検出結果を解除\n\n赤：検出結果 / 青：選択区間。選択区間は操作バーの「×」で解除できます。\n\n基準ログ全体: 0件。判定不能 1201点（条件の欠損・非有限値。時間は推定しません）。最低継続と解除条件を満たす区間はありません",
+  "hypothesis": "Continue map validation on repaired layout in a fresh reload; demo is disposable.",
+  "nextCommand": "reload; demo load; wait success"
+}

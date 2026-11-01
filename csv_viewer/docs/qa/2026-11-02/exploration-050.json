@@ -1,0 +1,20 @@
+{
+  "observationCommand": "390 narrow map scroll",
+  "observed": {
+    "bodyScroll": 320,
+    "chart": {
+      "bottom": 992.7999877929688,
+      "height": 350,
+      "left": 10,
+      "right": 374.8000183105469,
+      "top": 642.7999877929688,
+      "width": 364.8000183105469,
+      "x": 10,
+      "y": 642.7999877929688
+    },
+    "scrollWidth": 390,
+    "width": 390
+  },
+  "hypothesis": "カーソル移動は動作点だけを動かしマップ背景と寸法を保つ",
+  "nextCommand": "CDPmousemove30points; readonly canvas hash and marker geometry"
+}

@@ -1,0 +1,11 @@
+{
+  "observationCommand": "click 検出結果を解除; DOM",
+  "observed": {
+    "events": "",
+    "expression": "Engine_Speed > 3000",
+    "scope": "selection",
+    "selection": "選択区間 17.9381 – 41.134 s\n選択しただけでは解析しません\n拡大\n区間比較\n統計\nメモ\n画像コピー\n×"
+  },
+  "hypothesis": "Clear selection should return analysis scope to visible range independently of event configuration.",
+  "nextCommand": "click 区間選択を解除; DOM"
+}

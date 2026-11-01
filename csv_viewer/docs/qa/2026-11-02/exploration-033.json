@@ -1,0 +1,10 @@
+{
+  "observationCommand": "click 区間選択を解除; DOM",
+  "observed": {
+    "expression": "Engine_Speed > 3000",
+    "scope": "visible",
+    "selectionHidden": false
+  },
+  "hypothesis": "Invalid event expression must explain failure without red overlay.",
+  "nextCommand": "fill invalid event; click 検出; DOM event area"
+}

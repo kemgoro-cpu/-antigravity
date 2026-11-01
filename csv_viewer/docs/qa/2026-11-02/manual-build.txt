@@ -1,0 +1,226 @@
+{
+  "sectionHeights": [
+    {
+      "id": "start",
+      "height": 942
+    },
+    {
+      "id": "quickstart",
+      "height": 961
+    },
+    {
+      "id": "workspace",
+      "height": 944
+    },
+    {
+      "id": "files",
+      "height": 942
+    },
+    {
+      "id": "import-review",
+      "height": 981
+    },
+    {
+      "id": "range",
+      "height": 885
+    },
+    {
+      "id": "navigation",
+      "height": 684
+    },
+    {
+      "id": "data-quality",
+      "height": 970
+    },
+    {
+      "id": "compare",
+      "height": 669
+    },
+    {
+      "id": "align",
+      "height": 880
+    },
+    {
+      "id": "results",
+      "height": 699
+    },
+    {
+      "id": "tolerance",
+      "height": 914
+    },
+    {
+      "id": "notes",
+      "height": 717
+    },
+    {
+      "id": "templates",
+      "height": 827
+    },
+    {
+      "id": "save",
+      "height": 933
+    },
+    {
+      "id": "restore",
+      "height": 715
+    },
+    {
+      "id": "analysis",
+      "height": 830
+    },
+    {
+      "id": "xy-map",
+      "height": 857
+    },
+    {
+      "id": "map-data",
+      "height": 751
+    },
+    {
+      "id": "map-contours",
+      "height": 918
+    },
+    {
+      "id": "events",
+      "height": 976
+    },
+    {
+      "id": "event-rules",
+      "height": 684
+    },
+    {
+      "id": "advanced",
+      "height": 677
+    },
+    {
+      "id": "drive",
+      "height": 801
+    },
+    {
+      "id": "shortcuts",
+      "height": 814
+    },
+    {
+      "id": "trouble",
+      "height": 877
+    }
+  ]
+}
+{
+  "html": "C:\\Users\\kemgo\\Documents\\Program\\antigravity\\csv_viewer\\manual.html",
+  "pdf": "C:\\Users\\kemgo\\Documents\\Program\\antigravity\\csv_viewer\\docs\\CSV-Chart-Viewer-Manual.pdf",
+  "chapters": 26,
+  "imageInstances": 20,
+  "offline": true,
+  "responsive": [
+    1440,
+    900,
+    390
+  ],
+  "sectionHeights": [
+    {
+      "id": "start",
+      "height": 942
+    },
+    {
+      "id": "quickstart",
+      "height": 961
+    },
+    {
+      "id": "workspace",
+      "height": 944
+    },
+    {
+      "id": "files",
+      "height": 942
+    },
+    {
+      "id": "import-review",
+      "height": 981
+    },
+    {
+      "id": "range",
+      "height": 885
+    },
+    {
+      "id": "navigation",
+      "height": 684
+    },
+    {
+      "id": "data-quality",
+      "height": 970
+    },
+    {
+      "id": "compare",
+      "height": 669
+    },
+    {
+      "id": "align",
+      "height": 880
+    },
+    {
+      "id": "results",
+      "height": 699
+    },
+    {
+      "id": "tolerance",
+      "height": 914
+    },
+    {
+      "id": "notes",
+      "height": 717
+    },
+    {
+      "id": "templates",
+      "height": 827
+    },
+    {
+      "id": "save",
+      "height": 933
+    },
+    {
+      "id": "restore",
+      "height": 715
+    },
+    {
+      "id": "analysis",
+      "height": 830
+    },
+    {
+      "id": "xy-map",
+      "height": 857
+    },
+    {
+      "id": "map-data",
+      "height": 751
+    },
+    {
+      "id": "map-contours",
+      "height": 918
+    },
+    {
+      "id": "events",
+      "height": 976
+    },
+    {
+      "id": "event-rules",
+      "height": 684
+    },
+    {
+      "id": "advanced",
+      "height": 677
+    },
+    {
+      "id": "drive",
+      "height": 801
+    },
+    {
+      "id": "shortcuts",
+      "height": 814
+    },
+    {
+      "id": "trouble",
+      "height": 877
+    }
+  ]
+}

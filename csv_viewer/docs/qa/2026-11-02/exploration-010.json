@@ -1,0 +1,29 @@
+{
+  "observationCommand": "click XY・マップ twice; measure focused control and chart",
+  "observed": {
+    "active": "xy-close-btn",
+    "chart": {
+      "bottom": 757.8000183105469,
+      "height": 370,
+      "left": 638.375,
+      "right": 940.8000183105468,
+      "top": 387.8000183105469,
+      "width": 302.4250183105469,
+      "x": 638.375,
+      "y": 387.8000183105469
+    },
+    "pane": {
+      "bottom": 740.1000061035156,
+      "height": 390.7000122070313,
+      "left": 625.5750122070312,
+      "right": 958.4000244140624,
+      "top": 349.3999938964844,
+      "width": 332.82501220703125,
+      "x": 625.5750122070312,
+      "y": 349.3999938964844
+    },
+    "scroll": 0
+  },
+  "hypothesis": "Reopen layout was transitional; require stacked class then inspect settled focused area.",
+  "nextCommand": "wait xy-layout-stacked; DOM geometry; screenshot"
+}

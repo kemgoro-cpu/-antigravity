@@ -50,8 +50,10 @@ function harness() {
     const container = new Element(), wave = new Element(), panel = new Element(), scroll = new Element();
     wave.className = 'chart-container'; panel.id = 'xy-workspace'; scroll.className = 'xy-workspace-scroll';
     container.appendChild(wave); container.appendChild(panel); panel.appendChild(scroll);
-    container.getBoundingClientRect = () => ({ left: 100, right: 100 + width, width, height });
-    panel.getBoundingClientRect = () => ({ width: container.classList.contains('xy-layout-expanded') || container.classList.contains('xy-layout-stacked') ? width : parseFloat(panel.style.getPropertyValue('--xy-pane-width')) || 470,
+    container.scrollTop = 0;
+    container.getBoundingClientRect = () => ({ top: 100, left: 100, right: 100 + width, width, height });
+    panel.getBoundingClientRect = () => ({ top: 100 + (container.classList.contains('xy-layout-stacked') && !container.classList.contains('xy-layout-expanded') ? 320 : 0) - container.scrollTop,
+        width: container.classList.contains('xy-layout-expanded') || container.classList.contains('xy-layout-stacked') ? width : parseFloat(panel.style.getPropertyValue('--xy-pane-width')) || 470,
         height: container.classList.contains('xy-layout-stacked') ? 600 : height });
     wave.getBoundingClientRect = () => ({ width: container.classList.contains('xy-layout-stacked') ? width : width - 8 - panel.getBoundingClientRect().width,
         height: container.classList.contains('xy-layout-stacked') ? 320 : height });
@@ -130,6 +132,17 @@ for (const width of [719, 720, 719, 720]) {
     h.resize(width); h.flush();
     assert.equal(h.resizes, resizesBefore + 1, 'A stable boundary layout does not start a resize loop');
 }
+// Regression: QA-001 — explicit narrow-screen opening must reveal the new panel.
+// Found by /qa on 2026-11-02; live reproduction: docs/qa/2026-11-02/screenshots/009-narrow-reopen-settled.jpg.
+h.resize(694, 391); h.layout.setState({ visible: true, expanded: false, reveal: true }); h.flush();
+assert.equal(h.container.scrollTop, 320, 'Explicit open reveals the map header below the waveform');
+h.container.scrollTop = 410; h.resize(694, 391); h.flush();
+assert.equal(h.container.scrollTop, 410, 'Ordinary resize notifications do not take over user scrolling');
+h.layout.setState({ expanded: true, reveal: true }); h.flush();
+assert.equal(h.container.scrollTop, 0, 'Expanding a scrolled stacked map reveals its header');
+h.layout.setState({ expanded: false, reveal: true }); h.flush();
+assert.equal(h.container.scrollTop, 320, 'Returning from expanded mode keeps the map entry visible');
+assert.equal(h.panel.style.getPropertyValue('--xy-viewport-height'), '391px', 'Chart height is bounded by the available workspace, not a fixed viewport estimate');
 h.layout.destroy();
 assert.ok(h.observers.every(observer => observer.disconnected));
 assert.equal(h.frames.size, 0);

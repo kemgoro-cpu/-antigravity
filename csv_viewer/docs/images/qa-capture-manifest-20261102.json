@@ -1,0 +1,116 @@
+{
+  "revision": "2026-11-02",
+  "generatedAt": "2026-11-01T16:29:00.757Z",
+  "pathBase": "csv_viewer/",
+  "source": "Actual Chrome application screenshots captured through Computer Use (CUA) in the user-started local HTTP development preview.",
+  "url": "http://127.0.0.1:8765/?preview=1",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "theme": "dark",
+  "operationProvenance": [
+    "CUA opened the user-started local HTTP preview and used the bundled demo.",
+    "CUA operated the application to show the Engine_Speed and Engine_Torque waveforms alongside the fuel map or XY scatter plot, with all 0-120 seconds selected as analysis scope and shared settings collapsed.",
+    "CUA captured the two source JPEG screenshots; no application browser or capture script was run for this conversion.",
+    "sharp converted each JPEG to genuine PNG with no crop, resize, annotation, or content editing. Decoded raw pixel buffers were compared and are byte-identical."
+  ],
+  "timestampNote": "Source file modification times are recorded separately; they are not claimed as an independent capture timestamp.",
+  "sourceHashNote": "Application source hashes were collected when this conversion manifest was generated; historical capture manifests are unchanged.",
+  "samples": [
+    {
+      "file": "docs/samples/デモ_燃費率マップ付き走行ログ.csv",
+      "sha256": "37675cddde00e2b23e39261708ddc05ef9169066f0d7ac3e0fc512e720fd65d5",
+      "dataKind": "synthetic demonstration data, not engine measurements"
+    },
+    {
+      "file": "docs/samples/練習用_詳細燃費率ﾏｯﾌﾟ.csv",
+      "sha256": "8dda1e3093852fcf81cc4010f08d37a2021bf8cc0f8c4ba8465a37c471d5a798",
+      "dataKind": "synthetic demonstration data, not engine measurements"
+    }
+  ],
+  "sourceHashes": {
+    "index.html": "b8b0e2ddb1fd89dbbaafe2aea82d904b207876ed926ed4949b6f231ed9730f82",
+    "app.js": "baae171da563348f84979e7e38dabeee149b3c3e88db79f11644e01d3e0c764a",
+    "styles.css": "d8b625f95a0a06936aa31ea789f2f66ba5208568655503d4d07746ddcc55aadc",
+    "compare-workspace.js": "827576109f69451dab12f74af898f06e4e63393063dcae5d9747b911792c6105",
+    "compare-workspace.css": "1a3535ee1a968f2a01d4210553909c1fa996f10b9303607a9f936c6cf50b7e55",
+    "workspace-ui.js": "0ca23ce7a684960d4fcc2821ebad27c567b805b04c2ff1650f95c858535aa06c",
+    "workspace-ui.css": "690511b2d30aca1da5df656a06048a4fd9976831d046e9cb6806a094ecb3a987",
+    "xy-workspace.js": "ffd7e6eb4c7a26c48e415d82fa0ae5c0408bca6691d38fb7d52dde94e70a9ea1",
+    "xy-workspace.css": "f651873468e39086023e0534c6b1e74885f37bbd70d80895ea829542622442e0",
+    "xy-layout.js": "78547531c14c762a9d009be49bb087062ec8705bb6204e6720387e30c747962e",
+    "xy-utils.js": "fe57368937e14cac685a274eb6214a6e8394d7b96b650c33913afdfa324396a4",
+    "fuel-map-utils.js": "286a20686c9158d14abd49322b4029610ce3d54ce2d0257497ec18c5d1bed56c",
+    "dev-preview.js": "519147c81e4de7c27cd9dc149744259486381fca8fd096474359a68fd214fe34",
+    "dev-preview.css": "1acfcf3b454ae57c3fbede6ddd80b31fb5932afa0f5e5dcb9517b76243b1f4ac"
+  },
+  "shots": [
+    {
+      "mode": "fuel-map",
+      "sourceJpeg": "docs/qa/2026-11-02/screenshots/031-manual-fuel-map.jpg",
+      "png": "docs/images/fuel-map-qa-20261102.png",
+      "backgroundStyle": "filled-and-contours",
+      "sourceSha256": "bc1e943fbfee4fc7799d453ba8f398b96f184f5bd9df039eada14ee48170c55b",
+      "pngSha256": "156f65f3622a9aadd6b1bd24e927a7a48c5a68648b3df72132a773f49cdda3ce",
+      "sourceFileModifiedAt": "2026-11-01T16:23:42.409Z",
+      "dimensions": {
+        "width": 1600,
+        "height": 900
+      },
+      "decodedPixelsIdentical": true,
+      "axes": {
+        "x": {
+          "channel": "Engine_Speed",
+          "unit": "rpm"
+        },
+        "y": {
+          "channel": "Engine_Torque",
+          "unit": "Nm"
+        }
+      },
+      "analysisContext": {
+        "scope": "all",
+        "rangeSeconds": [
+          0,
+          120
+        ],
+        "timeBasis": "aligned"
+      },
+      "layout": "waveforms-and-XY-side-by-side; shared settings collapsed"
+    },
+    {
+      "mode": "scatter",
+      "sourceJpeg": "docs/qa/2026-11-02/screenshots/032-manual-xy-scatter.jpg",
+      "png": "docs/images/xy-qa-20261102.png",
+      "sourceSha256": "7b3c3591b6c7b9595eaed4e6570a373284795c58ae68dae6cb565d6b13c14a34",
+      "pngSha256": "83a58fdf1b9e0fe81e94125805ec39731ad83e2619f67b217a579996eb590271",
+      "sourceFileModifiedAt": "2026-11-01T16:23:48.173Z",
+      "dimensions": {
+        "width": 1600,
+        "height": 900
+      },
+      "decodedPixelsIdentical": true,
+      "axes": {
+        "x": {
+          "channel": "Engine_Speed",
+          "unit": "rpm"
+        },
+        "y": {
+          "channel": "Engine_Torque",
+          "unit": "Nm"
+        }
+      },
+      "analysisContext": {
+        "scope": "all",
+        "rangeSeconds": [
+          0,
+          120
+        ],
+        "timeBasis": "aligned"
+      },
+      "layout": "waveforms-and-XY-side-by-side; shared settings collapsed"
+    }
+  ],
+  "verificationBoundary": "These are synthetic-demo UI captures. They do not validate real engine characteristics, native file selection, settings-file import, exported files, or final manual HTML/PDF layout."
+}

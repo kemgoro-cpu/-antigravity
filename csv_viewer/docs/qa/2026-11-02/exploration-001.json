@@ -1,0 +1,6 @@
+{
+  "observationCommand": "createBrowserTab localhost preview",
+  "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 59-60\n+\t\t76 container\n+\t\t\t77 button (collapsed) 解析ツール ▾, Secondary Actions: Expand\n+\t\t\t\t78 text 解析ツール ▾\nThe focused UI element is 0 AXWebArea CSV Chart Viewer, URL: 127.0.0.1:8765/?preview=1",
+  "hypothesis": "Load bundled synthetic demo to establish successful baseline.",
+  "nextCommand": "click デモを読み込む; DOM; errors; screenshot"
+}

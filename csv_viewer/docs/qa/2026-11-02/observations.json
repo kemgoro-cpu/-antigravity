@@ -1,0 +1,1475 @@
+[
+  {
+    "sequence": 1,
+    "command": "createBrowserTab localhost preview",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 59-60\n+\t\t76 container\n+\t\t\t77 button (collapsed) 解析ツール ▾, Secondary Actions: Expand\n+\t\t\t\t78 text 解析ツール ▾\nThe focused UI element is 0 AXWebArea CSV Chart Viewer, URL: 127.0.0.1:8765/?preview=1"
+  },
+  {
+    "sequence": 2,
+    "command": "click デモを読み込む; DOM; errors; screenshot",
+    "observed": {
+      "state": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\n0 AXWebArea CSV Chart Viewer, URL: 127.0.0.1:8765/?preview=1\n\t1 container\n\t\t2 container Description: ファイルとチャンネル, ID: workspace-sidebar\n\t\t\t3 heading ファイルとチャンネル, Value: 2\n\t\t\t\t4 text ファイルとチャンネル\n\t\t\t5 button Description: ファイルとチャンネルを閉じる, ID: workspace-sidebar-close\n\t\t\t6 button (expanded) ファイル , Secondary Actions: Collapse\n\t\t\t\t7 text ファイル\n\t\t\t\t8 text \n\t\t\t9 container drop-zone\n\t\t\t\t10 text ここにファイルをドラッグ&ドロップ\n\t\t\t\t11 text CSV / TRN\n\t\t\t\t12 button 開く, ID: browse-files-btn\n\t\t\t13 checkbox (settable, integer) Description: 読込前に設定を確認, Value: 0, ID: import-review-before-load\n\t\t\t14 text 既定の設定ですぐに読み込みます。\n\t\t\t79 content list file-list\n\t\t\t\t80 container\n\t\t\t\t\t81 checkbox Description: デモ_燃費率マップ付き走行ログ.csv：基準ファイル, Help: Main file — 右クリックで色変更, Value: 1\n\t\t\t\t\t82 text デモ_燃費率マップ付き走行ログ.csv\n\t\t\t\t\t83 text utf-8\n\t\t\t\t\t84 button Description: デモ_燃費率マップ付き走行ログ.csvの表示色を変更, Help: 表示色を変更\n\t\t\t\t\t85 button Description: デモ_燃費率マップ付き走行ログ.csvの読み込み情報, Help: 読み込み情報\n\t\t\t\t\t86 button Description: デモ_燃費率マップ付き走行ログ.csvを外す, Help: ファイルを外す\n\t\t\t\t\t87 text 時間\n\t\t\t\t\t88 pop up button (collapsed, settable) Description: デモ_燃費率マップ付き走行ログ.csvの時間単位, Help: このファイルのTime列の元単位を指定, Value: s, Secondary Actions: Expand\n\t\t\t\t\t\t89 menu\n\t\t\t\t\t\t\t90 (selected) s\n\t\t\t\t\t\t\t91 ms\n\t\t\t\t\t92 text 自動\n\t\t\t\t\t93 container デモ_燃費率マップ付き走行ログ.csvの自動復元用保存状態\n\t\t\t\t\t\t94 text 開発用・自動保存なし\n\t\t\t95 button 作業をすべてクリア, ID: clear-all-btn\n\t\t\t15 button (collapsed) 読み込み設定・計算・イベント, Secondary Actions: Expand\n\t\t\t\t16 text 読み込み設定・計算・イベント\n\t\t\t17 button (expanded) チャンネル (デモ_燃費率マップ付き走行ログ.csv) , Secondary Actions: Collapse\n\t\t\t\t18 text チャンネル\n\t\t\t\t96 text (デモ_燃費率マップ付き走行ログ.csv)\n\t\t\t\t19 text \n\t\t\t20 text チャンネルを検索\n\t\t\t21 text field (settable) Description: チャンネル検索, ID: column-search\n\t\t\t22 pop up button (collapsed, settable) Description: チャンネルの絞り込み, Value: すべて, ID: compare-channel-filter, Secondary Actions: Expand\n\t\t\t\t23 menu\n\t\t\t\t\t24 (selected) すべて\n\t\t\t\t\t25 表示中\n\t\t\t\t\t26 全ファイル共通\n\t\t\t\t\t27 未対応あり\n\t\t\t\t\t28 お気に入りセット\n\t\t\t29 button 検索別名, Help: 検索用の別名を登録, ID: compare-alias-edit\n\t\t\t97 text ファイルを開くと一覧が表示されます\n\t\t\t98 container column-list\n\t\t\t\t99 checkbox Description: Engine_Speed [rpm], Value: 1\n\t\t\t\t\t100 text Engine_Speed\n\t\t\t\t\t101 text rpm\n\t\t\t\t\t102 button Description: Engine_Speedの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t103 container\n\t\t\t\t\t104 text Y\n\t\t\t\t\t105 stepper (settable) Description: Engine_SpeedのY軸下限, Help: Y-axis minimum\n\t\t\t\t\t106 text ~\n\t\t\t\t\t107 stepper (settable) Description: Engine_SpeedのY軸上限, Help: Y-axis maximum\n\t\t\t\t108 container\n\t\t\t\t\t109 text 太さ\n\t\t\t\t\t110 slider (settable, integer) Description: Engine_Speedの線の太さ, Value: 1\n\t\t\t\t\t111 text 1.0\n\t\t\t\t\t112 button ⟲, Help: 一括の太さに戻す\n\t\t\t\t113 checkbox Description: Engine_Torque [Nm], Value: 1\n\t\t\t\t\t114 text Engine_Torque\n\t\t\t\t\t115 text Nm\n\t\t\t\t\t116 button Description: Engine_Torqueの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t117 container\n\t\t\t\t\t118 text Y\n\t\t\t\t\t119 stepper (settable) Description: Engine_TorqueのY軸下限, Help: Y-axis minimum\n\t\t\t\t\t120 text ~\n\t\t\t\t\t121 stepper (settable) Description: Engine_TorqueのY軸上限, Help: Y-axis maximum\n\t\t\t\t122 container\n\t\t\t\t\t123 text 太さ\n\t\t\t\t\t124 slider (settable, integer) Description: Engine_Torqueの線の太さ, Value: 1\n\t\t\t\t\t125 text 1.0\n\t\t\t\t\t126 button ⟲, Help: 一括の太さに戻す\n\t\t\t\t127 checkbox Description: Coolant_Temp [degC], Value: 0\n\t\t\t\t\t128 text Coolant_Temp\n\t\t\t\t\t129 text degC\n\t\t\t\t\t130 button Description: Coolant_Tempの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t131 checkbox Description: sfc_ne [rpm], Value: 0\n\t\t\t\t\t132 text sfc_ne\n\t\t\t\t\t133 text rpm\n\t\t\t\t\t134 button Description: sfc_neの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t135 checkbox Description: sfc_te [Nm], Value: 0\n\t\t\t\t\t136 text sfc_te\n\t\t\t\t\t137 text Nm\n\t\t\t\t\t138 button Description: sfc_teの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t139 checkbox Description: sfc_g_kwh [g/kWh], Value: 0\n\t\t\t\t\t140 text sfc_g_kwh\n\t\t\t\t\t141 text g/kWh\n\t\t\t\t\t142 button Description: sfc_g_kwhの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t32 splitter Description: ファイルとチャンネルの幅, Value: 300, ID: sidebar-resize-handle\n\t\t33 container Description: 開発用プレビュー, ID: dev-preview-panel\n\t\t\t34 text 開発用プレビュー\n\t\t\t35 button (disabled) 読み込み中…, ID: dev-preview-demo\n\t\t\t36 text この画面の作業は自動保存しません。デモは架空データです。\n\t\t\t143 text 同梱のデモと背景マップを読み込んでいます…\n\t\t38 container\n\t\t\t39 button (expanded) ファイル, Help: ファイルとチャンネルの表示を切り替え, ID: workspace-sidebar-toggle, Secondary Actions: Collapse\n\t\t\t40 text CSV CHART VIEWER\n\t\t\t41 heading 比較ワークスペース, Value: 1\n\t\t\t\t42 text 比較ワークスペース\n\t\t\t43 button (collapsed) 比較パネル, ID: compare-panel-toggle, Secondary Actions: Expand\n\t\t\t44 button (expanded) XY・マップ, ID: xy-panel-toggle, Secondary Actions: Collapse\n\t\t45 container\n\t\t\t46 text 解析対象\n\t\t\t47 pop up button (collapsed, settable) Description: 比較・統計・XY・CSV・メモの対象区間, Value: 全体, ID: analysis-scope, Secondary Actions: Expand\n\t\t\t\t48 menu\n\t\t\t\t\t49 表示範囲\n\t\t\t\t\t50 (disabled) 選択区間\n\t\t\t\t\t51 (selected) 全体\n\t\t144 text 全体 0 – 120 s · 時間合わせ後\n\t\t52 text 比較・統計・XY・CSV・メモで共通\n\t\t53 button (collapsed) 調べる, Help: 元データ・品質診断・統計を確認します, ID: inspector-open, Secondary Actions: Expand\n\t\t54 button ボックスズーム, ID: zoom-mode-btn\n\t\t55 button リセット, ID: reset-zoom-btn\n\t\t56 button 計測, ID: measure-mode-btn\n\t\t57 button (disabled) Description: 元に戻す, ID: undo-btn\n\t\t58 button (disabled) Description: やり直す, ID: redo-btn\n\t\t76 container\n\t\t\t77 button (collapsed) 解析ツール ▾, Secondary Actions: Expand\n\t\t\t\t78 text 解析ツール ▾\n\t\t61 pop up button (collapsed) Description: 表示設定, ID: view-menu-btn, Secondary Actions: Expand\n\t\t62 pop up button (collapsed) Description: 保存・再利用, ID: export-menu-btn, Secondary Actions: Expand\n\t\t63 link Description: 操作マニュアル（別タブで開く）, Help: 図解付き操作マニュアルを別タブで開く, Value: 127.0.0.1:8765/manual.html, ID: manual-link\n\t\t64 button Description: テーマ切替（ライト/ダーク）, ID: theme-toggle-btn\n\t\t65 button Description: キーボードショートカット一覧, ID: shortcuts-help-btn\n\t\t145 container\n\t\t\t146 container Description: XYと燃費率マップ, ID: xy-workspace\n\t\t\t\t147 container\n\t\t\t\t\t148 heading XY・燃費率マップ, Value: 2\n\t\t\t\t\t\t149 text XY・燃費率マップ\n\t\t\t\t\t150 button (collapsed) 大きく表示, ID: xy-expand-btn, Secondary Actions: Expand\n\t\t\t\t\t151 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn\n\t\t\t\t152 text 左右分割：境界をドラッグして幅を調整できます。境界を選んで左右キーでも調整できます。\n\t\t\t\t153 container\n\t\t\t\t\t154 text 表示\n\t\t\t\t\t155 pop up button (collapsed, settable) 表示, Value: 燃費率マップ, ID: xy-mode, Secondary Actions: Expand\n\t\t\t\t\t\t156 menu\n\t\t\t\t\t\t\t157 散布図\n\t\t\t\t\t\t\t158 (selected) 燃費率マップ\n\t\t\t\t159 container\n\t\t\t\t\t160 text 走行点のX軸\n\t\t\t\t\t161 pop up button (collapsed, settable) Description: 走行点のX軸チャンネル, Value: Engine_Speed [rpm], ID: xy-x-select, Secondary Actions: Expand\n\t\t\t\t\t\t162 menu\n\t\t\t\t\t\t\t163 選択してください\n\t\t\t\t\t\t\t164 (selected) Engine_Speed [rpm]\n\t\t\t\t\t\t\t165 Engine_Torque [Nm]\n\t\t\t\t\t\t\t166 Coolant_Temp [degC]\n\t\t\t\t\t\t\t167 sfc_ne [rpm]\n\t\t\t\t\t\t\t168 sfc_te [Nm]\n\t\t\t\t\t\t\t169 sfc_g_kwh [g/kWh]\n\t\t\t\t170 container\n\t\t\t\t\t171 text 走行点のY軸\n\t\t\t\t\t172 pop up button (collapsed, settable) Description: 走行点のY軸チャンネル, Value: Engine_Torque [Nm], ID: xy-y-select, Secondary Actions: Expand\n\t\t\t\t\t\t173 menu\n\t\t\t\t\t\t\t174 選択してください\n\t\t\t\t\t\t\t175 Engine_Speed [rpm]\n\t\t\t\t\t\t\t176 (selected) Engine_Torque [Nm]\n\t\t\t\t\t\t\t177 Coolant_Temp [degC]\n\t\t\t\t\t\t\t178 sfc_ne [rpm]\n\t\t\t\t\t\t\t179 sfc_te [Nm]\n\t\t\t\t\t\t\t180 sfc_g_kwh [g/kWh]\n\t\t\t\t181 container xy-map-controls\n\t\t\t\t\t182 button (collapsed) 背景マップ・表示設定, Secondary Actions: Expand\n\t\t\t\t\t\t183 text 背景マップ・表示設定\n\t\t\t\t\t184 text CSVを読み込んでいます。完了後に単位を確認してください。\n\t\t\t\t185 container xy-map-navigation\n\t\t\t\t\t186 checkbox 拡大操作 OFF, Value: 0, ID: xy-map-zoom-btn\n\t\t\t\t\t187 button 全体に戻す, ID: xy-map-reset-view\n\t\t\t\t\t188 text ONでホイール・ピンチ拡大、ドラッグ移動\n\t\t\t\t189 image Description: XY・燃費率マップ, ID: xy-chart\n\t\t\t\t190 text 波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。\n\nThe focused UI element is 151 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn",
+      "logs": []
+    }
+  },
+  {
+    "sequence": 3,
+    "command": "wait for デモを表示しました then screenshot; inspect viewport capability",
+    "observed": {
+      "state": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 8-12, 19, 80-94, 96-97, 99-144, 160, 171, 184\n+\t\t\t\t191 text \n+\t\t\t192 button 開く, ID: browse-files-btn\n+\t\t\t\t193 container\n+\t\t\t\t\t194 checkbox Description: デモ_燃費率マップ付き走行ログ.csv：基準ファイル, Help: Main file — 右クリックで色変更, Value: 1\n+\t\t\t\t\t195 text デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t\t196 text utf-8\n+\t\t\t\t\t197 button Description: デモ_燃費率マップ付き走行ログ.csvの表示色を変更, Help: 表示色を変更\n+\t\t\t\t\t198 button Description: デモ_燃費率マップ付き走行ログ.csvの読み込み情報, Help: 読み込み情報\n+\t\t\t\t\t199 button Description: デモ_燃費率マップ付き走行ログ.csvを外す, Help: ファイルを外す\n+\t\t\t\t\t200 text 時間\n+\t\t\t\t\t201 pop up button (collapsed, settable) Description: デモ_燃費率マップ付き走行ログ.csvの時間単位, Help: このファイルのTime列の元単位を指定, Value: s, Secondary Actions: Expand\n+\t\t\t\t\t\t202 menu\n+\t\t\t\t\t\t\t203 (selected) s\n+\t\t\t\t\t\t\t204 ms\n+\t\t\t\t\t205 text 自動\n+\t\t\t\t\t206 container デモ_燃費率マップ付き走行ログ.csvの自動復元用保存状態\n+\t\t\t\t\t\t207 text 開発用・自動保存なし\n+\t\t\t\t208 text (デモ_燃費率マップ付き走行ログ.csv)\n+\t\t\t\t209 text \n+\t\t\t210 text 6 / 6 件 · 表示中 2\n+\t\t\t\t211 checkbox Description: Engine_Speed [rpm], Value: 1\n+\t\t\t\t\t212 text Engine_Speed\n+\t\t\t\t\t213 text rpm\n+\t\t\t\t\t214 button Description: Engine_Speedの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n+\t\t\t\t215 container\n+\t\t\t\t\t216 text Y\n+\t\t\t\t\t217 stepper (settable) Description: Engine_SpeedのY軸下限, Help: Y-axis minimum\n+\t\t\t\t\t218 text ~\n+\t\t\t\t\t219 stepper (settable) Description: Engine_SpeedのY軸上限, Help: Y-axis maximum\n+\t\t\t\t220 container\n+\t\t\t\t\t221 text 太さ\n+\t\t\t\t\t222 slider (settable, integer) Description: Engine_Speedの線の太さ, Value: 1\n+\t\t\t\t\t223 text 1.0\n+\t\t\t\t\t224 button ⟲, Help: 一括の太さに戻す\n+\t\t\t\t225 checkbox Description: Engine_Torque [Nm], Value: 1\n+\t\t\t\t\t226 text Engine_Torque\n+\t\t\t\t\t227 text Nm\n+\t\t\t\t\t228 button Description: Engine_Torqueの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n+\t\t\t\t229 container\n+\t\t\t\t\t230 text Y\n+\t\t\t\t\t231 stepper (settable) Description: Engine_TorqueのY軸下限, Help: Y-axis minimum\n+\t\t\t\t\t232 text ~\n+\t\t\t\t\t233 stepper (settable) Description: Engine_TorqueのY軸上限, Help: Y-axis maximum\n+\t\t\t\t234 container\n+\t\t\t\t\t235 text 太さ\n+\t\t\t\t\t236 slider (settable, integer) Description: Engine_Torqueの線の太さ, Value: 1\n+\t\t\t\t\t237 text 1.0\n+\t\t\t\t\t238 button ⟲, Help: 一括の太さに戻す\n+\t\t\t\t239 checkbox Description: Coolant_Temp [degC], Value: 0\n+\t\t\t\t\t240 text Coolant_Temp\n+\t\t\t\t\t241 text degC\n+\t\t\t\t\t242 button Description: Coolant_Tempの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n+\t\t\t\t243 checkbox Description: sfc_ne [rpm], Value: 0\n+\t\t\t\t\t244 text sfc_ne\n+\t\t\t\t\t245 text rpm\n+\t\t\t\t\t246 button Description: sfc_neの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n+\t\t\t\t247 checkbox Description: sfc_te [Nm], Value: 0\n+\t\t\t\t\t248 text sfc_te\n+\t\t\t\t\t249 text Nm\n+\t\t\t\t\t250 button Description: sfc_teの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n+\t\t\t\t251 checkbox Description: sfc_g_kwh [g/kWh], Value: 0\n+\t\t\t\t\t252 text sfc_g_kwh\n+\t\t\t\t\t253 text g/kWh\n+\t\t\t\t\t254 button Description: sfc_g_kwhの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n~\t\t\t35 button (disabled) デモを読み込む, ID: dev-preview-demo\n+\t\t\t255 text デモを表示しました。波形カーソル、境界の幅調整、マップの拡大操作を試せます。\n+\t\t\t256 text 1 ファイル · 2 チャンネル\n+\t\t257 container 比較の表示方法\n+\t\t\t258 checkbox 重ね合わせ, Value: 1\n+\t\t\t259 checkbox (disabled) 上下比較, Value: 0\n+\t\t\t260 checkbox (disabled) 差分, Value: 0\n+\t\t261 checkbox (disabled, settable, integer) Description: 元の時刻で確認, Value: 0, ID: compare-raw\n+\t\t262 checkbox 区間を選択・解析, Help: ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します, Value: 0, ID: compare-select-range\n+\t\t263 text 時間軸はすべて連動\n+\t\t264 text 全体 0 – 120 s · 時間合わせ後\n+\t\t\t265 splitter Description: 波形とマップの幅を調整, Help: ドラッグで幅を調整。左右キーで移動、Home/Endで最小/最大、ダブルクリックで半分に戻す, Value: 50, ID: xy-split-handle\n+\t\t\t\t\t266 text 走行点のX軸\n+\t\t\t\t\t267 text 走行点のY軸\n+\t\t\t\t\t268 text 練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。\n+\t\t\t\t269 text 全体 0 – 120 s · 時間合わせ後（動作点・散布図に適用）\n~\t\t\t\t189 container Description: XY・燃費率マップ, ID: xy-chart\n+\t\t\t\t270 text デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点\n+\t\t271 text 全体ナビゲーター \n+\t\t272 text Engine_Speed\n+\t\t273 text 0–120 s\n+\t\t274 container\n+\t\t\t275 text 開始 \n+\t\t\t276 stepper (settable, integer) Description: 表示区間の開始秒, Value: 0, ID: compare-range-start\n+\t\t\t277 text  s\n+\t\t278 container\n+\t\t\t279 text 終了 \n+\t\t\t280 stepper (settable, integer) Description: 表示区間の終了秒, Value: 120, ID: compare-range-end\n+\t\t\t281 text  s\n+\t\t282 button 表示, ID: compare-range-go\n+\t\t283 button 全体, ID: compare-range-all\nThe focused UI element is 151 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn",
+      "logs": []
+    }
+  },
+  {
+    "sequence": 4,
+    "command": "set viewport 1600x900; screenshot; CDP documentation",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 6-7, 13-16, 79, 95, 153-159, 161-170, 172-183, 185-207, 266-270, 272-273\n+\t\t\t284 container\n+\t\t\t\t285 button (expanded) ファイル , Secondary Actions: Collapse\n+\t\t\t\t\t286 text ファイル\n+\t\t\t\t\t287 text \n+\t\t\t\t288 button 開く, ID: browse-files-btn\n+\t\t\t\t289 checkbox (settable, integer) Description: 読込前に設定を確認, Value: 0, ID: import-review-before-load\n+\t\t\t\t290 text 既定の設定ですぐに読み込みます。\n+\t\t\t\t291 content list file-list\n+\t\t\t\t\t292 container\n+\t\t\t\t\t\t293 checkbox Description: デモ_燃費率マップ付き走行ログ.csv：基準ファイル, Help: Main file — 右クリックで色変更, Value: 1\n+\t\t\t\t\t\t294 text デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t\t\t295 text utf-8\n+\t\t\t\t\t\t296 button Description: デモ_燃費率マップ付き走行ログ.csvの表示色を変更, Help: 表示色を変更\n+\t\t\t\t\t\t297 button Description: デモ_燃費率マップ付き走行ログ.csvの読み込み情報, Help: 読み込み情報\n+\t\t\t\t\t\t298 button Description: デモ_燃費率マップ付き走行ログ.csvを外す, Help: ファイルを外す\n+\t\t\t\t\t\t299 text 時間\n+\t\t\t\t\t\t300 pop up button (collapsed, settable) Description: デモ_燃費率マップ付き走行ログ.csvの時間単位, Help: このファイルのTime列の元単位を指定, Value: s, Secondary Actions: Expand\n+\t\t\t\t\t\t\t301 menu\n+\t\t\t\t\t\t\t\t302 (selected) s\n+\t\t\t\t\t\t\t\t303 ms\n+\t\t\t\t\t\t304 text 自動\n+\t\t\t\t\t\t305 container デモ_燃費率マップ付き走行ログ.csvの自動復元用保存状態\n+\t\t\t\t\t\t\t306 text 開発用・自動保存なし\n+\t\t\t\t307 button 作業をすべてクリア, ID: clear-all-btn\n+\t\t\t\t308 button (collapsed) 読み込み設定・計算・イベント, Secondary Actions: Expand\n+\t\t\t\t\t309 text 読み込み設定・計算・イベント\n+\t\t\t\t310 container\n+\t\t\t\t\t311 text 表示\n+\t\t\t\t\t312 pop up button (collapsed, settable) 表示, Value: 燃費率マップ, ID: xy-mode, Secondary Actions: Expand\n+\t\t\t\t\t\t313 menu\n+\t\t\t\t\t\t\t314 散布図\n+\t\t\t\t\t\t\t315 (selected) 燃費率マップ\n+\t\t\t\t\t316 text 走行点のX軸\n+\t\t\t\t\t317 pop up button (collapsed, settable) Description: 走行点のX軸チャンネル, Value: Engine_Speed [rpm], ID: xy-x-select, Secondary Actions: Expand\n+\t\t\t\t\t\t318 menu\n+\t\t\t\t\t\t\t319 選択してください\n+\t\t\t\t\t\t\t320 (selected) Engine_Speed [rpm]\n+\t\t\t\t\t\t\t321 Engine_Torque [Nm]\n+\t\t\t\t\t\t\t322 Coolant_Temp [degC]\n+\t\t\t\t\t\t\t323 sfc_ne [rpm]\n+\t\t\t\t\t\t\t324 sfc_te [Nm]\n+\t\t\t\t\t\t\t325 sfc_g_kwh [g/kWh]\n+\t\t\t\t\t326 text 走行点のY軸\n+\t\t\t\t\t327 pop up button (collapsed, settable) Description: 走行点のY軸チャンネル, Value: Engine_Torque [Nm], ID: xy-y-select, Secondary Actions: Expand\n+\t\t\t\t\t\t328 menu\n+\t\t\t\t\t\t\t329 選択してください\n+\t\t\t\t\t\t\t330 Engine_Speed [rpm]\n+\t\t\t\t\t\t\t331 (selected) Engine_Torque [Nm]\n+\t\t\t\t\t\t\t332 Coolant_Temp [degC]\n+\t\t\t\t\t\t\t333 sfc_ne [rpm]\n+\t\t\t\t\t\t\t334 sfc_te [Nm]\n+\t\t\t\t\t\t\t335 sfc_g_kwh [g/kWh]\n+\t\t\t\t\t336 container xy-map-controls\n+\t\t\t\t\t\t337 button (collapsed) 背景マップ・表示設定, Secondary Actions: Expand\n+\t\t\t\t\t\t\t338 text 背景マップ・表示設定\n+\t\t\t\t\t\t339 text 練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。\n+\t\t\t\t\t340 text 全体 0 – 120 s · 時間合わせ後（動作点・散布図に適用）\n+\t\t\t\t\t341 container xy-map-navigation\n+\t\t\t\t\t\t342 checkbox 拡大操作 OFF, Value: 0, ID: xy-map-zoom-btn\n+\t\t\t\t\t\t343 button 全体に戻す, ID: xy-map-reset-view\n+\t\t\t\t\t\t344 text ONでホイール・ピンチ拡大、ドラッグ移動\n+\t\t\t\t\t345 container Description: XY・燃費率マップ, ID: xy-chart\n+\t\t\t\t\t346 text デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点\n+\t\t\t\t\t347 text 波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。\n+\t\t348 text Engine_Speed\n+\t\t349 text 0–120 s\nThe focused UI element is 151 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn"
+  },
+  {
+    "sequence": 5,
+    "command": "scroll map pane down once; DOM; screenshot",
+    "observed": {
+      "state": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThere has been no change in the accessibility tree.\nThe focused UI element is 151 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn",
+      "logs": []
+    }
+  },
+  {
+    "sequence": 6,
+    "command": "read DOM geometry xy-chart ancestor chain",
+    "observed": [
+      {
+        "class": "xy-workspace-chart",
+        "client": 370,
+        "height": 370,
+        "id": "xy-chart",
+        "overflow": "hidden",
+        "scroll": 370,
+        "top": 0,
+        "y": 320.8000183105469
+      },
+      {
+        "class": "xy-chart-frame",
+        "client": 370,
+        "height": 370,
+        "id": "xy-chart-frame",
+        "overflow": "visible",
+        "scroll": 370,
+        "top": 0,
+        "y": 320.8000183105469
+      },
+      {
+        "class": "xy-workspace-content",
+        "client": 534,
+        "height": 533.6000366210938,
+        "id": "",
+        "overflow": "visible",
+        "scroll": 534,
+        "top": 0,
+        "y": 232.1999969482422
+      },
+      {
+        "class": "xy-workspace-scroll",
+        "client": 387,
+        "height": 386.6000061035156,
+        "id": "",
+        "overflow": "auto",
+        "scroll": 787,
+        "top": 400,
+        "y": 399.1000061035156
+      },
+      {
+        "class": "xy-workspace",
+        "client": 470,
+        "height": 470.3000183105469,
+        "id": "xy-workspace",
+        "overflow": "visible",
+        "scroll": 470,
+        "top": 0,
+        "y": 315.3999938964844
+      },
+      {
+        "class": "compare-body xy-layout-active",
+        "client": 470,
+        "height": 470.3000183105469,
+        "id": "",
+        "overflow": "visible",
+        "scroll": 470,
+        "top": 0,
+        "y": 315.3999938964844
+      },
+      {
+        "class": "main-content compare-panel-open",
+        "client": 900,
+        "height": 900,
+        "id": "",
+        "overflow": "hidden",
+        "scroll": 900,
+        "top": 0,
+        "y": 0
+      },
+      {
+        "class": "app-container",
+        "client": 900,
+        "height": 900,
+        "id": "",
+        "overflow": "visible",
+        "scroll": 900,
+        "top": 0,
+        "y": 0
+      },
+      {
+        "class": "workspace-sidebar-open workspace-has-files workspace-has-chart",
+        "client": 900,
+        "height": 900,
+        "id": "",
+        "overflow": "hidden",
+        "scroll": 900,
+        "top": 0,
+        "y": 0
+      },
+      {
+        "class": "",
+        "client": 900,
+        "height": 900,
+        "id": "",
+        "overflow": "visible",
+        "scroll": 900,
+        "top": 0,
+        "y": 0
+      }
+    ]
+  },
+  {
+    "sequence": 7,
+    "command": "screenshot settled scroll; DOM visible labels",
+    "observed": {
+      "chart": {
+        "height": 370,
+        "width": 613.6000366210938,
+        "x": 968.7999877929688,
+        "y": 320.8000183105469
+      },
+      "viewport": {
+        "h": 900,
+        "w": 1600
+      }
+    }
+  },
+  {
+    "sequence": 8,
+    "command": "CDP mouseMove sweep waveform; DOM cursor and pane rectangles",
+    "observed": {
+      "observation": {
+        "marks": [
+          {
+            "class": "xy-cursor-overlay",
+            "style": null
+          },
+          {
+            "class": "xy-cursor-marker",
+            "style": "background-color: rgb(230, 76, 76); left: 142.065px; top: 252.964px;"
+          }
+        ],
+        "panes": [
+          {
+            "id": "xy-workspace",
+            "rect": {
+              "bottom": 785.7000122070312,
+              "height": 470.3000183105469,
+              "left": 956,
+              "right": 1600,
+              "top": 315.3999938964844,
+              "width": 644,
+              "x": 956,
+              "y": 315.3999938964844
+            }
+          },
+          {
+            "id": "xy-chart",
+            "rect": {
+              "bottom": 690.8000183105469,
+              "height": 370,
+              "left": 968.7999877929688,
+              "right": 1582.4000244140625,
+              "top": 320.8000183105469,
+              "width": 613.6000366210938,
+              "x": 968.7999877929688,
+              "y": 320.8000183105469
+            }
+          }
+        ],
+        "texts": [
+          "左右分割：境界をドラッグして幅を調整できます。境界を選んで左右キーでも調整できます。",
+          "",
+          "背景は選んだログのSFC列全体を格子平均します。走行中の燃料流量から燃費率を計算する機能ではありません。",
+          "走行ログとは別に読み込みます。UTF-8、5 MiBまで。行列形式は先頭行が回転数、先頭列がトルク。3列形式は回転数・トルク・燃費率の順です。",
+          "練習用_詳細燃費率ﾏｯﾌﾟ.csv を背景に適用しました。",
+          "色と等高線に共通の範囲です。空欄は元データ全体。例：200〜500 g/kWh。塗りつぶしの範囲外は端の色になり、元の値は保持します。",
+          "通常10、詳細5、広く見るときは20が目安です。主要線は太線と数値で表示。等高線は有効な格子間の線形補間で、元データの精度を増やしません。欠損セルは埋めません。走行点は回転数とトルクが非負の元サンプルです。",
+          "練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。",
+          "全体 0 – 120 s · 時間合わせ後（動作点・散布図に適用）",
+          "デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点",
+          "カーソル 41.1 s · デモ_燃費率マップ付き走行ログ.csv: 元 41.1 s / 表示 41.1 s（最寄りの観測点。補間なし）",
+          "波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。"
+        ]
+      },
+      "logs": []
+    }
+  },
+  {
+    "sequence": 9,
+    "command": "set viewport958x854; screenshot; rendered geometry",
+    "observed": {
+      "active": "xy-close-btn",
+      "bodies": [
+        {
+          "class": "compare-body xy-layout-active xy-layout-stacked",
+          "client": 391,
+          "scroll": 1171,
+          "top": 0
+        }
+      ],
+      "chart": {
+        "bottom": 1425.5999755859375,
+        "height": 350,
+        "left": 277,
+        "right": 940.7999877929688,
+        "top": 1075.5999755859375,
+        "width": 663.7999877929688,
+        "x": 277,
+        "y": 1075.5999755859375
+      },
+      "pane": {
+        "bottom": 1520.6000366210938,
+        "height": 851.2000122070312,
+        "left": 265,
+        "right": 952.7999877929688,
+        "top": 669.4000244140625,
+        "width": 687.7999877929688,
+        "x": 265,
+        "y": 669.4000244140625
+      }
+    }
+  },
+  {
+    "sequence": 10,
+    "command": "click XY・マップ twice; measure focused control and chart",
+    "observed": {
+      "active": "xy-close-btn",
+      "chart": {
+        "bottom": 757.8000183105469,
+        "height": 370,
+        "left": 638.375,
+        "right": 940.8000183105468,
+        "top": 387.8000183105469,
+        "width": 302.4250183105469,
+        "x": 638.375,
+        "y": 387.8000183105469
+      },
+      "pane": {
+        "bottom": 740.1000061035156,
+        "height": 390.7000122070313,
+        "left": 625.5750122070312,
+        "right": 958.4000244140624,
+        "top": 349.3999938964844,
+        "width": 332.82501220703125,
+        "x": 625.5750122070312,
+        "y": 349.3999938964844
+      },
+      "scroll": 0
+    }
+  },
+  {
+    "sequence": 11,
+    "command": "wait xy-layout-stacked; DOM geometry; screenshot",
+    "observed": {
+      "active": "xy-close-btn",
+      "chart": {
+        "bottom": 1425.5999755859375,
+        "height": 350,
+        "left": 277,
+        "right": 940.7999877929688,
+        "top": 1075.5999755859375,
+        "width": 663.7999877929688,
+        "x": 277,
+        "y": 1075.5999755859375
+      },
+      "pane": {
+        "bottom": 1520.6000366210938,
+        "height": 851.2000122070312,
+        "left": 265,
+        "right": 952.7999877929688,
+        "top": 669.4000244140625,
+        "width": 687.7999877929688,
+        "x": 265,
+        "y": 669.4000244140625
+      },
+      "scroll": 0
+    }
+  },
+  {
+    "sequence": 12,
+    "command": "click 大きく表示; DOM",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 145, 310-359\n+\t\t\t\t\t362 text \n+\t\t\t\t363 text \n+\t\t364 container Description: XYと燃費率マップ, ID: xy-workspace\n+\t\t\t365 container\n+\t\t\t\t366 heading XY・燃費率マップ, Value: 2\n+\t\t\t\t\t367 text XY・燃費率マップ\n+\t\t\t\t368 button (expanded) 並べて表示に戻る, ID: xy-expand-btn, Secondary Actions: Collapse\n+\t\t\t\t369 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn\n+\t\t\t370 text 「並べて表示に戻る」で、波形とマップを並べます。\n+\t\t\t371 container\n+\t\t\t\t372 text 表示\n+\t\t\t\t373 pop up button (collapsed, settable) 表示, Value: 燃費率マップ, ID: xy-mode, Secondary Actions: Expand\n+\t\t\t\t\t374 menu\n+\t\t\t\t\t\t375 散布図\n+\t\t\t\t\t\t376 (selected) 燃費率マップ\n+\t\t\t377 container\n+\t\t\t\t378 text 走行点のX軸\n+\t\t\t\t379 pop up button (collapsed, settable) Description: 走行点のX軸チャンネル, Value: Engine_Speed [rpm], ID: xy-x-select, Secondary Actions: Expand\n+\t\t\t\t\t380 menu\n+\t\t\t\t\t\t381 選択してください\n+\t\t\t\t\t\t382 (selected) Engine_Speed [rpm]\n+\t\t\t\t\t\t383 Engine_Torque [Nm]\n+\t\t\t\t\t\t384 Coolant_Temp [degC]\n+\t\t\t\t\t\t385 sfc_ne [rpm]\n+\t\t\t\t\t\t386 sfc_te [Nm]\n+\t\t\t\t\t\t387 sfc_g_kwh [g/kWh]\n+\t\t\t388 container\n+\t\t\t\t389 text 走行点のY軸\n+\t\t\t\t390 pop up button (collapsed, settable) Description: 走行点のY軸チャンネル, Value: Engine_Torque [Nm], ID: xy-y-select, Secondary Actions: Expand\n+\t\t\t\t\t391 menu\n+\t\t\t\t\t\t392 選択してください\n+\t\t\t\t\t\t393 Engine_Speed [rpm]\n+\t\t\t\t\t\t394 (selected) Engine_Torque [Nm]\n+\t\t\t\t\t\t395 Coolant_Temp [degC]\n+\t\t\t\t\t\t396 sfc_ne [rpm]\n+\t\t\t\t\t\t397 sfc_te [Nm]\n+\t\t\t\t\t\t398 sfc_g_kwh [g/kWh]\n+\t\t\t399 container xy-map-controls\n+\t\t\t\t400 button (collapsed) 背景マップ・表示設定, Secondary Actions: Expand\n+\t\t\t\t\t401 text 背景マップ・表示設定\n+\t\t\t\t402 text 練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。\n+\t\t\t403 text 全体 0 – 120 s · 時間合わせ後（動作点・散布図に適用）\n+\t\t\t404 container xy-map-navigation\n+\t\t\t\t405 checkbox 拡大操作 OFF, Value: 0, ID: xy-map-zoom-btn\n+\t\t\t\t406 button 全体に戻す, ID: xy-map-reset-view\n+\t\t\t\t407 text ONでホイール・ピンチ拡大、ドラッグ移動\n+\t\t\t408 container Description: XY・燃費率マップ, ID: xy-chart\n+\t\t\t409 text デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点\n+\t\t\t410 text カーソル 41.1 s · デモ_燃費率マップ付き走行ログ.csv: 元 41.1 s / 表示 41.1 s（最寄りの観測点。補間なし）\n+\t\t\t411 text 波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。\nThe focused UI element is 368 button (expanded) 並べて表示に戻る, ID: xy-expand-btn, Secondary Actions: Collapse"
+  },
+  {
+    "sequence": 13,
+    "command": "zoom role lookup failed; fresh DOM snapshot",
+    "observed": "- complementary \"ファイルとチャンネル\":\n  - heading \"ファイルとチャンネル\" [level=2]\n  - button \"ファイルとチャンネルを閉じる\": ×\n  - button \"ファイル \" [expanded]:\n    - generic: \n    - text: ファイル\n    - generic: \n  - text: \n  - button \"開く\"\n  - checkbox \"読込前に設定を確認\"\n  - text: 読込前に設定を確認\n  - status: 既定の設定ですぐに読み込みます。\n  - list:\n    - button \"デモ_燃費率マップ付き走行ログ.csv：基準ファイル\" [pressed]: M\n    - generic \"デモ_燃費率マップ付き走行ログ.csv\"\n    - generic \"CSV文字コード\": utf-8\n    - button \"デモ_燃費率マップ付き走行ログ.csvの表示色を変更\":\n      - generic: \n    - button \"デモ_燃費率マップ付き走行ログ.csvの読み込み情報\":\n      - generic: \n    - button \"デモ_燃費率マップ付き走行ログ.csvを外す\":\n      - generic: \n    - generic: 時間\n    - combobox \"デモ_燃費率マップ付き走行ログ.csvの時間単位\":\n      - option \"s\" [selected]\n      - option \"ms\"\n    - generic: 自動\n    - generic \"デモ_燃費率マップ付き走行ログ.csvの自動復元用保存状態\":\n      - generic \"この画面を再読み込みするとログと設定は消えます。\": 開発用・自動保存なし\n  - button \"作業をすべてクリア\":\n    - generic: \n    - generic: 作業をすべてクリア\n  - generic \"読み込み設定・計算・イベント\"\n  - text:  \n  - option \"自動\" [selected]\n  - option \"指定\"\n  - option \"自動\" [selected]\n  - option \"なし\"\n  - option \"指定\"\n  - option \"自動\" [selected]\n  - option \"カンマ\"\n  - option \"タブ\"\n  - option \"セミコロン\"\n  - option \"パイプ\"\n  - option \"自動\" [selected]\n  - option \"UTF-8\"\n  - option \"Shift_JIS\"\n  - option \"UTF-16LE\"\n  - option \"UTF-16BE\"\n  - text:     \n  - button \"チャンネル (デモ_燃費率マップ付き走行ログ.csv) \" [expanded]:\n    - generic: \n    - text: チャンネル\n    - generic: (デモ_燃費率マップ付き走行ログ.csv)\n    - generic: \n  - generic: チャンネルを検索\n  - generic: \n  - textbox \"チャンネル検索\":\n    - /placeholder: 名前・単位・検索別名\n  - combobox \"チャンネルの絞り込み\":\n    - option \"すべて\" [selected]\n    - option \"表示中\"\n    - option \"全ファイル共通\"\n    - option \"未対応あり\"\n    - option \"お気に入りセット\"\n  - button \"検索別名\"\n  - status: 6 / 6 件 · 表示中 2\n  - button \"Engine_Speed [rpm]\" [pressed]:\n    - generic \"Engine_Speed [rpm] — デモ_燃費率マップ付き走行ログ.csv\": Engine_Speed\n    - generic: rpm\n    - button \"Engine_Speedの別名チャンネル対応を編集\": \n    - text: \n  - generic: \"Y\"\n  - spinbutton \"Engine_SpeedのY軸下限\"\n  - generic: ~\n  - spinbutton \"Engine_SpeedのY軸上限\"\n  - generic: 太さ\n  - slider \"Engine_Speedの線の太さ\": \"1\"\n  - generic: \"1.0\"\n  - button \"⟲\"\n  - button \"Engine_Torque [Nm]\" [pressed]:\n    - generic \"Engine_Torque [Nm] — デモ_燃費率マップ付き走行ログ.csv\": Engine_Torque\n    - generic: Nm\n    - button \"Engine_Torqueの別名チャンネル対応を編集\": \n    - text: \n  - generic: \"Y\"\n  - spinbutton \"Engine_TorqueのY軸下限\"\n  - generic: ~\n  - spinbutton \"Engine_TorqueのY軸上限\"\n  - generic: 太さ\n  - slider \"Engine_Torqueの線の太さ\": \"1\"\n  - generic: \"1.0\"\n  - button \"⟲\"\n  - button \"Coolant_Temp [degC]\":\n    - generic \"Coolant_Temp [degC] — デモ_燃費率マップ付き走行ログ.csv\": Coolant_Temp\n    - generic: degC\n    - button \"Coolant_Tempの別名チャンネル対応を編集\": \n    - text: \n  - button \"sfc_ne [rpm]\":\n    - generic \"sfc_ne [rpm] — デモ_燃費率マップ付き走行ログ.csv\": sfc_ne\n    - generic: rpm\n    - button \"sfc_neの別名チャンネル対応を編集\": \n    - text: \n  - button \"sfc_te [Nm]\":\n    - generic \"sfc_te [Nm] — デモ_燃費率マップ付き走行ログ.csv\": sfc_te\n    - generic: Nm\n    - button \"sfc_teの別名チャンネル対応を編集\": \n    - text: \n  - button \"sfc_g_kwh [g/kWh]\":\n    - generic \"sfc_g_kwh [g/kWh] — デモ_燃費率マップ付き走行ログ.csv\": sfc_g_kwh\n    - generic: g/kWh\n    - button \"sfc_g_kwhの別名チャンネル対応を編集\": \n    - text: \n- separator \"ファイルとチャンネルの幅\"\n- main:\n  - region \"開発用プレビュー\":\n    - strong: 開発用プレビュー\n    - button \"デモを読み込む\" [disabled]\n    - paragraph: この画面の作業は自動保存しません。デモは架空データです。\n    - status: デモを表示しました。波形カーソル、境界の幅調整、マップの拡大操作を試せます。\n  - button \"ファイル\" [expanded]:\n    - generic: \n    - generic: ファイル\n  - generic: CSV CHART VIEWER\n  - heading \"比較ワークスペース\" [level=1]\n  - button \"比較パネル\"\n  - button \"XY・マップ\" [expanded]\n  - group \"比較の表示方法\":\n    - button \"重ね合わせ\" [pressed]\n    - button \"上下比較\" [disabled]\n    - button \"差分\" [disabled]\n  - checkbox \"元の時刻で確認\" [disabled]\n  - text: 元の時刻で確認\n  - button \"区間を選択・解析\"\n  - text: 解析対象\n  - combobox \"比較・統計・XY・CSV・メモの対象区間\":\n    - option \"表示範囲\"\n    - option \"選択区間\" [disabled]\n    - option \"全体\" [selected]\n  - status: 全体 0 – 120 s · 時間合わせ後\n  - generic: 比較・統計・XY・CSV・メモで共通\n  - button \"調べる\"\n  - button \"ボックスズーム\":\n    - generic: \n    - generic: ボックスズーム\n  - button \"リセット\":\n    - generic: \n    - generic: リセット\n  - button \"計測\":\n    - generic: \n    - generic: 計測\n  - button \"元に戻す\" [disabled]:\n    - generic: \n  - button \"やり直す\" [disabled]:\n    - generic: \n  - generic \"解析ツール ▾\"\n  - text:     \n  - button \"表示設定\":\n    - generic: \n    - generic: 表示\n    - generic: \n  - text:       \n  - button \"保存・再利用\":\n    - generic: \n    - generic: 保存・再利用\n    - generic: \n  - link \"操作マニュアル（別タブで開く）\":\n    - /url: manual.html\n    - generic: \n  - button \"テーマ切替（ライト/ダーク）\":\n    - generic: \n  - button \"キーボードショートカット一覧\":\n    - generic: \n  - complementary \"XYと燃費率マップ\":\n    - heading \"XY・燃費率マップ\" [level=2]\n    - button \"並べて表示に戻る\" [expanded] [active]\n    - button \"XY・マップを閉じて比較へ戻る\": ×\n    - paragraph: 「並べて表示に戻る」で、波形とマップを並べます。\n    - text: 表示\n    - combobox \"表示\":\n      - option \"散布図\"\n      - option \"燃費率マップ\" [selected]\n    - generic: 走行点のX軸\n    - combobox \"走行点のX軸チャンネル\":\n      - option \"選択してください\"\n      - option \"Engine_Speed [rpm]\" [selected]\n      - option \"Engine_Torque [Nm]\"\n      - option \"Coolant_Temp [degC]\"\n      - option \"sfc_ne [rpm]\"\n      - option \"sfc_te [Nm]\"\n      - option \"sfc_g_kwh [g/kWh]\"\n    - generic: 走行点のY軸\n    - combobox \"走行点のY軸チャンネル\":\n      - option \"選択してください\"\n      - option \"Engine_Speed [rpm]\"\n      - option \"Engine_Torque [Nm]\" [selected]\n      - option \"Coolant_Temp [degC]\"\n      - option \"sfc_ne [rpm]\"\n      - option \"sfc_te [Nm]\"\n      - option \"sfc_g_kwh [g/kWh]\"\n    - generic \"背景マップ・表示設定\"\n    - option \"基準ログのSFC列\"\n    - option \"別のマップCSV\" [selected]\n    - option \"自動判別\"\n    - option \"行列（先頭行X・先頭列Y）\"\n    - option \"3列（X・Y・燃費率）\" [selected]\n    - option \"塗りつぶし\"\n    - option \"等高線のみ\"\n    - option \"塗りつぶし＋等高線\" [selected]\n    - status: 練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。\n    - paragraph: 全体 0 – 120 s · 時間合わせ後（動作点・散布図に適用）\n    - button \"拡大操作 OFF\"\n    - button \"全体に戻す\"\n    - generic: ONでホイール・ピンチ拡大、ドラッグ移動\n    - img \"XY・燃費率マップ\"\n    - status: \"デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点\"\n    - 'status \"カーソル 41.1 s · デモ_燃費率マップ付き走行ログ.csv: 元 41.1 s / 表示 41.1 s（最寄りの観測点。補間なし）\"'\n    - paragraph: 波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。\n  - text: 全体ナビゲーター\n  - generic: Engine_Speed\n  - generic: 0–120 s\n  - text: 開始\n  - spinbutton \"表示区間の開始秒\": \"0\"\n  - text: s\n  - text: 終了\n  - spinbutton \"表示区間の終了秒\": \"120\"\n  - text: s\n  - button \"表示\"\n  - button \"全体\"\n- text:            "
+  },
+  {
+    "sequence": 14,
+    "command": "click button 拡大操作 OFF; DOM; screenshot",
+    "observed": {
+      "chart": {
+        "bottom": 1031.6000366210938,
+        "height": 440,
+        "left": 277,
+        "right": 940.7999877929688,
+        "top": 591.6000366210938,
+        "width": 663.7999877929688,
+        "x": 277,
+        "y": 591.6000366210938
+      },
+      "scroll": 0,
+      "zoom": "拡大操作 ON"
+    }
+  },
+  {
+    "sequence": 15,
+    "command": "CDP wheel at600,680 deltaY-300; DOM; screenshot",
+    "observed": {
+      "observation": {
+        "chart": {
+          "bottom": 1031.6000366210938,
+          "height": 440,
+          "left": 277,
+          "right": 940.7999877929688,
+          "top": 591.6000366210938,
+          "width": 663.7999877929688,
+          "x": 277,
+          "y": 591.6000366210938
+        },
+        "marker": [
+          "background-color: rgb(230, 76, 76); left: 149.106px; top: 315.144px; display: none;"
+        ],
+        "zoom": "拡大操作 ON"
+      },
+      "logs": []
+    }
+  },
+  {
+    "sequence": 16,
+    "command": "read ECharts dataZoom via CDP; screenshot",
+    "observed": {
+      "result": {
+        "type": "string",
+        "value": "{\"zoom\":[{\"start\":7.378472222222221,\"end\":90.71180555555556,\"startValue\":1141,\"endValue\":5558,\"disabled\":false},{\"start\":13.995726495726487,\"end\":97.32905982905983,\"startValue\":33.7,\"endValue\":234.6,\"disabled\":false}],\"size\":[664,440]}"
+      }
+    }
+  },
+  {
+    "sequence": 17,
+    "command": "drag map600,680 to650,700; DOM; ECharts ranges",
+    "observed": {
+      "result": {
+        "type": "string",
+        "value": "[{\"start\":0.14467592592592438,\"end\":83.47800925925927,\"startValue\":758,\"endValue\":5174},{\"start\":16.66666666666666,\"end\":100,\"startValue\":40.2,\"endValue\":241}]"
+      }
+    }
+  },
+  {
+    "sequence": 18,
+    "command": "click 全体に戻す; DOM; ranges",
+    "observed": {
+      "result": {
+        "type": "string",
+        "value": "{\"label\":\"拡大操作 OFF\",\"zoom\":[{\"start\":0,\"end\":100,\"disabled\":true},{\"start\":0,\"end\":100,\"disabled\":true}],\"scroll\":0}"
+      }
+    }
+  },
+  {
+    "sequence": 19,
+    "command": "OFF wheel timed out; observe resulting state",
+    "observed": {
+      "state": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThere has been no change in the accessibility tree.\nThe focused UI element is 406 button 全体に戻す, ID: xy-map-reset-view",
+      "values": {
+        "result": {
+          "type": "string",
+          "value": "{\"zoom\":[{\"start\":0,\"end\":100,\"disabled\":true},{\"start\":0,\"end\":100,\"disabled\":true}],\"scrolls\":[{\"class\":\"compare-body xy-layout-active xy-layout-stacked xy-layout-expanded\",\"top\":464},{\"class\":\"xy-workspace xy-expanded\",\"top\":0},{\"class\":\"xy-workspace-scroll\",\"top\":0}]}"
+        }
+      },
+      "logs": []
+    }
+  },
+  {
+    "sequence": 20,
+    "command": "viewport1600x900; close XY; DOM screenshot",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 362-409, 411, 415\n+\t\t\t\t\t415 text \n+\t\t\t\t416 text \n~\t\t32 splitter Description: ファイルとチャンネルの幅, Value: 300, ID: sidebar-resize-handle\n+\t\t\t417 text 1 ファイル · 2 チャンネル\n~\t\t\t43 button (expanded) 比較パネル, ID: compare-panel-toggle, Secondary Actions: Collapse\n~\t\t\t44 button (collapsed) XY・マップ, ID: xy-panel-toggle, Secondary Actions: Expand\n+\t\t418 text 時間軸はすべて連動\n+\t\t419 container Description: 比較の準備と結果, ID: compare-panel\n+\t\t\t420 text 比較パネル\n+\t\t\t421 button Description: 比較パネルを閉じる, ID: workspace-panel-close\n+\t\t\t422 container 比較パネル\n+\t\t\t\t423 button 準備\n+\t\t\t\t424 button 時間合わせ\n+\t\t\t\t425 button 比較結果\n+\t\t\t\t426 button メモ\n+\t\t\t427 container compare-panel-content\n+\t\t\t\t428 text 01\n+\t\t\t\t429 heading 基準と比較ファイル, Value: 2\n+\t\t\t\t\t430 text 基準と比較ファイル\n+\t\t\t\t431 text ファイル名は保持したまま、作業用の名前を付けられます。\n+\t\t\t\t432 container\n+\t\t\t\t\t433 text 基準 · デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t\t434 text field (settable) Description: デモ_燃費率マップ付き走行ログ.csvの表示名, Value: デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t435 container\n+\t\t\t\t\t436 text 基準ファイル\n+\t\t\t\t\t437 pop up button (collapsed, settable) 基準ファイル, Value: デモ_燃費率マップ付き走行ログ.csv, ID: compare-main, Secondary Actions: Expand\n+\t\t\t\t\t\t438 menu\n+\t\t\t\t\t\t\t439 (selected) デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t440 text 02\n+\t\t\t\t441 heading チャンネル対応, Value: 2\n+\t\t\t\t\t442 text チャンネル対応\n+\t\t\t\t443 text 比較用のファイルをもう1つ追加してください。\nThe focused UI element is 44 button (collapsed) XY・マップ, ID: xy-panel-toggle, Secondary Actions: Expand"
+  },
+  {
+    "sequence": 21,
+    "command": "click 区間を選択・解析; DOM screenshot",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 413-414, 419-443\n~\t\t262 checkbox 区間選択をキャンセル, Help: ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します, Value: 1, ID: compare-select-range\n~\t\t54 button  キャンセル, ID: zoom-mode-btn\n+\t\t\t419 text \n+\t\t\t420 text キャンセル\n+\t\t421 container\n+\t\t\t422 text ドラッグで区間を選択。Escでキャンセルできます。\n+\t\t\t423 container Description: 比較の準備と結果, ID: compare-panel\n+\t\t\t\t424 text 比較パネル\n+\t\t\t\t425 button Description: 比較パネルを閉じる, ID: workspace-panel-close\n+\t\t\t\t426 container 比較パネル\n+\t\t\t\t\t427 button 準備\n+\t\t\t\t\t428 button 時間合わせ\n+\t\t\t\t\t429 button 比較結果\n+\t\t\t\t\t430 button メモ\n+\t\t\t\t431 container compare-panel-content\n+\t\t\t\t\t432 text 01\n+\t\t\t\t\t433 heading 基準と比較ファイル, Value: 2\n+\t\t\t\t\t\t434 text 基準と比較ファイル\n+\t\t\t\t\t435 text ファイル名は保持したまま、作業用の名前を付けられます。\n+\t\t\t\t\t436 container\n+\t\t\t\t\t\t437 text 基準 · デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t\t\t438 text field (settable) Description: デモ_燃費率マップ付き走行ログ.csvの表示名, Value: デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t\t439 container\n+\t\t\t\t\t\t440 text 基準ファイル\n+\t\t\t\t\t\t441 pop up button (collapsed, settable) 基準ファイル, Value: デモ_燃費率マップ付き走行ログ.csv, ID: compare-main, Secondary Actions: Expand\n+\t\t\t\t\t\t\t442 menu\n+\t\t\t\t\t\t\t\t443 (selected) デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t\t444 text 02\n+\t\t\t\t\t445 heading チャンネル対応, Value: 2\n+\t\t\t\t\t\t446 text チャンネル対応\n+\t\t\t\t\t447 text 比較用のファイルをもう1つ追加してください。\n+\t\t448 text Engine_Speed\n+\t\t449 text 0–120 s\nThe focused UI element is 262 checkbox 区間選択をキャンセル, Help: ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します, Value: 1, ID: compare-select-range"
+  },
+  {
+    "sequence": 22,
+    "command": "drag waveform500,420 to650,450; DOM",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 264, 419-420, 422\n~\t\t262 checkbox 区間を選択・解析, Help: ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します, Value: 0, ID: compare-select-range\n+\t\t450 container compare-selection\n+\t\t\t451 text 選択区間 17.9381 – 41.134 s\n+\t\t\t452 text 選択しただけでは解析しません\n+\t\t\t453 button 拡大\n+\t\t\t454 button 区間比較\n+\t\t\t455 button 統計\n+\t\t\t456 button メモ, Help: 選択区間に説明を付けて記録します\n+\t\t\t457 button 画像コピー\n+\t\t\t458 button 区間選択を解除\n~\t\t\t47 pop up button (collapsed, settable) Description: 比較・統計・XY・CSV・メモの対象区間, Value: 選択区間, ID: analysis-scope, Secondary Actions: Expand\n~\t\t\t\t\t50 (selected) 選択区間\n~\t\t\t\t\t51 全体\n+\t\t459 text 選択区間 17.938144 – 41.134021 s · 時間合わせ後\n~\t\t54 button  ボックスズーム, ID: zoom-mode-btn\n+\t\t\t460 text \n+\t\t\t461 text ボックスズーム\n~\t\t57 button Description: 元に戻す, ID: undo-btn\n+\t\t\t462 container chart\n+\t\t\t\t463 text t = 41.100 s\n+\t\t\t\t464 container\n+\t\t\t\t\t465 text 1496.284 26.924\nThe focused UI element is 262 checkbox 区間を選択・解析, Help: ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します, Value: 0, ID: compare-select-range"
+  },
+  {
+    "sequence": 23,
+    "command": "click selection 統計; DOM",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 210, 417-418, 448-449, 459-460, 462-465\n+\t\t\t462 text 6 / 6 件 · 表示中 2\n+\t\t\t463 text 1 ファイル · 2 チャンネル\n+\t\t464 text 時間軸はすべて連動\n+\t\t465 text 選択区間 17.938144 – 41.134021 s · 時間合わせ後\n~\t\t53 button (expanded) 調べる, Help: 元データ・品質診断・統計を確認します, ID: inspector-open, Secondary Actions: Collapse\n+\t\t\t466 text \n+\t\t467 container Description: 調べる：元データ・品質・統計, ID: data-inspector\n+\t\t\t468 tab group 確認する内容\n+\t\t\t\t469 tab (selectable, settable, boolean) 元データ, Value: 0, ID: inspector-tab-data\n+\t\t\t\t470 tab (selectable, settable, boolean) 品質診断, Value: 0, ID: inspector-tab-quality\n+\t\t\t\t471 tab (selected, settable, boolean) 統計, Value: 1, ID: inspector-tab-stats\n+\t\t\t472 button 更新, ID: inspector-refresh\n+\t\t\t473 button Description: 調べるパネルを閉じる, ID: inspector-close\n+\t\t\t474 text 選択区間 17.938144 – 41.134021 s · 時間合わせ後\n+\t\t\t475 container Description: 統計, ID: inspector-content\n+\t\t\t\t476 container inspector-statistics\n+\t\t\t\t\t477 text 表示中の全ファイル・チャンネルを集計します。数値は有効サンプルの等重み統計です。元データ・品質診断のファイル選択とは独立しています。\n+\t\t\t\t\t478 container\n+\t\t\t\t\t\t479 text 解析対象の統計　 17.94 – 41.13 s\n+\t\t\t\t\t480 table\n+\t\t\t\t\t\t481 row\n+\t\t\t\t\t\t\t482 cell\n+\t\t\t\t\t\t\t\t483 text チャンネル\n+\t\t\t\t\t\t\t484 cell\n+\t\t\t\t\t\t\t\t485 text min\n+\t\t\t\t\t\t\t486 cell\n+\t\t\t\t\t\t\t\t487 text max\n+\t\t\t\t\t\t\t488 cell\n+\t\t\t\t\t\t\t\t489 text mean\n+\t\t\t\t\t\t\t490 cell\n+\t\t\t\t\t\t\t\t491 text σ\n+\t\t\t\t\t\t\t492 cell\n+\t\t\t\t\t\t\t\t493 text n\n+\t\t\t\t\t\t494 row\n+\t\t\t\t\t\t\t495 cell\n+\t\t\t\t\t\t\t\t496 text Engine_Speed [デモ_燃費率マップ付き走行ログ.csv]\n+\t\t\t\t\t\t\t497 cell\n+\t\t\t\t\t\t\t\t498 text 1496.284\n+\t\t\t\t\t\t\t499 cell\n+\t\t\t\t\t\t\t\t500 text 3276.513\n+\t\t\t\t\t\t\t501 cell\n+\t\t\t\t\t\t\t\t502 text 2190.303\n+\t\t\t\t\t\t\t503 cell\n+\t\t\t\t\t\t\t\t504 text 640.674\n+\t\t\t\t\t\t\t505 cell\n+\t\t\t\t\t\t\t\t506 text 232\n+\t\t\t\t\t\t507 row\n+\t\t\t\t\t\t\t508 cell\n+\t\t\t\t\t\t\t\t509 text Engine_Torque [デモ_燃費率マップ付き走行ログ.csv]\n+\t\t\t\t\t\t\t510 cell\n+\t\t\t\t\t\t\t\t511 text 24.801\n+\t\t\t\t\t\t\t512 cell\n+\t\t\t\t\t\t\t\t513 text 85.857\n+\t\t\t\t\t\t\t514 cell\n+\t\t\t\t\t\t\t\t515 text 60.207\n+\t\t\t\t\t\t\t516 cell\n+\t\t\t\t\t\t\t\t517 text 24.046\n+\t\t\t\t\t\t\t518 cell\n+\t\t\t\t\t\t\t\t519 text 232\n+\t\t520 text Engine_Speed\n+\t\t521 text 0–120 s\nThe focused UI element is 455 button 統計"
+  },
+  {
+    "sequence": 24,
+    "command": "click 元データ; DOM",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\n0 AXWebArea CSV Chart Viewer, URL: 127.0.0.1:8765/?preview=1\n\t1 container\n\t\t2 container Description: ファイルとチャンネル, ID: workspace-sidebar\n\t\t\t3 heading ファイルとチャンネル, Value: 2\n\t\t\t\t4 text ファイルとチャンネル\n\t\t\t5 button Description: ファイルとチャンネルを閉じる, ID: workspace-sidebar-close\n\t\t\t284 container\n\t\t\t\t285 button (expanded) ファイル , Secondary Actions: Collapse\n\t\t\t\t\t286 text ファイル\n\t\t\t\t\t415 text \n\t\t\t\t288 button 開く, ID: browse-files-btn\n\t\t\t\t289 checkbox (settable, integer) Description: 読込前に設定を確認, Value: 0, ID: import-review-before-load\n\t\t\t\t290 text 既定の設定ですぐに読み込みます。\n\t\t\t\t291 content list file-list\n\t\t\t\t\t292 container\n\t\t\t\t\t\t293 checkbox Description: デモ_燃費率マップ付き走行ログ.csv：基準ファイル, Help: Main file — 右クリックで色変更, Value: 1\n\t\t\t\t\t\t294 text デモ_燃費率マップ付き走行ログ.csv\n\t\t\t\t\t\t295 text utf-8\n\t\t\t\t\t\t296 button Description: デモ_燃費率マップ付き走行ログ.csvの表示色を変更, Help: 表示色を変更\n\t\t\t\t\t\t297 button Description: デモ_燃費率マップ付き走行ログ.csvの読み込み情報, Help: 読み込み情報\n\t\t\t\t\t\t298 button Description: デモ_燃費率マップ付き走行ログ.csvを外す, Help: ファイルを外す\n\t\t\t\t\t\t299 text 時間\n\t\t\t\t\t\t300 pop up button (collapsed, settable) Description: デモ_燃費率マップ付き走行ログ.csvの時間単位, Help: このファイルのTime列の元単位を指定, Value: s, Secondary Actions: Expand\n\t\t\t\t\t\t\t301 menu\n\t\t\t\t\t\t\t\t302 (selected) s\n\t\t\t\t\t\t\t\t303 ms\n\t\t\t\t\t\t304 text 自動\n\t\t\t\t\t\t305 container デモ_燃費率マップ付き走行ログ.csvの自動復元用保存状態\n\t\t\t\t\t\t\t306 text 開発用・自動保存なし\n\t\t\t\t307 button 作業をすべてクリア, ID: clear-all-btn\n\t\t\t\t308 button (collapsed) 読み込み設定・計算・イベント, Secondary Actions: Expand\n\t\t\t\t\t309 text 読み込み設定・計算・イベント\n\t\t\t17 button (expanded) チャンネル (デモ_燃費率マップ付き走行ログ.csv) , Secondary Actions: Collapse\n\t\t\t\t18 text チャンネル\n\t\t\t\t208 text (デモ_燃費率マップ付き走行ログ.csv)\n\t\t\t\t416 text \n\t\t\t20 text チャンネルを検索\n\t\t\t21 text field (settable) Description: チャンネル検索, ID: column-search\n\t\t\t22 pop up button (collapsed, settable) Description: チャンネルの絞り込み, Value: すべて, ID: compare-channel-filter, Secondary Actions: Expand\n\t\t\t\t23 menu\n\t\t\t\t\t24 (selected) すべて\n\t\t\t\t\t25 表示中\n\t\t\t\t\t26 全ファイル共通\n\t\t\t\t\t27 未対応あり\n\t\t\t\t\t28 お気に入りセット\n\t\t\t29 button 検索別名, Help: 検索用の別名を登録, ID: compare-alias-edit\n\t\t\t462 text 6 / 6 件 · 表示中 2\n\t\t\t98 container column-list\n\t\t\t\t211 checkbox Description: Engine_Speed [rpm], Value: 1\n\t\t\t\t\t212 text Engine_Speed\n\t\t\t\t\t213 text rpm\n\t\t\t\t\t214 button Description: Engine_Speedの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t215 container\n\t\t\t\t\t216 text Y\n\t\t\t\t\t217 stepper (settable) Description: Engine_SpeedのY軸下限, Help: Y-axis minimum\n\t\t\t\t\t218 text ~\n\t\t\t\t\t219 stepper (settable) Description: Engine_SpeedのY軸上限, Help: Y-axis maximum\n\t\t\t\t220 container\n\t\t\t\t\t221 text 太さ\n\t\t\t\t\t222 slider (settable, integer) Description: Engine_Speedの線の太さ, Value: 1\n\t\t\t\t\t223 text 1.0\n\t\t\t\t\t224 button ⟲, Help: 一括の太さに戻す\n\t\t\t\t225 checkbox Description: Engine_Torque [Nm], Value: 1\n\t\t\t\t\t226 text Engine_Torque\n\t\t\t\t\t227 text Nm\n\t\t\t\t\t228 button Description: Engine_Torqueの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t229 container\n\t\t\t\t\t230 text Y\n\t\t\t\t\t231 stepper (settable) Description: Engine_TorqueのY軸下限, Help: Y-axis minimum\n\t\t\t\t\t232 text ~\n\t\t\t\t\t233 stepper (settable) Description: Engine_TorqueのY軸上限, Help: Y-axis maximum\n\t\t\t\t234 container\n\t\t\t\t\t235 text 太さ\n\t\t\t\t\t236 slider (settable, integer) Description: Engine_Torqueの線の太さ, Value: 1\n\t\t\t\t\t237 text 1.0\n\t\t\t\t\t238 button ⟲, Help: 一括の太さに戻す\n\t\t\t\t239 checkbox Description: Coolant_Temp [degC], Value: 0\n\t\t\t\t\t240 text Coolant_Temp\n\t\t\t\t\t241 text degC\n\t\t\t\t\t242 button Description: Coolant_Tempの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t243 checkbox Description: sfc_ne [rpm], Value: 0\n\t\t\t\t\t244 text sfc_ne\n\t\t\t\t\t245 text rpm\n\t\t\t\t\t246 button Description: sfc_neの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t247 checkbox Description: sfc_te [Nm], Value: 0\n\t\t\t\t\t248 text sfc_te\n\t\t\t\t\t249 text Nm\n\t\t\t\t\t250 button Description: sfc_teの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t251 checkbox Description: sfc_g_kwh [g/kWh], Value: 0\n\t\t\t\t\t252 text sfc_g_kwh\n\t\t\t\t\t253 text g/kWh\n\t\t\t\t\t254 button Description: sfc_g_kwhの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t32 splitter Description: ファイルとチャンネルの幅, Value: 300, ID: sidebar-resize-handle\n\t\t33 container Description: 開発用プレビュー, ID: dev-preview-panel\n\t\t\t34 text 開発用プレビュー\n\t\t\t35 button (disabled) デモを読み込む, ID: dev-preview-demo\n\t\t\t36 text この画面の作業は自動保存しません。デモは架空データです。\n\t\t\t255 text デモを表示しました。波形カーソル、境界の幅調整、マップの拡大操作を試せます。\n\t\t38 container\n\t\t\t39 button (expanded) ファイル, Help: ファイルとチャンネルの表示を切り替え, ID: workspace-sidebar-toggle, Secondary Actions: Collapse\n\t\t\t40 text CSV CHART VIEWER\n\t\t\t41 heading 比較ワークスペース, Value: 1\n\t\t\t\t42 text 比較ワークスペース\n\t\t\t463 text 1 ファイル · 2 チャンネル\n\t\t\t43 button (expanded) 比較パネル, ID: compare-panel-toggle, Secondary Actions: Collapse\n\t\t\t44 button (collapsed) XY・マップ, ID: xy-panel-toggle, Secondary Actions: Expand\n\t\t257 container 比較の表示方法\n\t\t\t258 checkbox 重ね合わせ, Value: 1\n\t\t\t259 checkbox (disabled) 上下比較, Value: 0\n\t\t\t260 checkbox (disabled) 差分, Value: 0\n\t\t261 checkbox (disabled, settable, integer) Description: 元の時刻で確認, Value: 0, ID: compare-raw\n\t\t262 checkbox 区間を選択・解析, Help: ドラッグで対象区間を選び、区間比較・統計・メモなどを実行します, Value: 0, ID: compare-select-range\n\t\t464 text 時間軸はすべて連動\n\t\t450 container compare-selection\n\t\t\t451 text 選択区間 17.9381 – 41.134 s\n\t\t\t452 text 選択しただけでは解析しません\n\t\t\t453 button 拡大\n\t\t\t454 button 区間比較\n\t\t\t455 button 統計\n\t\t\t456 button メモ, Help: 選択区間に説明を付けて記録します\n\t\t\t457 button 画像コピー\n\t\t\t458 button 区間選択を解除\n\t\t45 container\n\t\t\t46 text 解析対象\n\t\t\t47 pop up button (collapsed, settable) Description: 比較・統計・XY・CSV・メモの対象区間, Value: 選択区間, ID: analysis-scope, Secondary Actions: Expand\n\t\t\t\t48 menu\n\t\t\t\t\t49 表示範囲\n\t\t\t\t\t50 (selected) 選択区間\n\t\t\t\t\t51 全体\n\t\t465 text 選択区間 17.938144 – 41.134021 s · 時間合わせ後\n\t\t52 text 比較・統計・XY・CSV・メモで共通\n\t\t53 button (expanded) 調べる, Help: 元データ・品質診断・統計を確認します, ID: inspector-open, Secondary Actions: Collapse\n\t\t54 button  ボックスズーム, ID: zoom-mode-btn\n\t\t\t466 text \n\t\t\t461 text ボックスズーム\n\t\t55 button リセット, ID: reset-zoom-btn\n\t\t56 button 計測, ID: measure-mode-btn\n\t\t57 button Description: 元に戻す, ID: undo-btn\n\t\t58 button (disabled) Description: やり直す, ID: redo-btn\n\t\t76 container\n\t\t\t77 button (collapsed) 解析ツール ▾, Secondary Actions: Expand\n\t\t\t\t78 text 解析ツール ▾\n\t\t61 pop up button (collapsed) Description: 表示設定, ID: view-menu-btn, Secondary Actions: Expand\n\t\t62 pop up button (collapsed) Description: 保存・再利用, ID: export-menu-btn, Secondary Actions: Expand\n\t\t63 link Description: 操作マニュアル（別タブで開く）, Help: 図解付き操作マニュアルを別タブで開く, Value: 127.0.0.1:8765/manual.html, ID: manual-link\n\t\t64 button Description: テーマ切替（ライト/ダーク）, ID: theme-toggle-btn\n\t\t65 button Description: キーボードショートカット一覧, ID: shortcuts-help-btn\n\t\t421 container\n\t\t\t423 container Description: 比較の準備と結果, ID: compare-panel\n\t\t\t\t424 text 比較パネル\n\t\t\t\t425 button Description: 比較パネルを閉じる, ID: workspace-panel-close\n\t\t\t\t426 container 比較パネル\n\t\t\t\t\t427 button 準備\n\t\t\t\t\t428 button 時間合わせ\n\t\t\t\t\t429 button 比較結果\n\t\t\t\t\t430 button メモ\n\t\t\t\t431 container compare-panel-content\n\t\t\t\t\t432 text 01\n\t\t\t\t\t433 heading 基準と比較ファイル, Value: 2\n\t\t\t\t\t\t434 text 基準と比較ファイル\n\t\t\t\t\t435 text ファイル名は保持したまま、作業用の名前を付けられます。\n\t\t\t\t\t436 container\n\t\t\t\t\t\t437 text 基準 · デモ_燃費率マップ付き走行ログ.csv\n\t\t\t\t\t\t438 text field (settable) Description: デモ_燃費率マップ付き走行ログ.csvの表示名, Value: デモ_燃費率マップ付き走行ログ.csv\n\t\t\t\t\t439 container\n\t\t\t\t\t\t440 text 基準ファイル\n\t\t\t\t\t\t441 pop up button (collapsed, settable) 基準ファイル, Value: デモ_燃費率マップ付き走行ログ.csv, ID: compare-main, Secondary Actions: Expand\n\t\t\t\t\t\t\t442 menu\n\t\t\t\t\t\t\t\t443 (selected) デモ_燃費率マップ付き走行ログ.csv\n\t\t\t\t\t444 text 02\n\t\t\t\t\t445 heading チャンネル対応, Value: 2\n\t\t\t\t\t\t446 text チャンネル対応\n\t\t\t\t\t447 text 比較用のファイルをもう1つ追加してください。\n\t\t467 container Description: 調べる：元データ・品質・統計, ID: data-inspector\n\t\t\t468 tab group 確認する内容\n\t\t\t\t469 tab (selected, settable, boolean) 元データ, Value: 1, ID: inspector-tab-data\n\t\t\t\t470 tab (selectable, settable, boolean) 品質診断, Value: 0, ID: inspector-tab-quality\n\t\t\t\t471 tab (selectable, settable, boolean) 統計, Value: 0, ID: inspector-tab-stats\n\t\t\t522 container\n\t\t\t\t523 text ファイル\n\t\t\t\t524 pop up button (collapsed, settable) Description: 元データ・品質診断のファイル, Value: 1. デモ_燃費率マップ付き走行ログ.csv, ID: inspector-file, Secondary Actions: Expand\n\t\t\t\t\t525 menu\n\t\t\t\t\t\t526 (disabled) ファイルを選択してください\n\t\t\t\t\t\t527 (selected) 1. デモ_燃費率マップ付き走行ログ.csv\n\t\t\t472 button 更新, ID: inspector-refresh\n\t\t\t473 button Description: 調べるパネルを閉じる, ID: inspector-close\n\t\t\t528 text 選択区間 17.938144 – 41.134021 s · 時間合わせ後\n\t\t\t475 container Description: 元データ, ID: inspector-content\n\t\t\t\t529 text 1–100 / 232 サンプル\n\t\t\t\t530 button (disabled) 前, ID: inspector-prev-page\n\t\t\t\t531 container\n\t\t\t\t\t532 text ページ\n\t\t\t\t\t533 stepper (settable, integer) Description: 元データのページ, Value: 1, ID: inspector-page\n\t\t\t\t534 text / 3\n\t\t\t\t535 button 次, ID: inspector-next-page\n\t\t\t\t536 text 元レコードは空行を除く1始まりの番号です（物理行番号ではありません）。元時刻は秒換算済み。表示時刻＝元時刻＋時間補正。値は読込済みの原サンプル／計算列の値で、補間しません。\n\t\t\t\t537 table inspector-sample-table\n\t\t\t\t\t538 row\n\t\t\t\t\t\t539 cell\n\t\t\t\t\t\t\t540 text 元レコード\n\t\t\t\t\t\t541 cell\n\t\t\t\t\t\t\t542 text 元時刻 [s]\n\t\t\t\t\t\t543 cell\n\t\t\t\t\t\t\t544 text 表示時刻 [s]\n\t\t\t\t\t\t545 cell Engine_Speed\n\t\t\t\t\t\t\t546 text Engine_Speed\n\t\t\t\t\t\t\t547 text rpm\n\t\t\t\t\t\t548 cell Engine_Torque\n\t\t\t\t\t\t\t549 text Engine_Torque\n\t\t\t\t\t\t\t550 text Nm\n\t\t\t\t\t551 row\n\t\t\t\t\t\t552 cell\n\t\t\t\t\t\t\t553 button 元レコード183、表示時刻18秒を波形で確認\n\t\t\t\t\t\t554 cell\n\t\t\t\t\t\t\t555 text 18\n\t\t\t\t\t\t556 cell\n\t\t\t\t\t\t\t557 text 18\n\t\t\t\t\t\t558 cell\n\t\t\t\t\t\t\t559 text 3168.028076171875\n\t\t\t\t\t\t560 cell\n\t\t\t\t\t\t\t561 text 82.50399780273438\n\t\t\t\t\t562 row\n\t\t\t\t\t\t563 cell\n\t\t\t\t\t\t\t564 button 元レコード184、表示時刻18.1秒を波形で確認\n\t\t\t\t\t\t565 cell\n\t\t\t\t\t\t\t566 text 18.1\n\t\t\t\t\t\t567 cell\n\t\t\t\t\t\t\t568 text 18.1\n\t\t\t\t\t\t569 cell\n\t\t\t\t\t\t\t570 text 3177.448974609375\n\t\t\t\t\t\t571 cell\n\t\t\t\t\t\t\t572 text 82.50399780273438\n\t\t\t\t\t573 row\n\t\t\t\t\t\t574 cell\n\t\t\t\t\t\t\t575 button 元レコード185、表示時刻18.2秒を波形で確認\n\t\t\t\t\t\t576 cell\n\t\t\t\t\t\t\t577 text 18.2\n\t\t\t\t\t\t578 cell\n\t\t\t\t\t\t\t579 text 18.2\n\t\t\t\t\t\t580 cell\n\t\t\t\t\t\t\t581 text 3186.5458984375\n\t\t\t\t\t\t582 cell\n\t\t\t\t\t\t\t583 text 82.51100158691406\n\t\t\t\t\t584 row\n\t\t\t\t\t\t585 cell\n\t\t\t\t\t\t\t586 button 元レコード186、表示時刻18.3秒を波形で確認\n\t\t\t\t\t\t587 cell\n\t\t\t\t\t\t\t588 text 18.3\n\t\t\t\t\t\t589 cell\n\t\t\t\t\t\t\t590 text 18.3\n\t\t\t\t\t\t591 cell\n\t\t\t\t\t\t\t592 text 3195.300048828125\n\t\t\t\t\t\t593 cell\n\t\t\t\t\t\t\t594 text 82.52400207519531\n\t\t\t\t\t595 row\n\t\t\t\t\t\t596 cell\n\t\t\t\t\t\t\t597 button 元レコード187、表示時刻18.4秒を波形で確認\n\t\t\t\t\t\t598 cell\n\t\t\t\t\t\t\t599 text 18.4\n\t\t\t\t\t\t600 cell\n\t\t\t\t\t\t\t601 text 18.4\n\t\t\t\t\t\t602 cell\n\t\t\t\t\t\t\t603 text 3203.695068359375\n\t\t\t\t\t\t604 cell\n\t\t\t\t\t\t\t605 text 82.54299926757812\n\t\t\t\t\t606 row\n\t\t\t\t\t\t607 cell\n\t\t\t\t\t\t\t608 button 元レコード188、表示時刻18.5秒を波形で確認\n\t\t\t\t\t\t609 cell\n\t\t\t\t\t\t\t610 text 18.5\n\t\t\t\t\t\t611 cell\n\t\t\t\t\t\t\t612 text 18.5\n\t\t\t\t\t\t613 cell\n\t\t\t\t\t\t\t614 text 3211.7119140625\n\t\t\t\t\t\t615 cell\n\t\t\t\t\t\t\t616 text 82.56800079345703\n\t\t\t\t\t617 row\n\t\t\t\t\t\t618 cell\n\t\t\t\t\t\t\t619 button 元レコード189、表示時刻18.6秒を波形で確認\n\t\t\t\t\t\t620 cell\n\t\t\t\t\t\t\t621 text 18.6\n\t\t\t\t\t\t622 cell\n\t\t\t\t\t\t\t623 text 18.6\n\t\t\t\t\t\t624 cell\n\t\t\t\t\t\t\t625 text 3219.3359375\n\t\t\t\t\t\t626 cell\n\t\t\t\t\t\t\t627 text 82.5979995727539\n\t\t\t\t\t628 row\n\t\t\t\t\t\t629 cell\n\t\t\t\t\t\t\t630 button 元レコード190、表示時刻18.7秒を波形で確認\n\t\t\t\t\t\t631 cell\n\t\t\t\t\t\t\t632 text 18.7\n\t\t\t\t\t\t633 cell\n\t\t\t\t\t\t\t634 text 18.7\n\t\t\t\t\t\t635 cell\n\t\t\t\t\t\t\t636 text 3226.549072265625\n\t\t\t\t\t\t637 cell\n\t\t\t\t\t\t\t638 text 82.63300323486328\n\t\t\t\t\t639 row\n\t\t\t\t\t\t640 cell\n\t\t\t\t\t\t\t641 button 元レコード191、表示時刻18.8秒を波形で確認\n\t\t\t\t\t\t642 cell\n\t\t\t\t\t\t\t643 text 18.8\n\t\t\t\t\t\t644 cell\n\t\t\t\t\t\t\t645 text 18.8\n\t\t\t\t\t\t646 cell\n\t\t\t\t\t\t\t647 text 3233.3369140625\n\t\t\t\t\t\t648 cell\n\t\t\t\t\t\t\t649 text 82.67400360107422\n\t\t\t\t\t650 row\n\t\t\t\t\t\t651 cell\n\t\t\t\t\t\t\t652 button 元レコード192、表示時刻18.9秒を波形で確認\n\t\t\t\t\t\t653 cell\n\t\t\t\t\t\t\t654 text 18.9\n\t\t\t\t\t\t655 cell\n\t\t\t\t\t\t\t656 text 18.9\n\t\t\t\t\t\t657 cell\n\t\t\t\t\t\t\t658 text 3239.68310546875\n\t\t\t\t\t\t659 cell\n\t\t\t\t\t\t\t660 text 82.72000122070312\n\t\t\t\t\t661 row\n\t\t\t\t\t\t662 cell\n\t\t\t\t\t\t\t663 button 元レコード193、表示時刻19秒を波形で確認\n\t\t\t\t\t\t664 cell\n\t\t\t\t\t\t\t665 text 19\n\t\t\t\t\t\t666 cell\n\t\t\t\t\t\t\t667 text 19\n\t\t\t\t\t\t668 cell\n\t\t\t\t\t\t\t669 text 3245.572998046875\n\t\t\t\t\t\t670 cell\n\t\t\t\t\t\t\t671 text 82.7699966430664\n\t\t\t\t\t672 row\n\t\t\t\t\t\t673 cell\n\t\t\t\t\t\t\t674 button 元レコード194、表示時刻19.1秒を波形で確認\n\t\t\t\t\t\t675 cell\n\t\t\t\t\t\t\t676 text 19.1\n\t\t\t\t\t\t677 cell\n\t\t\t\t\t\t\t678 text 19.1\n\t\t\t\t\t\t679 cell\n\t\t\t\t\t\t\t680 text 3250.991943359375\n\t\t\t\t\t\t681 cell\n\t\t\t\t\t\t\t682 text 82.82499694824219\n\t\t\t\t\t683 row\n\t\t\t\t\t\t684 cell\n\t\t\t\t\t\t\t685 button 元レコード195、表示時刻19.2秒を波形で確認\n\t\t\t\t\t\t686 cell\n\t\t\t\t\t\t\t687 text 19.2\n\t\t\t\t\t\t688 cell\n\t\t\t\t\t\t\t689 text 19.2\n\t\t\t\t\t\t690 cell\n\t\t\t\t\t\t\t691 text 3255.926025390625\n\t\t\t\t\t\t692 cell\n\t\t\t\t\t\t\t693 text 82.88400268554688\n\t\t\t\t\t694 row\n\t\t\t\t\t\t695 cell\n\t\t\t\t\t\t\t696 button 元レコード196、表示時刻19.3秒を波形で確認\n\t\t\t\t\t\t697 cell\n\t\t\t\t\t\t\t698 text 19.3\n\t\t\t\t\t\t699 cell\n\t\t\t\t\t\t\t700 text 19.3\n\t\t\t\t\t\t701 cell\n\t\t\t\t\t\t\t702 text 3260.363037109375\n\t\t\t\t\t\t703 cell\n\t\t\t\t\t\t\t704 text 82.9469985961914\n\t\t\t\t\t705 row\n\t\t\t\t\t\t706 cell\n\t\t\t\t\t\t\t707 button 元レコード197、表示時刻19.4秒を波形で確認\n\t\t\t\t\t\t708 cell\n\t\t\t\t\t\t\t709 text 19.4\n\t\t\t\t\t\t710 cell\n\t\t\t\t\t\t\t711 text 19.4\n\t\t\t\t\t\t712 cell\n\t\t\t\t\t\t\t713 text 3264.2880859375\n\t\t\t\t\t\t714 cell\n\t\t\t\t\t\t\t715 text 83.01499938964844\n\t\t\t\t\t716 row\n\t\t\t\t\t\t717 cell\n\t\t\t\t\t\t\t718 button 元レコード198、表示時刻19.5秒を波形で確認\n\t\t\t\t\t\t719 cell\n\t\t\t\t\t\t\t720 text 19.5\n\t\t\t\t\t\t721 cell\n\t\t\t\t\t\t\t722 text 19.5\n\t\t\t\t\t\t723 cell\n\t\t\t\t\t\t\t724 text 3267.68994140625\n\t\t\t\t\t\t725 cell\n\t\t\t\t\t\t\t726 text 83.08599853515625\n\t\t\t\t\t727 row\n\t\t\t\t\t\t728 cell\n\t\t\t\t\t\t\t729 button 元レコード199、表示時刻19.6秒を波形で確認\n\t\t\t\t\t\t730 cell\n\t\t\t\t\t\t\t731 text 19.6\n\t\t\t\t\t\t732 cell\n\t\t\t\t\t\t\t733 text 19.6\n\t\t\t\t\t\t734 cell\n\t\t\t\t\t\t\t735 text 3270.55810546875\n\t\t\t\t\t\t736 cell\n\t\t\t\t\t\t\t737 text 83.16000366210938\n\t\t\t\t\t738 row\n\t\t\t\t\t\t739 cell\n\t\t\t\t\t\t\t740 button 元レコード200、表示時刻19.7秒を波形で確認\n\t\t\t\t\t\t741 cell\n\t\t\t\t\t\t\t742 text 19.7\n\t\t\t\t\t\t743 cell\n\t\t\t\t\t\t\t744 text 19.7\n\t\t\t\t\t\t745 cell\n\t\t\t\t\t\t\t746 text 3272.8798828125\n\t\t\t\t\t\t747 cell\n\t\t\t\t\t\t\t748 text 83.23699951171875\n\t\t\t\t\t749 row\n\t\t\t\t\t\t750 cell\n\t\t\t\t\t\t\t751 button 元レコード201、表示時刻19.8秒を波形で確認\n\t\t\t\t\t\t752 cell\n\t\t\t\t\t\t\t753 text 19.8\n\t\t\t\t\t\t754 cell\n\t\t\t\t\t\t\t755 text 19.8\n\t\t\t\t\t\t756 cell\n\t\t\t\t\t\t\t757 text 3274.64599609375\n\t\t\t\t\t\t758 cell\n\t\t\t\t\t\t\t759 text 83.31800079345703\n\t\t\t\t\t760 row\n\t\t\t\t\t\t761 cell\n\t\t\t\t\t\t\t762 button 元レコード202、表示時刻19.9秒を波形で確認\n\t\t\t\t\t\t763 cell\n\t\t\t\t\t\t\t764 text 19.9\n\t\t\t\t\t\t765 cell\n\t\t\t\t\t\t\t766 text 19.9\n\t\t\t\t\t\t767 cell\n\t\t\t\t\t\t\t768 text 3275.845947265625\n\t\t\t\t\t\t769 cell\n\t\t\t\t\t\t\t770 text 83.4010009765625\n\t\t\t\t\t771 row\n\t\t\t\t\t\t772 cell\n\t\t\t\t\t\t\t773 button 元レコード203、表示時刻20秒を波形で確認\n\t\t\t\t\t\t774 cell\n\t\t\t\t\t\t\t775 text 20\n\t\t\t\t\t\t776 cell\n\t\t\t\t\t\t\t777 text 20\n\t\t\t\t\t\t778 cell\n\t\t\t\t\t\t\t779 text 3276.470947265625\n\t\t\t\t\t\t780 cell\n\t\t\t\t\t\t\t781 text 83.48600006103516\n\t\t\t\t\t782 row\n\t\t\t\t\t\t783 cell\n\t\t\t\t\t\t\t784 button 元レコード204、表示時刻20.1秒を波形で確認\n\t\t\t\t\t\t785 cell\n\t\t\t\t\t\t\t786 text 20.1\n\t\t\t\t\t\t787 cell\n\t\t\t\t\t\t\t788 text 20.1\n\t\t\t\t\t\t789 cell\n\t\t\t\t\t\t\t790 text 3276.512939453125\n\t\t\t\t\t\t791 cell\n\t\t\t\t\t\t\t792 text 83.572998046875\n\t\t\t\t\t793 row\n\t\t\t\t\t\t794 cell\n\t\t\t\t\t\t\t795 button 元レコード205、表示時刻20.2秒を波形で確認\n\t\t\t\t\t\t796 cell\n\t\t\t\t\t\t\t797 text 20.2\n\t\t\t\t\t\t798 cell\n\t\t\t\t\t\t\t799 text 20.2\n\t\t\t\t\t\t800 cell\n\t\t\t\t\t\t\t801 text 3275.964111328125\n\t\t\t\t\t\t802 cell\n\t\t\t\t\t\t\t803 text 83.66300201416016\n\t\t\t\t\t804 row\n\t\t\t\t\t\t805 cell\n\t\t\t\t\t\t\t806 button 元レコード206、表示時刻20.3秒を波形で確認\n\t\t\t\t\t\t807 cell\n\t\t\t\t\t\t\t808 text 20.3\n\t\t\t\t\t\t809 cell\n\t\t\t\t\t\t\t810 text 20.3\n\t\t\t\t\t\t811 cell\n\t\t\t\t\t\t\t812 text 3274.81689453125\n\t\t\t\t\t\t813 cell\n\t\t\t\t\t\t\t814 text 83.75399780273438\n\t\t\t\t\t815 row\n\t\t\t\t\t\t816 cell\n\t\t\t\t\t\t\t817 button 元レコード207、表示時刻20.4秒を波形で確認\n\t\t\t\t\t\t818 cell\n\t\t\t\t\t\t\t819 text 20.4\n\t\t\t\t\t\t820 cell\n\t\t\t\t\t\t\t821 text 20.4\n\t\t\t\t\t\t822 cell\n\t\t\t\t\t\t\t823 text 3273.06689453125\n\t\t\t\t\t\t824 cell\n\t\t\t\t\t\t\t825 text 83.84600067138672\n\t\t\t\t\t826 row\n\t\t\t\t\t\t827 cell\n\t\t\t\t\t\t\t828 button 元レコード208、表示時刻20.5秒を波形で確認\n\t\t\t\t\t\t829 cell\n\t\t\t\t\t\t\t830 text 20.5\n\t\t\t\t\t\t831 cell\n\t\t\t\t\t\t\t832 text 20.5\n\t\t\t\t\t\t833 cell\n\t\t\t\t\t\t\t834 text 3270.7060546875\n\t\t\t\t\t\t835 cell\n\t\t\t\t\t\t\t836 text 83.93900299072266\n\t\t\t\t\t837 row\n\t\t\t\t\t\t838 cell\n\t\t\t\t\t\t\t839 button 元レコード209、表示時刻20.6秒を波形で確認\n\t\t\t\t\t\t840 cell\n\t\t\t\t\t\t\t841 text 20.6\n\t\t\t\t\t\t842 cell\n\t\t\t\t\t\t\t843 text 20.6\n\t\t\t\t\t\t844 cell\n\t\t\t\t\t\t\t845 text 3267.73095703125\n\t\t\t\t\t\t846 cell\n\t\t\t\t\t\t\t847 text 84.03399658203125\n\t\t\t\t\t848 row\n\t\t\t\t\t\t849 cell\n\t\t\t\t\t\t\t850 button 元レコード210、表示時刻20.7秒を波形で確認\n\t\t\t\t\t\t851 cell\n\t\t\t\t\t\t\t852 text 20.7\n\t\t\t\t\t\t853 cell\n\t\t\t\t\t\t\t854 text 20.7\n\t\t\t\t\t\t855 cell\n\t\t\t\t\t\t\t856 text 3264.137939453125\n\t\t\t\t\t\t857 cell\n\t\t\t\t\t\t\t858 text 84.12799835205078\n\t\t\t\t\t859 row\n\t\t\t\t\t\t860 cell\n\t\t\t\t\t\t\t861 button 元レコード211、表示時刻20.8秒を波形で確認\n\t\t\t\t\t\t862 cell\n\t\t\t\t\t\t\t863 text 20.8\n\t\t\t\t\t\t864 cell\n\t\t\t\t\t\t\t865 text 20.8\n\t\t\t\t\t\t866 cell\n\t\t\t\t\t\t\t867 text 3259.922119140625\n\t\t\t\t\t\t868 cell\n\t\t\t\t\t\t\t869 text 84.2229995727539\n\t\t\t\t\t870 row\n\t\t\t\t\t\t871 cell\n\t\t\t\t\t\t\t872 button 元レコード212、表示時刻20.9秒を波形で確認\n\t\t\t\t\t\t873 cell\n\t\t\t\t\t\t\t874 text 20.9\n\t\t\t\t\t\t875 cell\n\t\t\t\t\t\t\t876 text 20.9\n\t\t\t\t\t\t877 cell\n\t\t\t\t\t\t\t878 text 3255.0830078125\n\t\t\t\t\t\t879 cell\n\t\t\t\t\t\t\t880 text 84.31800079345703\n\t\t\t\t\t881 row\n\t\t\t\t\t\t882 cell\n\t\t\t\t\t\t\t883 button 元レコード213、表示時刻21秒を波形で確認\n\t\t\t\t\t\t884 cell\n\t\t\t\t\t\t\t885 text 21\n\t\t\t\t\t\t886 cell\n\t\t\t\t\t\t\t887 text 21\n\t\t\t\t\t\t888 cell\n\t\t\t\t\t\t\t889 text 3249.615966796875\n\t\t\t\t\t\t890 cell\n\t\t\t\t\t\t\t891 text 84.41300201416016\n\t\t\t\t\t892 row\n\t\t\t\t\t\t893 cell\n\t\t\t\t\t\t\t894 button 元レコード214、表示時刻21.1秒を波形で確認\n\t\t\t\t\t\t895 cell\n\t\t\t\t\t\t\t896 text 21.1\n\t\t\t\t\t\t897 cell\n\t\t\t\t\t\t\t898 text 21.1\n\t\t\t\t\t\t899 cell\n\t\t\t\t\t\t\t900 text 3243.52294921875\n\t\t\t\t\t\t901 cell\n\t\t\t\t\t\t\t902 text 84.50700378417969\n\t\t\t\t\t903 row\n\t\t\t\t\t\t904 cell\n\t\t\t\t\t\t\t905 button 元レコード215、表示時刻21.2秒を波形で確認\n\t\t\t\t\t\t906 cell\n\t\t\t\t\t\t\t907 text 21.2\n\t\t\t\t\t\t908 cell\n\t\t\t\t\t\t\t909 text 21.2\n\t\t\t\t\t\t910 cell\n\t\t\t\t\t\t\t911 text 3236.802001953125\n\t\t\t\t\t\t912 cell\n\t\t\t\t\t\t\t913 text 84.5999984741211\n\t\t\t\t\t914 row\n\t\t\t\t\t\t915 cell\n\t\t\t\t\t\t\t916 button 元レコード216、表示時刻21.3秒を波形で確認\n\t\t\t\t\t\t917 cell\n\t\t\t\t\t\t\t918 text 21.3\n\t\t\t\t\t\t919 cell\n\t\t\t\t\t\t\t920 text 21.3\n\t\t\t\t\t\t921 cell\n\t\t\t\t\t\t\t922 text 3229.452880859375\n\t\t\t\t\t\t923 cell\n\t\t\t\t\t\t\t924 text 84.69200134277344\n\t\t\t\t\t925 row\n\t\t\t\t\t\t926 cell\n\t\t\t\t\t\t\t927 button 元レコード217、表示時刻21.4秒を波形で確認\n\t\t\t\t\t\t928 cell\n\t\t\t\t\t\t\t929 text 21.4\n\t\t\t\t\t\t930 cell\n\t\t\t\t\t\t\t931 text 21.4\n\t\t\t\t\t\t932 cell\n\t\t\t\t\t\t\t933 text 3221.47900390625\n\t\t\t\t\t\t934 cell\n\t\t\t\t\t\t\t935 text 84.78199768066406\n\t\t\t\t\t936 row\n\t\t\t\t\t\t937 cell\n\t\t\t\t\t\t\t938 button 元レコード218、表示時刻21.5秒を波形で確認\n\t\t\t\t\t\t939 cell\n\t\t\t\t\t\t\t940 text 21.5\n\t\t\t\t\t\t941 cell\n\t\t\t\t\t\t\t942 text 21.5\n\t\t\t\t\t\t943 cell\n\t\t\t\t\t\t\t944 text 3212.8798828125\n\t\t\t\t\t\t945 cell\n\t\t\t\t\t\t\t946 text 84.87100219726562\n\t\t\t\t\t947 row\n\t\t\t\t\t\t948 cell\n\t\t\t\t\t\t\t949 button 元レコード219、表示時刻21.6秒を波形で確認\n\t\t\t\t\t\t950 cell\n\t\t\t\t\t\t\t951 text 21.6\n\t\t\t\t\t\t952 cell\n\t\t\t\t\t\t\t953 text 21.6\n\t\t\t\t\t\t954 cell\n\t\t\t\t\t\t\t955 text 3203.659912109375\n\t\t\t\t\t\t956 cell\n\t\t\t\t\t\t\t957 text 84.95700073242188\n\t\t\t\t\t958 row\n\t\t\t\t\t\t959 cell\n\t\t\t\t\t\t\t960 button 元レコード220、表示時刻21.7秒を波形で確認\n\t\t\t\t\t\t961 cell\n\t\t\t\t\t\t\t962 text 21.7\n\t\t\t\t\t\t963 cell\n\t\t\t\t\t\t\t964 text 21.7\n\t\t\t\t\t\t965 cell\n\t\t\t\t\t\t\t966 text 3193.822021484375\n\t\t\t\t\t\t967 cell\n\t\t\t\t\t\t\t968 text 85.04199981689453\n\t\t\t\t\t969 row\n\t\t\t\t\t\t970 cell\n\t\t\t\t\t\t\t971 button 元レコード221、表示時刻21.8秒を波形で確認\n\t\t\t\t\t\t972 cell\n\t\t\t\t\t\t\t973 text 21.8\n\t\t\t\t\t\t974 cell\n\t\t\t\t\t\t\t975 text 21.8\n\t\t\t\t\t\t976 cell\n\t\t\t\t\t\t\t977 text 3183.37109375\n\t\t\t\t\t\t978 cell\n\t\t\t\t\t\t\t979 text 85.1240005493164\n\t\t\t\t\t980 row\n\t\t\t\t\t\t981 cell\n\t\t\t\t\t\t\t982 button 元レコード222、表示時刻21.9秒を波形で確認\n\t\t\t\t\t\t983 cell\n\t\t\t\t\t\t\t984 text 21.9\n\t\t\t\t\t\t985 cell\n\t\t\t\t\t\t\t986 text 21.9\n\t\t\t\t\t\t987 cell\n\t\t\t\t\t\t\t988 text 3172.31103515625\n\t\t\t\t\t\t989 cell\n\t\t\t\t\t\t\t990 text 85.2020034790039\n\t\t\t\t\t991 row\n\t\t\t\t\t\t992 cell\n\t\t\t\t\t\t\t993 button 元レコード223、表示時刻22秒を波形で確認\n\t\t\t\t\t\t994 cell\n\t\t\t\t\t\t\t995 text 22\n\t\t\t\t\t\t996 cell\n\t\t\t\t\t\t\t997 text 22\n\t\t\t\t\t\t998 cell\n\t\t\t\t\t\t\t999 text 3160.64794921875\n\t\t\t\t\t\t1000 cell\n\t\t\t\t\t\t\t1001 text 85.27799987792969\n\t\t\t\t\t1002 row\n\t\t\t\t\t\t1003 cell\n\t\t\t\t\t\t\t1004 button 元レコード224、表示時刻22.1秒を波形で確認\n\t\t\t\t\t\t1005 cell\n\t\t\t\t\t\t\t1006 text 22.1\n\t\t\t\t\t\t1007 cell\n\t\t\t\t\t\t\t1008 text 22.1\n\t\t\t\t\t\t1009 cell\n\t\t\t\t\t\t\t1010 text 3148.388916015625\n\t\t\t\t\t\t1011 cell\n\t\t\t\t\t\t\t1012 text 85.35099792480469\n\t\t\t\t\t1013 row\n\t\t\t\t\t\t1014 cell\n\t\t\t\t\t\t\t1015 button 元レコード225、表示時刻22.2秒を波形で確認\n\t\t\t\t\t\t1016 cell\n\t\t\t\t\t\t\t1017 text 22.2\n\t\t\t\t\t\t1018 cell\n\t\t\t\t\t\t\t1019 text 22.2\n\t\t\t\t\t\t1020 cell\n\t\t\t\t\t\t\t1021 text 3135.5400390625\n\t\t\t\t\t\t1022 cell\n\t\t\t\t\t\t\t1023 text 85.41899871826172\n\t\t\t\t\t1024 row\n\t\t\t\t\t\t1025 cell\n\t\t\t\t\t\t\t1026 button 元レコード226、表示時刻22.3秒を波形で確認\n\t\t\t\t\t\t1027 cell\n\t\t\t\t\t\t\t1028 text 22.3\n\t\t\t\t\t\t1029 cell\n\t\t\t\t\t\t\t1030 text 22.3\n\t\t\t\t\t\t1031 cell\n\t\t\t\t\t\t\t1032 text 3122.111083984375\n\t\t\t\t\t\t1033 cell\n\t\t\t\t\t\t\t1034 text 85.48400115966797\n\t\t\t\t\t1035 row\n\t\t\t\t\t\t1036 cell\n\t\t\t\t\t\t\t1037 button 元レコード227、表示時刻22.4秒を波形で確認\n\t\t\t\t\t\t1038 cell\n\t\t\t\t\t\t\t1039 text 22.4\n\t\t\t\t\t\t1040 cell\n\t\t\t\t\t\t\t1041 text 22.4\n\t\t\t\t\t\t1042 cell\n\t\t\t\t\t\t\t1043 text 3108.10791015625\n\t\t\t\t\t\t1044 cell\n\t\t\t\t\t\t\t1045 text 85.54399871826172\n\t\t\t\t\t1046 row\n\t\t\t\t\t\t1047 cell\n\t\t\t\t\t\t\t1048 button 元レコード228、表示時刻22.5秒を波形で確認\n\t\t\t\t\t\t1049 cell\n\t\t\t\t\t\t\t1050 text 22.5\n\t\t\t\t\t\t1051 cell\n\t\t\t\t\t\t\t1052 text 22.5\n\t\t\t\t\t\t1053 cell\n\t\t\t\t\t\t\t1054 text 3093.54296875\n\t\t\t\t\t\t1055 cell\n\t\t\t\t\t\t\t1056 text 85.5999984741211\n\t\t\t\t\t1057 row\n\t\t\t\t\t\t1058 cell\n\t\t\t\t\t\t\t1059 button 元レコード229、表示時刻22.6秒を波形で確認\n\t\t\t\t\t\t1060 cell\n\t\t\t\t\t\t\t1061 text 22.6\n\t\t\t\t\t\t1062 cell\n\t\t\t\t\t\t\t1063 text 22.6\n\t\t\t\t\t\t1064 cell\n\t\t\t\t\t\t\t1065 text 3078.424072265625\n\t\t\t\t\t\t1066 cell\n\t\t\t\t\t\t\t1067 text 85.6510009765625\n\t\t\t\t\t1068 row\n\t\t\t\t\t\t1069 cell\n\t\t\t\t\t\t\t1070 button 元レコード230、表示時刻22.7秒を波形で確認\n\t\t\t\t\t\t1071 cell\n\t\t\t\t\t\t\t1072 text 22.7\n\t\t\t\t\t\t1073 cell\n\t\t\t\t\t\t\t1074 text 22.7\n\t\t\t\t\t\t1075 cell\n\t\t\t\t\t\t\t1076 text 3062.761962890625\n\t\t\t\t\t\t1077 cell\n\t\t\t\t\t\t\t1078 text 85.6969985961914\n\t\t\t\t\t1079 row\n\t\t\t\t\t\t1080 cell\n\t\t\t\t\t\t\t1081 button 元レコード231、表示時刻22.8秒を波形で確認\n\t\t\t\t\t\t1082 cell\n\t\t\t\t\t\t\t1083 text 22.8\n\t\t\t\t\t\t1084 cell\n\t\t\t\t\t\t\t1085 text 22.8\n\t\t\t\t\t\t1086 cell\n\t\t\t\t\t\t\t1087 text 3046.569091796875\n\t\t\t\t\t\t1088 cell\n\t\t\t\t\t\t\t1089 text 85.73799896240234\n\t\t\t\t\t1090 row\n\t\t\t\t\t\t1091 cell\n\t\t\t\t\t\t\t1092 button 元レコード232、表示時刻22.9秒を波形で確認\n\t\t\t\t\t\t1093 cell\n\t\t\t\t\t\t\t1094 text 22.9\n\t\t\t\t\t\t1095 cell\n\t\t\t\t\t\t\t1096 text 22.9\n\t\t\t\t\t\t1097 cell\n\t\t\t\t\t\t\t1098 text 3029.85693359375\n\t\t\t\t\t\t1099 cell\n\t\t\t\t\t\t\t1100 text 85.77300262451172\n\t\t\t\t\t1101 row\n\t\t\t\t\t\t1102 cell\n\t\t\t\t\t\t\t1103 button 元レコード233、表示時刻23秒を波形で確認\n\t\t\t\t\t\t1104 cell\n\t\t\t\t\t\t\t1105 text 23\n\t\t\t\t\t\t1106 cell\n\t\t\t\t\t\t\t1107 text 23\n\t\t\t\t\t\t1108 cell\n\t\t\t\t\t\t\t1109 text 3012.637939453125\n\t\t\t\t\t\t1110 cell\n\t\t\t\t\t\t\t1111 text 85.8030014038086\n\t\t\t\t\t1112 row\n\t\t\t\t\t\t1113 cell\n\t\t\t\t\t\t\t1114 button 元レコード234、表示時刻23.1秒を波形で確認\n\t\t\t\t\t\t1115 cell\n\t\t\t\t\t\t\t1116 text 23.1\n\t\t\t\t\t\t1117 cell\n\t\t\t\t\t\t\t1118 text 23.1\n\t\t\t\t\t\t1119 cell\n\t\t\t\t\t\t\t1120 text 2994.926025390625\n\t\t\t\t\t\t1121 cell\n\t\t\t\t\t\t\t1122 text 85.82599639892578\n\t\t\t\t\t1123 row\n\t\t\t\t\t\t1124 cell\n\t\t\t\t\t\t\t1125 button 元レコード235、表示時刻23.2秒を波形で確認\n\t\t\t\t\t\t1126 cell\n\t\t\t\t\t\t\t1127 text 23.2\n\t\t\t\t\t\t1128 cell\n\t\t\t\t\t\t\t1129 text 23.2\n\t\t\t\t\t\t1130 cell\n\t\t\t\t\t\t\t1131 text 2976.735107421875\n\t\t\t\t\t\t1132 cell\n\t\t\t\t\t\t\t1133 text 85.84300231933594\n\t\t\t\t\t1134 row\n\t\t\t\t\t\t1135 cell\n\t\t\t\t\t\t\t1136 button 元レコード236、表示時刻23.3秒を波形で確認\n\t\t\t\t\t\t1137 cell\n\t\t\t\t\t\t\t1138 text 23.3\n\t\t\t\t\t\t1139 cell\n\t\t\t\t\t\t\t1140 text 23.3\n\t\t\t\t\t\t1141 cell\n\t\t\t\t\t\t\t1142 text 2958.077880859375\n\t\t\t\t\t\t1143 cell\n\t\t\t\t\t\t\t1144 text 85.85399627685547\n\t\t\t\t\t1145 row\n\t\t\t\t\t\t1146 cell\n\t\t\t\t\t\t\t1147 button 元レコード237、表示時刻23.4秒を波形で確認\n\t\t\t\t\t\t1148 cell\n\t\t\t\t\t\t\t1149 text 23.4\n\t\t\t\t\t\t1150 cell\n\t\t\t\t\t\t\t1151 text 23.4\n\t\t\t\t\t\t1152 cell\n\t\t\t\t\t\t\t1153 text 2938.971923828125\n\t\t\t\t\t\t1154 cell\n\t\t\t\t\t\t\t1155 text 85.85700225830078\n\t\t\t\t\t1156 row\n\t\t\t\t\t\t1157 cell\n\t\t\t\t\t\t\t1158 button 元レコード238、表示時刻23.5秒を波形で確認\n\t\t\t\t\t\t1159 cell\n\t\t\t\t\t\t\t1160 text 23.5\n\t\t\t\t\t\t1161 cell\n\t\t\t\t\t\t\t1162 text 23.5\n\t\t\t\t\t\t1163 cell\n\t\t\t\t\t\t\t1164 text 2919.430908203125\n\t\t\t\t\t\t1165 cell\n\t\t\t\t\t\t\t1166 text 85.85399627685547\n\t\t\t\t\t1167 row\n\t\t\t\t\t\t1168 cell\n\t\t\t\t\t\t\t1169 button 元レコード239、表示時刻23.6秒を波形で確認\n\t\t\t\t\t\t1170 cell\n\t\t\t\t\t\t\t1171 text 23.6\n\t\t\t\t\t\t1172 cell\n\t\t\t\t\t\t\t1173 text 23.6\n\t\t\t\t\t\t1174 cell\n\t\t\t\t\t\t\t1175 text 2899.470947265625\n\t\t\t\t\t\t1176 cell\n\t\t\t\t\t\t\t1177 text 85.84300231933594\n\t\t\t\t\t1178 row\n\t\t\t\t\t\t1179 cell\n\t\t\t\t\t\t\t1180 button 元レコード240、表示時刻23.7秒を波形で確認\n\t\t\t\t\t\t1181 cell\n\t\t\t\t\t\t\t1182 text 23.7\n\t\t\t\t\t\t1183 cell\n\t\t\t\t\t\t\t1184 text 23.7\n\t\t\t\t\t\t1185 cell\n\t\t\t\t\t\t\t1186 text 2879.110107421875\n\t\t\t\t\t\t1187 cell\n\t\t\t\t\t\t\t1188 text 85.82499694824219\n\t\t\t\t\t1189 row\n\t\t\t\t\t\t1190 cell\n\t\t\t\t\t\t\t1191 button 元レコード241、表示時刻23.8秒を波形で確認\n\t\t\t\t\t\t1192 cell\n\t\t\t\t\t\t\t1193 text 23.8\n\t\t\t\t\t\t1194 cell\n\t\t\t\t\t\t\t1195 text 23.8\n\t\t\t\t\t\t1196 cell\n\t\t\t\t\t\t\t1197 text 2858.364013671875\n\t\t\t\t\t\t1198 cell\n\t\t\t\t\t\t\t1199 text 85.80000305175781\n\t\t\t\t\t1200 row\n\t\t\t\t\t\t1201 cell\n\t\t\t\t\t\t\t1202 button 元レコード242、表示時刻23.9秒を波形で確認\n\t\t\t\t\t\t1203 cell\n\t\t\t\t\t\t\t1204 text 23.9\n\t\t\t\t\t\t1205 cell\n\t\t\t\t\t\t\t1206 text 23.9\n\t\t\t\t\t\t1207 cell\n\t\t\t\t\t\t\t1208 text 2837.25\n\t\t\t\t\t\t1209 cell\n\t\t\t\t\t\t\t1210 text 85.76599884033203\n\t\t\t\t\t1211 row\n\t\t\t\t\t\t1212 cell\n\t\t\t\t\t\t\t1213 button 元レコード243、表示時刻24秒を波形で確認\n\t\t\t\t\t\t1214 cell\n\t\t\t\t\t\t\t1215 text 24\n\t\t\t\t\t\t1216 cell\n\t\t\t\t\t\t\t1217 text 24\n\t\t\t\t\t\t1218 cell\n\t\t\t\t\t\t\t1219 text 2815.7880859375\n\t\t\t\t\t\t1220 cell\n\t\t\t\t\t\t\t1221 text 85.7239990234375\n\t\t\t\t\t1222 row\n\t\t\t\t\t\t1223 cell\n\t\t\t\t\t\t\t1224 button 元レコード244、表示時刻24.1秒を波形で確認\n\t\t\t\t\t\t1225 cell\n\t\t\t\t\t\t\t1226 text 24.1\n\t\t\t\t\t\t1227 cell\n\t\t\t\t\t\t\t1228 text 24.1\n\t\t\t\t\t\t1229 cell\n\t\t\t\t\t\t\t1230 text 2793.993896484375\n\t\t\t\t\t\t1231 cell\n\t\t\t\t\t\t\t1232 text 85.67400360107422\n\t\t\t\t\t1233 row\n\t\t\t\t\t\t1234 cell\n\t\t\t\t\t\t\t1235 button 元レコード245、表示時刻24.2秒を波形で確認\n\t\t\t\t\t\t1236 cell\n\t\t\t\t\t\t\t1237 text 24.2\n\t\t\t\t\t\t1238 cell\n\t\t\t\t\t\t\t1239 text 24.2\n\t\t\t\t\t\t1240 cell\n\t\t\t\t\t\t\t1241 text 2771.887939453125\n\t\t\t\t\t\t1242 cell\n\t\t\t\t\t\t\t1243 text 85.61599731445312\n\t\t\t\t\t1244 row\n\t\t\t\t\t\t1245 cell\n\t\t\t\t\t\t\t1246 button 元レコード246、表示時刻24.3秒を波形で確認\n\t\t\t\t\t\t1247 cell\n\t\t\t\t\t\t\t1248 text 24.3\n\t\t\t\t\t\t1249 cell\n\t\t\t\t\t\t\t1250 text 24.3\n\t\t\t\t\t\t1251 cell\n\t\t\t\t\t\t\t1252 text 2749.489013671875\n\t\t\t\t\t\t1253 cell\n\t\t\t\t\t\t\t1254 text 85.54900360107422\n\t\t\t\t\t1255 row\n\t\t\t\t\t\t1256 cell\n\t\t\t\t\t\t\t1257 button 元レコード247、表示時刻24.4秒を波形で確認\n\t\t\t\t\t\t1258 cell\n\t\t\t\t\t\t\t1259 text 24.4\n\t\t\t\t\t\t1260 cell\n\t\t\t\t\t\t\t1261 text 24.4\n\t\t\t\t\t\t1262 cell\n\t\t\t\t\t\t\t1263 text 2726.81689453125\n\t\t\t\t\t\t1264 cell\n\t\t\t\t\t\t\t1265 text 85.4729995727539\n\t\t\t\t\t1266 row\n\t\t\t\t\t\t1267 cell\n\t\t\t\t\t\t\t1268 button 元レコード248、表示時刻24.5秒を波形で確認\n\t\t\t\t\t\t1269 cell\n\t\t\t\t\t\t\t1270 text 24.5\n\t\t\t\t\t\t1271 cell\n\t\t\t\t\t\t\t1272 text 24.5\n\t\t\t\t\t\t1273 cell\n\t\t\t\t\t\t\t1274 text 2703.89111328125\n\t\t\t\t\t\t1275 cell\n\t\t\t\t\t\t\t1276 text 85.38800048828125\n\t\t\t\t\t1277 row\n\t\t\t\t\t\t1278 cell\n\t\t\t\t\t\t\t1279 button 元レコード249、表示時刻24.6秒を波形で確認\n\t\t\t\t\t\t1280 cell\n\t\t\t\t\t\t\t1281 text 24.6\n\t\t\t\t\t\t1282 cell\n\t\t\t\t\t\t\t1283 text 24.6\n\t\t\t\t\t\t1284 cell\n\t\t\t\t\t\t\t1285 text 2680.73095703125\n\t\t\t\t\t\t1286 cell\n\t\t\t\t\t\t\t1287 text 85.29399871826172\n\t\t\t\t\t1288 row\n\t\t\t\t\t\t1289 cell\n\t\t\t\t\t\t\t1290 button 元レコード250、表示時刻24.7秒を波形で確認\n\t\t\t\t\t\t1291 cell\n\t\t\t\t\t\t\t1292 text 24.7\n\t\t\t\t\t\t1293 cell\n\t\t\t\t\t\t\t1294 text 24.7\n\t\t\t\t\t\t1295 cell\n\t\t\t\t\t\t\t1296 text 2657.35693359375\n\t\t\t\t\t\t1297 cell\n\t\t\t\t\t\t\t1298 text 85.19000244140625\n\t\t\t\t\t1299 row\n\t\t\t\t\t\t1300 cell\n\t\t\t\t\t\t\t1301 button 元レコード251、表示時刻24.8秒を波形で確認\n\t\t\t\t\t\t1302 cell\n\t\t\t\t\t\t\t1303 text 24.8\n\t\t\t\t\t\t1304 cell\n\t\t\t\t\t\t\t1305 text 24.8\n\t\t\t\t\t\t1306 cell\n\t\t\t\t\t\t\t1307 text 2633.791015625\n\t\t\t\t\t\t1308 cell\n\t\t\t\t\t\t\t1309 text 85.0770034790039\n\t\t\t\t\t1310 row\n\t\t\t\t\t\t1311 cell\n\t\t\t\t\t\t\t1312 button 元レコード252、表示時刻24.9秒を波形で確認\n\t\t\t\t\t\t1313 cell\n\t\t\t\t\t\t\t1314 text 24.9\n\t\t\t\t\t\t1315 cell\n\t\t\t\t\t\t\t1316 text 24.9\n\t\t\t\t\t\t1317 cell\n\t\t\t\t\t\t\t1318 text 2610.052978515625\n\t\t\t\t\t\t1319 cell\n\t\t\t\t\t\t\t1320 text 84.95500183105469\n\t\t\t\t\t1321 row\n\t\t\t\t\t\t1322 cell\n\t\t\t\t\t\t\t1323 button 元レコード253、表示時刻25秒を波形で確認\n\t\t\t\t\t\t1324 cell\n\t\t\t\t\t\t\t1325 text 25\n\t\t\t\t\t\t1326 cell\n\t\t\t\t\t\t\t1327 text 25\n\t\t\t\t\t\t1328 cell\n\t\t\t\t\t\t\t1329 text 2586.1630859375\n\t\t\t\t\t\t1330 cell\n\t\t\t\t\t\t\t1331 text 84.8219985961914\n\t\t\t\t\t1332 row\n\t\t\t\t\t\t1333 cell\n\t\t\t\t\t\t\t1334 button 元レコード254、表示時刻25.1秒を波形で確認\n\t\t\t\t\t\t1335 cell\n\t\t\t\t\t\t\t1336 text 25.1\n\t\t\t\t\t\t1337 cell\n\t\t\t\t\t\t\t1338 text 25.1\n\t\t\t\t\t\t1339 cell\n\t\t\t\t\t\t\t1340 text 2562.14404296875\n\t\t\t\t\t\t1341 cell\n\t\t\t\t\t\t\t1342 text 84.68000030517578\n\t\t\t\t\t1343 row\n\t\t\t\t\t\t1344 cell\n\t\t\t\t\t\t\t1345 button 元レコード255、表示時刻25.2秒を波形で確認\n\t\t\t\t\t\t1346 cell\n\t\t\t\t\t\t\t1347 text 25.2\n\t\t\t\t\t\t1348 cell\n\t\t\t\t\t\t\t1349 text 25.2\n\t\t\t\t\t\t1350 cell\n\t\t\t\t\t\t\t1351 text 2538.01611328125\n\t\t\t\t\t\t1352 cell\n\t\t\t\t\t\t\t1353 text 84.52799987792969\n\t\t\t\t\t1354 row\n\t\t\t\t\t\t1355 cell\n\t\t\t\t\t\t\t1356 button 元レコード256、表示時刻25.3秒を波形で確認\n\t\t\t\t\t\t1357 cell\n\t\t\t\t\t\t\t1358 text 25.3\n\t\t\t\t\t\t1359 cell\n\t\t\t\t\t\t\t1360 text 25.3\n\t\t\t\t\t\t1361 cell\n\t\t\t\t\t\t\t1362 text 2513.801025390625\n\t\t\t\t\t\t1363 cell\n\t\t\t\t\t\t\t1364 text 84.36599731445312\n\t\t\t\t\t1365 row\n\t\t\t\t\t\t1366 cell\n\t\t\t\t\t\t\t1367 button 元レコード257、表示時刻25.4秒を波形で確認\n\t\t\t\t\t\t1368 cell\n\t\t\t\t\t\t\t1369 text 25.4\n\t\t\t\t\t\t1370 cell\n\t\t\t\t\t\t\t1371 text 25.4\n\t\t\t\t\t\t1372 cell\n\t\t\t\t\t\t\t1373 text 2489.52001953125\n\t\t\t\t\t\t1374 cell\n\t\t\t\t\t\t\t1375 text 84.19300079345703\n\t\t\t\t\t1376 row\n\t\t\t\t\t\t1377 cell\n\t\t\t\t\t\t\t1378 button 元レコード258、表示時刻25.5秒を波形で確認\n\t\t\t\t\t\t1379 cell\n\t\t\t\t\t\t\t1380 text 25.5\n\t\t\t\t\t\t1381 cell\n\t\t\t\t\t\t\t1382 text 25.5\n\t\t\t\t\t\t1383 cell\n\t\t\t\t\t\t\t1384 text 2465.194091796875\n\t\t\t\t\t\t1385 cell\n\t\t\t\t\t\t\t1386 text 84.01000213623047\n\t\t\t\t\t1387 row\n\t\t\t\t\t\t1388 cell\n\t\t\t\t\t\t\t1389 button 元レコード259、表示時刻25.6秒を波形で確認\n\t\t\t\t\t\t1390 cell\n\t\t\t\t\t\t\t1391 text 25.6\n\t\t\t\t\t\t1392 cell\n\t\t\t\t\t\t\t1393 text 25.6\n\t\t\t\t\t\t1394 cell\n\t\t\t\t\t\t\t1395 text 2440.845947265625\n\t\t\t\t\t\t1396 cell\n\t\t\t\t\t\t\t1397 text 83.81700134277344\n\t\t\t\t\t1398 row\n\t\t\t\t\t\t1399 cell\n\t\t\t\t\t\t\t1400 button 元レコード260、表示時刻25.7秒を波形で確認\n\t\t\t\t\t\t1401 cell\n\t\t\t\t\t\t\t1402 text 25.7\n\t\t\t\t\t\t1403 cell\n\t\t\t\t\t\t\t1404 text 25.7\n\t\t\t\t\t\t1405 cell\n\t\t\t\t\t\t\t1406 text 2416.49609375\n\t\t\t\t\t\t1407 cell\n\t\t\t\t\t\t\t1408 text 83.61399841308594\n\t\t\t\t\t1409 row\n\t\t\t\t\t\t1410 cell\n\t\t\t\t\t\t\t1411 button 元レコード261、表示時刻25.8秒を波形で確認\n\t\t\t\t\t\t1412 cell\n\t\t\t\t\t\t\t1413 text 25.8\n\t\t\t\t\t\t1414 cell\n\t\t\t\t\t\t\t1415 text 25.8\n\t\t\t\t\t\t1416 cell\n\t\t\t\t\t\t\t1417 text 2392.166015625\n\t\t\t\t\t\t1418 cell\n\t\t\t\t\t\t\t1419 text 83.4000015258789\n\t\t\t\t\t1420 row\n\t\t\t\t\t\t1421 cell\n\t\t\t\t\t\t\t1422 button 元レコード262、表示時刻25.9秒を波形で確認\n\t\t\t\t\t\t1423 cell\n\t\t\t\t\t\t\t1424 text 25.9\n\t\t\t\t\t\t1425 cell\n\t\t\t\t\t\t\t1426 text 25.9\n\t\t\t\t\t\t1427 cell\n\t\t\t\t\t\t\t1428 text 2367.8779296875\n\t\t\t\t\t\t1429 cell\n\t\t\t\t\t\t\t1430 text 83.17500305175781\n\t\t\t\t\t1431 row\n\t\t\t\t\t\t1432 cell\n\t\t\t\t\t\t\t1433 button 元レコード263、表示時刻26秒を波形で確認\n\t\t\t\t\t\t1434 cell\n\t\t\t\t\t\t\t1435 text 26\n\t\t\t\t\t\t1436 cell\n\t\t\t\t\t\t\t1437 text 26\n\t\t\t\t\t\t1438 cell\n\t\t\t\t\t\t\t1439 text 2343.652099609375\n\t\t\t\t\t\t1440 cell\n\t\t\t\t\t\t\t1441 text 82.94000244140625\n\t\t\t\t\t1442 row\n\t\t\t\t\t\t1443 cell\n\t\t\t\t\t\t\t1444 button 元レコード264、表示時刻26.1秒を波形で確認\n\t\t\t\t\t\t1445 cell\n\t\t\t\t\t\t\t1446 text 26.1\n\t\t\t\t\t\t1447 cell\n\t\t\t\t\t\t\t1448 text 26.1\n\t\t\t\t\t\t1449 cell\n\t\t\t\t\t\t\t1450 text 2319.510009765625\n\t\t\t\t\t\t1451 cell\n\t\t\t\t\t\t\t1452 text 82.69400024414062\n\t\t\t\t\t1453 row\n\t\t\t\t\t\t1454 cell\n\t\t\t\t\t\t\t1455 button 元レコード265、表示時刻26.2秒を波形で確認\n\t\t\t\t\t\t1456 cell\n\t\t\t\t\t\t\t1457 text 26.2\n\t\t\t\t\t\t1458 cell\n\t\t\t\t\t\t\t1459 text 26.2\n\t\t\t\t\t\t1460 cell\n\t\t\t\t\t\t\t1461 text 2295.471923828125\n\t\t\t\t\t\t1462 cell\n\t\t\t\t\t\t\t1463 text 82.43699645996094\n\t\t\t\t\t1464 row\n\t\t\t\t\t\t1465 cell\n\t\t\t\t\t\t\t1466 button 元レコード266、表示時刻26.3秒を波形で確認\n\t\t\t\t\t\t1467 cell\n\t\t\t\t\t\t\t1468 text 26.3\n\t\t\t\t\t\t1469 cell\n\t\t\t\t\t\t\t1470 text 26.3\n\t\t\t\t\t\t1471 cell\n\t\t\t\t\t\t\t1472 text 2271.56103515625\n\t\t\t\t\t\t1473 cell\n\t\t\t\t\t\t\t1474 text 82.16999816894531\n\t\t\t\t\t1475 row\n\t\t\t\t\t\t1476 cell\n\t\t\t\t\t\t\t1477 button 元レコード267、表示時刻26.4秒を波形で確認\n\t\t\t\t\t\t1478 cell\n\t\t\t\t\t\t\t1479 text 26.4\n\t\t\t\t\t\t1480 cell\n\t\t\t\t\t\t\t1481 text 26.4\n\t\t\t\t\t\t1482 cell\n\t\t\t\t\t\t\t1483 text 2247.7958984375\n\t\t\t\t\t\t1484 cell\n\t\t\t\t\t\t\t1485 text 81.89099884033203\n\t\t\t\t\t1486 row\n\t\t\t\t\t\t1487 cell\n\t\t\t\t\t\t\t1488 button 元レコード268、表示時刻26.5秒を波形で確認\n\t\t\t\t\t\t1489 cell\n\t\t\t\t\t\t\t1490 text 26.5\n\t\t\t\t\t\t1491 cell\n\t\t\t\t\t\t\t1492 text 26.5\n\t\t\t\t\t\t1493 cell\n\t\t\t\t\t\t\t1494 text 2224.197021484375\n\t\t\t\t\t\t1495 cell\n\t\t\t\t\t\t\t1496 text 81.60299682617188\n\t\t\t\t\t1497 row\n\t\t\t\t\t\t1498 cell\n\t\t\t\t\t\t\t1499 button 元レコード269、表示時刻26.6秒を波形で確認\n\t\t\t\t\t\t1500 cell\n\t\t\t\t\t\t\t1501 text 26.6\n\t\t\t\t\t\t1502 cell\n\t\t\t\t\t\t\t1503 text 26.6\n\t\t\t\t\t\t1504 cell\n\t\t\t\t\t\t\t1505 text 2200.785888671875\n\t\t\t\t\t\t1506 cell\n\t\t\t\t\t\t\t1507 text 81.3030014038086\n\t\t\t\t\t1508 row\n\t\t\t\t\t\t1509 cell\n\t\t\t\t\t\t\t1510 button 元レコード270、表示時刻26.7秒を波形で確認\n\t\t\t\t\t\t1511 cell\n\t\t\t\t\t\t\t1512 text 26.7\n\t\t\t\t\t\t1513 cell\n\t\t\t\t\t\t\t1514 text 26.7\n\t\t\t\t\t\t1515 cell\n\t\t\t\t\t\t\t1516 text 2177.5810546875\n\t\t\t\t\t\t1517 cell\n\t\t\t\t\t\t\t1518 text 80.99199676513672\n\t\t\t\t\t1519 row\n\t\t\t\t\t\t1520 cell\n\t\t\t\t\t\t\t1521 button 元レコード271、表示時刻26.8秒を波形で確認\n\t\t\t\t\t\t1522 cell\n\t\t\t\t\t\t\t1523 text 26.8\n\t\t\t\t\t\t1524 cell\n\t\t\t\t\t\t\t1525 text 26.8\n\t\t\t\t\t\t1526 cell\n\t\t\t\t\t\t\t1527 text 2154.60205078125\n\t\t\t\t\t\t1528 cell\n\t\t\t\t\t\t\t1529 text 80.6709976196289\n\t\t\t\t\t1530 row\n\t\t\t\t\t\t1531 cell\n\t\t\t\t\t\t\t1532 button 元レコード272、表示時刻26.9秒を波形で確認\n\t\t\t\t\t\t1533 cell\n\t\t\t\t\t\t\t1534 text 26.9\n\t\t\t\t\t\t1535 cell\n\t\t\t\t\t\t\t1536 text 26.9\n\t\t\t\t\t\t1537 cell\n\t\t\t\t\t\t\t1538 text 2131.868896484375\n\t\t\t\t\t\t1539 cell\n\t\t\t\t\t\t\t1540 text 80.33999633789062\n\t\t\t\t\t1541 row\n\t\t\t\t\t\t1542 cell\n\t\t\t\t\t\t\t1543 button 元レコード273、表示時刻27秒を波形で確認\n\t\t\t\t\t\t1544 cell\n\t\t\t\t\t\t\t1545 text 27\n\t\t\t\t\t\t1546 cell\n\t\t\t\t\t\t\t1547 text 27\n\t\t\t\t\t\t1548 cell\n\t\t\t\t\t\t\t1549 text 2109.39990234375\n\t\t\t\t\t\t1550 cell\n\t\t\t\t\t\t\t1551 text 79.99700164794922\n\t\t\t\t\t1552 row\n\t\t\t\t\t\t1553 cell\n\t\t\t\t\t\t\t1554 button 元レコード274、表示時刻27.1秒を波形で確認\n\t\t\t\t\t\t1555 cell\n\t\t\t\t\t\t\t1556 text 27.1\n\t\t\t\t\t\t1557 cell\n\t\t\t\t\t\t\t1558 text 27.1\n\t\t\t\t\t\t1559 cell\n\t\t\t\t\t\t\t1560 text 2087.212890625\n\t\t\t\t\t\t1561 cell\n\t\t\t\t\t\t\t1562 text 79.64399719238281\n\t\t\t\t\t1563 row\n\t\t\t\t\t\t1564 cell\n\t\t\t\t\t\t\t1565 button 元レコード275、表示時刻27.2秒を波形で確認\n\t\t\t\t\t\t1566 cell\n\t\t\t\t\t\t\t1567 text 27.2\n\t\t\t\t\t\t1568 cell\n\t\t\t\t\t\t\t1569 text 27.2\n\t\t\t\t\t\t1570 cell\n\t\t\t\t\t\t\t1571 text 2065.327880859375\n\t\t\t\t\t\t1572 cell\n\t\t\t\t\t\t\t1573 text 79.28099822998047\n\t\t\t\t\t1574 row\n\t\t\t\t\t\t1575 cell\n\t\t\t\t\t\t\t1576 button 元レコード276、表示時刻27.3秒を波形で確認\n\t\t\t\t\t\t1577 cell\n\t\t\t\t\t\t\t1578 text 27.3\n\t\t\t\t\t\t1579 cell\n\t\t\t\t\t\t\t1580 text 27.3\n\t\t\t\t\t\t1581 cell\n\t\t\t\t\t\t\t1582 text 2043.760986328125\n\t\t\t\t\t\t1583 cell\n\t\t\t\t\t\t\t1584 text 78.90699768066406\n\t\t\t\t\t1585 row\n\t\t\t\t\t\t1586 cell\n\t\t\t\t\t\t\t1587 button 元レコード277、表示時刻27.4秒を波形で確認\n\t\t\t\t\t\t1588 cell\n\t\t\t\t\t\t\t1589 text 27.4\n\t\t\t\t\t\t1590 cell\n\t\t\t\t\t\t\t1591 text 27.4\n\t\t\t\t\t\t1592 cell\n\t\t\t\t\t\t\t1593 text 2022.530029296875\n\t\t\t\t\t\t1594 cell\n\t\t\t\t\t\t\t1595 text 78.52200317382812\n\t\t\t\t\t1596 row\n\t\t\t\t\t\t1597 cell\n\t\t\t\t\t\t\t1598 button 元レコード278、表示時刻27.5秒を波形で確認\n\t\t\t\t\t\t1599 cell\n\t\t\t\t\t\t\t1600 text 27.5\n\t\t\t\t\t\t1601 cell\n\t\t\t\t\t\t\t1602 text 27.5\n\t\t\t\t\t\t1603 cell\n\t\t\t\t\t\t\t1604 text 2001.6510009765625\n\t\t\t\t\t\t1605 cell\n\t\t\t\t\t\t\t1606 text 78.12799835205078\n\t\t\t\t\t1607 row\n\t\t\t\t\t\t1608 cell\n\t\t\t\t\t\t\t1609 button 元レコード279、表示時刻27.6秒を波形で確認\n\t\t\t\t\t\t1610 cell\n\t\t\t\t\t\t\t1611 text 27.6\n\t\t\t\t\t\t1612 cell\n\t\t\t\t\t\t\t1613 text 27.6\n\t\t\t\t\t\t1614 cell\n\t\t\t\t\t\t\t1615 text 1981.1409912109375\n\t\t\t\t\t\t1616 cell\n\t\t\t\t\t\t\t1617 text 77.7229995727539\n\t\t\t\t\t1618 row\n\t\t\t\t\t\t1619 cell\n\t\t\t\t\t\t\t1620 button 元レコード280、表示時刻27.7秒を波形で確認\n\t\t\t\t\t\t1621 cell\n\t\t\t\t\t\t\t1622 text 27.7\n\t\t\t\t\t\t1623 cell\n\t\t\t\t\t\t\t1624 text 27.7\n\t\t\t\t\t\t1625 cell\n\t\t\t\t\t\t\t1626 text 1961.0150146484375\n\t\t\t\t\t\t1627 cell\n\t\t\t\t\t\t\t1628 text 77.30799865722656\n\t\t\t\t\t1629 row\n\t\t\t\t\t\t1630 cell\n\t\t\t\t\t\t\t1631 button 元レコード281、表示時刻27.8秒を波形で確認\n\t\t\t\t\t\t1632 cell\n\t\t\t\t\t\t\t1633 text 27.8\n\t\t\t\t\t\t1634 cell\n\t\t\t\t\t\t\t1635 text 27.8\n\t\t\t\t\t\t1636 cell\n\t\t\t\t\t\t\t1637 text 1941.2889404296875\n\t\t\t\t\t\t1638 cell\n\t\t\t\t\t\t\t1639 text 76.88300323486328\n\t\t\t\t\t1640 row\n\t\t\t\t\t\t1641 cell\n\t\t\t\t\t\t\t1642 button 元レコード282、表示時刻27.9秒を波形で確認\n\t\t\t\t\t\t1643 cell\n\t\t\t\t\t\t\t1644 text 27.9\n\t\t\t\t\t\t1645 cell\n\t\t\t\t\t\t\t1646 text 27.9\n\t\t\t\t\t\t1647 cell\n\t\t\t\t\t\t\t1648 text 1921.9759521484375\n\t\t\t\t\t\t1649 cell\n\t\t\t\t\t\t\t1650 text 76.447998046875\n\t\t271 text 全体ナビゲーター \n\t\t520 text Engine_Speed\n\t\t521 text 0–120 s\n\t\t274 container\n\t\t\t275 text 開始 \n\t\t\t276 stepper (settable, integer) Description: 表示区間の開始秒, Value: 0, ID: compare-range-start\n\t\t\t277 text  s\n\t\t278 container\n\t\t\t279 text 終了 \n\t\t\t280 stepper (settable, integer) Description: 表示区間の終了秒, Value: 120, ID: compare-range-end\n\t\t\t281 text  s\n\t\t282 button 表示, ID: compare-range-go\n\t\t283 button 全体, ID: compare-range-all\n\nThe focused UI element is 469 tab (selected, settable, boolean) 元データ, Value: 1, ID: inspector-tab-data"
+  },
+  {
+    "sequence": 25,
+    "command": "page3 enter; inspector summary",
+    "observed": {
+      "page": "3",
+      "rect": {
+        "bottom": 785.7000122070312,
+        "height": 280,
+        "left": 305,
+        "right": 1600,
+        "top": 505.7000122070313,
+        "width": 1295,
+        "x": 305,
+        "y": 505.7000122070313
+      },
+      "rows": [
+        "元レコード383、表示時刻38秒を波形で確認",
+        "元レコード384、表示時刻38.1秒を波形で確認",
+        "元レコード385、表示時刻38.2秒を波形で確認",
+        "元レコード386、表示時刻38.3秒を波形で確認",
+        "元レコード387、表示時刻38.4秒を波形で確認",
+        "元レコード388、表示時刻38.5秒を波形で確認",
+        "元レコード389、表示時刻38.6秒を波形で確認",
+        "元レコード390、表示時刻38.7秒を波形で確認",
+        "元レコード391、表示時刻38.8秒を波形で確認",
+        "元レコード392、表示時刻38.9秒を波形で確認",
+        "元レコード393、表示時刻39秒を波形で確認",
+        "元レコード394、表示時刻39.1秒を波形で確認",
+        "元レコード395、表示時刻39.2秒を波形で確認",
+        "元レコード396、表示時刻39.3秒を波形で確認",
+        "元レコード397、表示時刻39.4秒を波形で確認",
+        "元レコード398、表示時刻39.5秒を波形で確認",
+        "元レコード399、表示時刻39.6秒を波形で確認",
+        "元レコード400、表示時刻39.7秒を波形で確認",
+        "元レコード401、表示時刻39.8秒を波形で確認",
+        "元レコード402、表示時刻39.9秒を波形で確認",
+        "元レコード403、表示時刻40秒を波形で確認",
+        "元レコード404、表示時刻40.1秒を波形で確認",
+        "元レコード405、表示時刻40.2秒を波形で確認",
+        "元レコード406、表示時刻40.3秒を波形で確認",
+        "元レコード407、表示時刻40.4秒を波形で確認",
+        "元レコード408、表示時刻40.5秒を波形で確認",
+        "元レコード409、表示時刻40.6秒を波形で確認",
+        "元レコード410、表示時刻40.7秒を波形で確認",
+        "元レコード411、表示時刻40.8秒を波形で確認",
+        "元レコード412、表示時刻40.9秒を波形で確認",
+        "元レコード413、表示時刻41秒を波形で確認",
+        "元レコード414、表示時刻41.1秒を波形で確認"
+      ],
+      "scroll": 0,
+      "summary": "201–232 / 232 サンプル\n前\nページ\n/ 3\n次\n\n元レコードは空行を除く1始まりの番号です（物理行番号ではありません）。元時刻は秒換算済み。表示時刻＝元時刻＋時間補正。値は読込済みの原サンプル／計算列の値で、補間しません。\n\n元レコード\t元時刻 [s]\t表示時刻 [s]\tEngine_Speed\nrpm\n\tEngine_Torque\nNm\n\n383\t38\t38\t1805.175048828125\t25.5\n384\t38.1\t38.1\t1801.177001953125\t25.375\n385\t38.2\t38.2\t1796.72802734375\t25.26300048828125\n386\t38.3\t38.3\t1791.8310546875\t25.163000106811523\n387\t38.4\t38.4\t1786.4840087890625\t25.075000762939453\n388\t38.5\t38.5\t1780.6920166015625\t25\n389\t38.6\t38.6\t1774.4560546875\t24.937000274658203\n390\t38.7\t38.7\t1767.779052734375\t24.88599967956543\n391\t38.8\t38.8\t1760.666015625\t24.847000122070312\n392\t38.9\t38.9\t1753.1219482421875\t24.81999969482422\n393\t39\t39\t1745.1510009765625\t24.804000854492188\n394\t39.1\t39.1\t173"
+    }
+  },
+  {
+    "sequence": 26,
+    "command": "click row41441.1; read cursor and scroll",
+    "observed": {
+      "chartText": "",
+      "inspector": {
+        "bottom": 785.7000122070312,
+        "height": 280,
+        "left": 305,
+        "right": 1600,
+        "top": 505.7000122070313,
+        "width": 1295,
+        "x": 305,
+        "y": 505.7000122070313
+      },
+      "pageScroll": 0,
+      "scope": "selection",
+      "selected": []
+    }
+  },
+  {
+    "sequence": 27,
+    "command": "press ArrowRight on 元データ tab; DOM inspector summary",
+    "observed": {
+      "active": "inspector-tab-quality",
+      "summary": "時刻品質はファイル全体、値の品質は選択区間 17.938144 – 41.134021 s · 時間合わせ後の選択チャンネルです。重複は非隣接も含む2回目以降、逆転は隣接点を数えます。元レコード番号は空行を除くレコードの番号です。\n\n時刻サンプル\n1,201\n重複（2回目以降）\n0\n隣接時刻の逆転\n0\n長い間隔（候補）\n0\n除外・非有限時刻\n0\n\n長い間隔は正の隣接間隔の中央値 0.10000000000000053 s × 10（1.0000000000000053 s超）を目安にした候補です。計測欠落と断定しません。\n\n選択チャンネル\t対象点\t有効点\t欠損合計\n変換不能を含む\t変換不能\nファイル全体\t最小\t最大\t値の状態\nEngine_Speed\nrpm\n\t232\t232\t0 (0.0%)\t0\t1496.2840576171875\t3276.512939453125\t変化あり\nEngine_Torque\nNm\n\t232\t232\t0 (0.0%)\t0\t24.801000595092773\t85.85700225830078\t変化あり\n\n一定値は正常な状態保持でも発生します。欠損は0と扱いません。変換不能の原文と時刻の除外明細は先頭1000件まで保持されるため、区間内の内訳を確定できない場合があります。\n\n問題の詳細 \nすべて\n時刻品質（全体）\n欠損・非有限値（対象区間）\n変換不能の保持明細（対象区間）\n0件表示 / 検出 0件（表示上限1000件）\n種類\tチャンネル\t元レコード\t表示時刻 [s]\t詳細・元文字\t移動\n表示できる問題の明細はありません。上の件数と対象範囲も確認してください。",
+      "tabs": [
+        {
+          "id": "inspector-tab-data",
+          "selected": "false"
+        },
+        {
+          "id": "inspector-tab-quality",
+          "selected": "true"
+        },
+        {
+          "id": "inspector-tab-stats",
+          "selected": "false"
+        }
+      ]
+    }
+  },
+  {
+    "sequence": 28,
+    "command": "Escape; open 読み込み設定・計算・イベント; DOM",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\n~\t\t\t\t308 button (expanded) 読み込み設定・計算・イベント, Secondary Actions: Collapse\n+\t\t\t\t473 button (expanded) 読み込み設定 , Secondary Actions: Collapse\n+\t\t\t\t\t474 text 読み込み設定\n+\t\t\t\t\t475 text \n+\t\t\t\t476 text 名前行:\n+\t\t\t\t477 pop up button (collapsed, settable) Description: 名前行の選択方法, Value: 自動, ID: import-name-mode, Secondary Actions: Expand\n+\t\t\t\t\t478 menu\n+\t\t\t\t\t\t479 (selected) 自動\n+\t\t\t\t\t\t480 指定\n+\t\t\t\t481 stepper (disabled, settable, integer) 名前行:, Value: 1, ID: name-row-idx\n+\t\t\t\t482 text 単位行:\n+\t\t\t\t483 pop up button (collapsed, settable) Description: 単位行の選択方法, Value: 自動, ID: import-unit-mode, Secondary Actions: Expand\n+\t\t\t\t\t484 menu\n+\t\t\t\t\t\t485 (selected) 自動\n+\t\t\t\t\t\t486 なし\n+\t\t\t\t\t\t487 指定\n+\t\t\t\t488 stepper (disabled, settable, integer) 単位行:, Value: 2, ID: unit-row-idx\n+\t\t\t\t489 text 時間列:\n+\t\t\t\t490 stepper (settable) Description: 時間列番号（空欄は自動）, ID: import-time-column\n+\t\t\t\t491 text 区切り:\n+\t\t\t\t492 pop up button (collapsed, settable) 区切り:, Value: 自動, ID: import-delimiter, Secondary Actions: Expand\n+\t\t\t\t\t493 menu\n+\t\t\t\t\t\t494 (selected) 自動\n+\t\t\t\t\t\t495 カンマ\n+\t\t\t\t\t\t496 タブ\n+\t\t\t\t\t\t497 セミコロン\n+\t\t\t\t\t\t498 パイプ\n+\t\t\t\t499 text 文字コード:\n+\t\t\t\t500 pop up button (collapsed, settable) Description: CSV文字コード, Value: 自動, ID: encoding-mode, Secondary Actions: Expand\n+\t\t\t\t\t501 menu\n+\t\t\t\t\t\t502 (selected) 自動\n+\t\t\t\t\t\t503 UTF-8\n+\t\t\t\t\t\t504 Shift_JIS\n+\t\t\t\t\t\t505 UTF-16LE\n+\t\t\t\t\t\t506 UTF-16BE\n+\t\t\t\t507 text 単位行のないCSVにも対応。行番号は空行を除く番号です。TRNの区切りは専用処理します。\n+\t\t\t\t508 container parse-preview\n+\t\t\t\t\t509 text デモ_燃費率マップ付き走行ログ.csv\n+\t\t\t\t\t510 definition list\n+\t\t\t\t\t\t511 container 文字コード\n+\t\t\t\t\t\t\t512 text 文字コード\n+\t\t\t\t\t\t513 text utf-8\n+\t\t\t\t\t\t514 container 行\n+\t\t\t\t\t\t\t515 text 行\n+\t\t\t\t\t\t516 text 名前 1, 単位 2, データ 3\n+\t\t\t\t\t\t517 container 時間\n+\t\t\t\t\t\t\t518 text 時間\n+\t\t\t\t\t\t519 text Time (s -> s (unit))\n+\t\t\t\t\t\t520 container データ\n+\t\t\t\t\t\t\t521 text データ\n+\t\t\t\t\t\t522 text 1201 点 / 6 チャンネル\n+\t\t\t\t\t523 text Engine_Speed, Engine_Torque, Coolant_Temp, sfc_ne, sfc_te, +1\n+\t\t\t\t524 button (expanded) Custom RAM 使える関数の一覧を表示 , Secondary Actions: Collapse\n+\t\t\t\t\t525 text Custom RAM\n+\t\t\t\t\t526 button Description: 使える関数の一覧を表示, ID: custom-ram-help\n+\t\t\t\t\t527 text \n+\t\t\t\t528 text field (settable) Description: Custom RAM名, ID: custom-ram-name\n+\t\t\t\t529 text field (settable) Description: Custom RAM単位（省略可）, ID: custom-ram-unit\n+\t\t\t\t530 text field (settable) Description: Custom RAM計算式, ID: custom-ram-expr\n+\t\t\t\t531 button 追加, ID: custom-ram-add\n+\t\t\t\t532 button (expanded) イベント検出 , Secondary Actions: Collapse\n+\t\t\t\t\t533 text イベント検出\n+\t\t\t\t\t534 text \n+\t\t\t\t535 container\n+\t\t\t\t\t536 text 条件が続いた区間を、 基準ログ全体 から探します。\n+\t\t\t\t537 text 開始条件\n+\t\t\t\t538 text field (settable) 開始条件, ID: event-expr\n+\t\t\t\t539 container\n+\t\t\t\t\t540 text 最低継続 [s]\n+\t\t\t\t\t541 stepper (settable, integer) 最低継続 [s], Value: 0, ID: event-min-duration\n+\t\t\t\t542 container\n+\t\t\t\t\t543 text 解除条件（任意）\n+\t\t\t\t\t544 text field (settable) 解除条件（任意）, ID: event-release-expr\n+\t\t\t\t545 text 例は説明用です。開始「油圧 < 250」、最低継続「2秒」、解除「油圧 >= 270」なら、低下が2秒続いて確定し、270に戻るまで追います。実際の信号名・単位に合わせて入力してください。解除条件が空欄なら開始条件が偽になった時点で終了します。\n+\t\t\t\t546 button (collapsed) 詳細条件・移動時の余白, Secondary Actions: Expand\n+\t\t\t\t\t547 text 詳細条件・移動時の余白\n+\t\t\t\t548 button 検出, ID: event-detect-btn\n+\t\t\t\t549 button (disabled) 検出結果を解除, ID: event-clear-btn\n+\t\t\t\t550 container\n+\t\t\t\t\t551 text 赤：検出結果  /  青：選択区間 。選択区間は操作バーの「×」で解除できます。\n+\t\t\t\t552 content list Description: 検出したイベント区間, ID: event-list\nThe focused UI element is 308 button (expanded) 読み込み設定・計算・イベント, Secondary Actions: Collapse"
+  },
+  {
+    "sequence": 29,
+    "command": "fill Engine_Speed > 3000 duration1; verify values; click 検出; DOM",
+    "observed": {
+      "clearDisabled": false,
+      "results": "1. 4.2 s → 7.6 s\n確定 5.2 s / 解除を確認 7.7 s / 観測した幅 3.4 s\n2. 16.5 s → 23 s\n確定 17.5 s / 解除を確認 23.1 s / 観測した幅 6.5 s\n3. 67.6 s → 75.9 s\n確定 68.6 s / 解除を確認 76 s / 観測した幅 8.3 s",
+      "scope": "selection",
+      "selection": "選択区間 17.9381 – 41.134 s\n選択しただけでは解析しません\n拡大\n区間比較\n統計\nメモ\n画像コピー\n×"
+    }
+  },
+  {
+    "sequence": 30,
+    "command": "inspect event-list buttons; screenshot",
+    "observed": [
+      {
+        "label": "1. 4.2 s → 7.6 s。確定 5.2 s / 解除を確認 7.7 s / 観測した幅 3.4 s。この区間へ移動",
+        "tag": "BUTTON",
+        "text": "1. 4.2 s → 7.6 s確定 5.2 s / 解除を確認 7.7 s / 観測した幅 3.4 s",
+        "type": "button"
+      },
+      {
+        "label": "2. 16.5 s → 23 s。確定 17.5 s / 解除を確認 23.1 s / 観測した幅 6.5 s。この区間へ移動",
+        "tag": "BUTTON",
+        "text": "2. 16.5 s → 23 s確定 17.5 s / 解除を確認 23.1 s / 観測した幅 6.5 s",
+        "type": "button"
+      },
+      {
+        "label": "3. 67.6 s → 75.9 s。確定 68.6 s / 解除を確認 76 s / 観測した幅 8.3 s。この区間へ移動",
+        "tag": "BUTTON",
+        "text": "3. 67.6 s → 75.9 s確定 68.6 s / 解除を確認 76 s / 観測した幅 8.3 s",
+        "type": "button"
+      }
+    ]
+  },
+  {
+    "sequence": 31,
+    "command": "click event3; DOM scope/range",
+    "observed": {
+      "end": "76.9",
+      "scope": "selection",
+      "selection": "選択区間 17.9381 – 41.134 s\n選択しただけでは解析しません\n拡大\n区間比較\n統計\nメモ\n画像コピー\n×",
+      "start": "66.6"
+    }
+  },
+  {
+    "sequence": 32,
+    "command": "click 検出結果を解除; DOM",
+    "observed": {
+      "events": "",
+      "expression": "Engine_Speed > 3000",
+      "scope": "selection",
+      "selection": "選択区間 17.9381 – 41.134 s\n選択しただけでは解析しません\n拡大\n区間比較\n統計\nメモ\n画像コピー\n×"
+    }
+  },
+  {
+    "sequence": 33,
+    "command": "click 区間選択を解除; DOM",
+    "observed": {
+      "expression": "Engine_Speed > 3000",
+      "scope": "visible",
+      "selectionHidden": false
+    }
+  },
+  {
+    "sequence": 34,
+    "command": "fill invalid event; click 検出; DOM event area",
+    "observed": "イベント検出\n\n条件が続いた区間を、基準ログ全体から探します。\n\n開始条件\n最低継続 [s]\n解除条件（任意）\n\n例は説明用です。開始「油圧 < 250」、最低継続「2秒」、解除「油圧 >= 270」なら、低下が2秒続いて確定し、270に戻るまで追います。実際の信号名・単位に合わせて入力してください。解除条件が空欄なら開始条件が偽になった時点で終了します。\n\n詳細条件・移動時の余白\n検出\n検出結果を解除\n\n赤：検出結果 / 青：選択区間。選択区間は操作バーの「×」で解除できます。\n\n基準ログ全体: 0件。判定不能 1201点（条件の欠損・非有限値。時間は推定しません）。最低継続と解除条件を満たす区間はありません"
+  },
+  {
+    "sequence": 35,
+    "command": "valid detect then invalid Engine_Speed > detect; DOM",
+    "observed": "イベント検出\n\n条件が続いた区間を、基準ログ全体から探します。\n\n開始条件\n最低継続 [s]\n解除条件（任意）\n\n例は説明用です。開始「油圧 < 250」、最低継続「2秒」、解除「油圧 >= 270」なら、低下が2秒続いて確定し、270に戻るまで追います。実際の信号名・単位に合わせて入力してください。解除条件が空欄なら開始条件が偽になった時点で終了します。\n\n詳細条件・移動時の余白\n検出\n検出結果を解除\n\n赤：検出結果 / 青：選択区間。選択区間は操作バーの「×」で解除できます。\n\n基準ログ全体: 0件。判定不能 1201点（条件の欠損・非有限値。時間は推定しません）。最低継続と解除条件を満たす区間はありません"
+  },
+  {
+    "sequence": 36,
+    "command": "reload; demo load; wait success",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\n1 AXWebArea CSV Chart Viewer, URL: 127.0.0.1:8765/?preview=1\n\t2 container\n\t\t3 container Description: ファイルとチャンネル, ID: workspace-sidebar\n\t\t\t4 heading ファイルとチャンネル, Value: 2\n\t\t\t\t5 text ファイルとチャンネル\n\t\t\t6 button Description: ファイルとチャンネルを閉じる, ID: workspace-sidebar-close\n\t\t\t67 container\n\t\t\t\t68 button (expanded) ファイル , Secondary Actions: Collapse\n\t\t\t\t\t69 text ファイル\n\t\t\t\t\t70 text \n\t\t\t\t71 container drop-zone\n\t\t\t\t\t72 text ここにファイルをドラッグ&ドロップ\n\t\t\t\t\t73 text CSV / TRN\n\t\t\t\t\t74 button 開く, ID: browse-files-btn\n\t\t\t\t75 checkbox (settable, integer) Description: 読込前に設定を確認, Value: 0, ID: import-review-before-load\n\t\t\t\t76 text 既定の設定ですぐに読み込みます。\n\t\t\t\t77 content list file-list\n\t\t\t\t\t78 container\n\t\t\t\t\t\t79 checkbox Description: デモ_燃費率マップ付き走行ログ.csv：基準ファイル, Help: Main file — 右クリックで色変更, Value: 1\n\t\t\t\t\t\t80 text デモ_燃費率マップ付き走行ログ.csv\n\t\t\t\t\t\t81 text utf-8\n\t\t\t\t\t\t82 button Description: デモ_燃費率マップ付き走行ログ.csvの表示色を変更, Help: 表示色を変更\n\t\t\t\t\t\t83 button Description: デモ_燃費率マップ付き走行ログ.csvの読み込み情報, Help: 読み込み情報\n\t\t\t\t\t\t84 button Description: デモ_燃費率マップ付き走行ログ.csvを外す, Help: ファイルを外す\n\t\t\t\t\t\t85 text 時間\n\t\t\t\t\t\t86 pop up button (collapsed, settable) Description: デモ_燃費率マップ付き走行ログ.csvの時間単位, Help: このファイルのTime列の元単位を指定, Value: s, Secondary Actions: Expand\n\t\t\t\t\t\t\t87 menu\n\t\t\t\t\t\t\t\t88 (selected) s\n\t\t\t\t\t\t\t\t89 ms\n\t\t\t\t\t\t90 text 自動\n\t\t\t\t\t\t91 container デモ_燃費率マップ付き走行ログ.csvの自動復元用保存状態\n\t\t\t\t\t\t\t92 text 開発用・自動保存なし\n\t\t\t\t93 button 作業をすべてクリア, ID: clear-all-btn\n\t\t\t\t94 button (collapsed) 読み込み設定・計算・イベント, Secondary Actions: Expand\n\t\t\t\t\t95 text 読み込み設定・計算・イベント\n\t\t\t18 button (expanded) チャンネル (デモ_燃費率マップ付き走行ログ.csv) , Secondary Actions: Collapse\n\t\t\t\t19 text チャンネル\n\t\t\t\t96 text (デモ_燃費率マップ付き走行ログ.csv)\n\t\t\t\t20 text \n\t\t\t21 text チャンネルを検索\n\t\t\t22 text field (settable) Description: チャンネル検索, ID: column-search\n\t\t\t23 pop up button (collapsed, settable) Description: チャンネルの絞り込み, Value: すべて, ID: compare-channel-filter, Secondary Actions: Expand\n\t\t\t\t24 menu\n\t\t\t\t\t25 (selected) すべて\n\t\t\t\t\t26 表示中\n\t\t\t\t\t27 全ファイル共通\n\t\t\t\t\t28 未対応あり\n\t\t\t\t\t29 お気に入りセット\n\t\t\t30 button 検索別名, Help: 検索用の別名を登録, ID: compare-alias-edit\n\t\t\t31 text ファイルを開くと一覧が表示されます\n\t\t\t97 container column-list\n\t\t\t\t98 checkbox Description: Engine_Speed [rpm], Value: 1\n\t\t\t\t\t99 text Engine_Speed\n\t\t\t\t\t100 text rpm\n\t\t\t\t\t101 button Description: Engine_Speedの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t102 container\n\t\t\t\t\t103 text Y\n\t\t\t\t\t104 stepper (settable) Description: Engine_SpeedのY軸下限, Help: Y-axis minimum\n\t\t\t\t\t105 text ~\n\t\t\t\t\t106 stepper (settable) Description: Engine_SpeedのY軸上限, Help: Y-axis maximum\n\t\t\t\t107 container\n\t\t\t\t\t108 text 太さ\n\t\t\t\t\t109 slider (settable, integer) Description: Engine_Speedの線の太さ, Value: 1\n\t\t\t\t\t110 text 1.0\n\t\t\t\t\t111 button ⟲, Help: 一括の太さに戻す\n\t\t\t\t112 checkbox Description: Engine_Torque [Nm], Value: 1\n\t\t\t\t\t113 text Engine_Torque\n\t\t\t\t\t114 text Nm\n\t\t\t\t\t115 button Description: Engine_Torqueの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t116 container\n\t\t\t\t\t117 text Y\n\t\t\t\t\t118 stepper (settable) Description: Engine_TorqueのY軸下限, Help: Y-axis minimum\n\t\t\t\t\t119 text ~\n\t\t\t\t\t120 stepper (settable) Description: Engine_TorqueのY軸上限, Help: Y-axis maximum\n\t\t\t\t121 container\n\t\t\t\t\t122 text 太さ\n\t\t\t\t\t123 slider (settable, integer) Description: Engine_Torqueの線の太さ, Value: 1\n\t\t\t\t\t124 text 1.0\n\t\t\t\t\t125 button ⟲, Help: 一括の太さに戻す\n\t\t\t\t126 checkbox Description: Coolant_Temp [degC], Value: 0\n\t\t\t\t\t127 text Coolant_Temp\n\t\t\t\t\t128 text degC\n\t\t\t\t\t129 button Description: Coolant_Tempの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t130 checkbox Description: sfc_ne [rpm], Value: 0\n\t\t\t\t\t131 text sfc_ne\n\t\t\t\t\t132 text rpm\n\t\t\t\t\t133 button Description: sfc_neの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t134 checkbox Description: sfc_te [Nm], Value: 0\n\t\t\t\t\t135 text sfc_te\n\t\t\t\t\t136 text Nm\n\t\t\t\t\t137 button Description: sfc_teの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t\t\t138 checkbox Description: sfc_g_kwh [g/kWh], Value: 0\n\t\t\t\t\t139 text sfc_g_kwh\n\t\t\t\t\t140 text g/kWh\n\t\t\t\t\t141 button Description: sfc_g_kwhの別名チャンネル対応を編集, Help: Subファイル側の別名チャンネルを対応付け\n\t\t33 splitter Description: ファイルとチャンネルの幅, Value: 300, ID: sidebar-resize-handle\n\t\t34 container Description: 開発用プレビュー, ID: dev-preview-panel\n\t\t\t35 text 開発用プレビュー\n\t\t\t36 button (disabled) デモを読み込む, ID: dev-preview-demo\n\t\t\t37 text この画面の作業は自動保存しません。デモは架空データです。\n\t\t\t142 text デモを表示しました。波形カーソル、境界の幅調整、マップの拡大操作を試せます。\n\t\t39 container\n\t\t\t40 button (expanded) ファイル, Help: ファイルとチャンネルの表示を切り替え, ID: workspace-sidebar-toggle, Secondary Actions: Collapse\n\t\t\t41 text CSV CHART VIEWER\n\t\t\t42 heading 比較ワークスペース, Value: 1\n\t\t\t\t43 text 比較ワークスペース\n\t\t\t44 button (collapsed) 比較パネル, ID: compare-panel-toggle, Secondary Actions: Expand\n\t\t\t45 button (expanded) XY・マップ, ID: xy-panel-toggle, Secondary Actions: Collapse\n\t\t46 container\n\t\t\t47 text 解析対象\n\t\t\t48 pop up button (collapsed, settable) Description: 比較・統計・XY・CSV・メモの対象区間, Value: 全体, ID: analysis-scope, Secondary Actions: Expand\n\t\t\t\t49 menu\n\t\t\t\t\t50 表示範囲\n\t\t\t\t\t51 (disabled) 選択区間\n\t\t\t\t\t52 (selected) 全体\n\t\t143 text 全体 0 – 120 s · 時間合わせ後\n\t\t53 text 比較・統計・XY・CSV・メモで共通\n\t\t54 button (collapsed) 調べる, Help: 元データ・品質診断・統計を確認します, ID: inspector-open, Secondary Actions: Expand\n\t\t55 button ボックスズーム, ID: zoom-mode-btn\n\t\t56 button リセット, ID: reset-zoom-btn\n\t\t57 button 計測, ID: measure-mode-btn\n\t\t58 button (disabled) Description: 元に戻す, ID: undo-btn\n\t\t59 button (disabled) Description: やり直す, ID: redo-btn\n\t\t144 container\n\t\t\t145 button (collapsed) 解析ツール ▾, Secondary Actions: Expand\n\t\t\t\t146 text 解析ツール ▾\n\t\t62 pop up button (collapsed) Description: 表示設定, ID: view-menu-btn, Secondary Actions: Expand\n\t\t63 pop up button (collapsed) Description: 保存・再利用, ID: export-menu-btn, Secondary Actions: Expand\n\t\t64 link Description: 操作マニュアル（別タブで開く）, Help: 図解付き操作マニュアルを別タブで開く, Value: 127.0.0.1:8765/manual.html, ID: manual-link\n\t\t65 button Description: テーマ切替（ライト/ダーク）, ID: theme-toggle-btn\n\t\t66 button Description: キーボードショートカット一覧, ID: shortcuts-help-btn\n\t\t147 container\n\t\t\t148 container Description: XYと燃費率マップ, ID: xy-workspace\n\t\t\t\t149 container\n\t\t\t\t\t150 heading XY・燃費率マップ, Value: 2\n\t\t\t\t\t\t151 text XY・燃費率マップ\n\t\t\t\t\t152 button (collapsed) 大きく表示, ID: xy-expand-btn, Secondary Actions: Expand\n\t\t\t\t\t153 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn\n\t\t\t\t154 text 左右分割：境界をドラッグして幅を調整できます。境界を選んで左右キーでも調整できます。\n\t\t\t\t155 container\n\t\t\t\t\t156 button (collapsed) 表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque, ID: xy-settings-summary, Secondary Actions: Expand\n\t\t\t\t\t\t157 text 表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque\n\t\t\t\t\t158 container xy-map-navigation\n\t\t\t\t\t\t159 checkbox 拡大操作 OFF, Value: 0, ID: xy-map-zoom-btn\n\t\t\t\t\t\t160 button 全体に戻す, ID: xy-map-reset-view\n\t\t\t\t\t\t161 text ONでホイール・ピンチ拡大、ドラッグ移動\n\t\t\t\t\t162 image Description: XY・燃費率マップ, ID: xy-chart\n\t\t\t\t\t163 text 練習用_詳細燃費率ﾏｯﾌﾟ.csv を背景に適用しました。\n\t\t\t\t\t164 text 波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。\n\nThe focused UI element is 153 button Description: XY・マップを閉じて比較へ戻る, ID: xy-close-btn"
+  },
+  {
+    "sequence": 37,
+    "command": "read settled map geometry; screenshot",
+    "observed": {
+      "chart": {
+        "bottom": 795.7999877929688,
+        "height": 260,
+        "left": 966.7999877929688,
+        "right": 1584.4000244140625,
+        "top": 535.7999877929688,
+        "width": 617.6000366210938,
+        "x": 966.7999877929688,
+        "y": 535.7999877929688
+      },
+      "pane": {
+        "bottom": 785.7000122070312,
+        "height": 470.3000183105469,
+        "left": 956,
+        "right": 1600,
+        "top": 315.3999938964844,
+        "width": 644,
+        "x": 956,
+        "y": 315.3999938964844
+      },
+      "settingsOpen": false,
+      "summary": "表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque"
+    }
+  },
+  {
+    "sequence": 38,
+    "command": "open xy-settings-summary; DOM",
+    "observed": "Browser tab: 888813748, Title: \"CSV Chart Viewer\", URL: \"http://127.0.0.1:8765/?preview=1\".\nThe following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.\nRemoved element IDs: 156-157\n+\t\t\t\t\t195 container xy-map-settings\n+\t\t\t\t\t\t196 button (expanded) 表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque, ID: xy-settings-summary, Secondary Actions: Collapse\n+\t\t\t\t\t\t\t197 text 表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque\n+\t\t\t\t\t\t198 container\n+\t\t\t\t\t\t\t199 text 表示\n+\t\t\t\t\t\t\t200 pop up button (collapsed, settable) 表示, Value: 燃費率マップ, ID: xy-mode, Secondary Actions: Expand\n+\t\t\t\t\t\t\t\t201 menu\n+\t\t\t\t\t\t\t\t\t202 散布図\n+\t\t\t\t\t\t\t\t\t203 (selected) 燃費率マップ\n+\t\t\t\t\t\t204 container\n+\t\t\t\t\t\t\t205 text 走行点のX軸\n+\t\t\t\t\t\t\t206 pop up button (collapsed, settable) Description: 走行点のX軸チャンネル, Value: Engine_Speed [rpm], ID: xy-x-select, Secondary Actions: Expand\n+\t\t\t\t\t\t\t\t207 menu\n+\t\t\t\t\t\t\t\t\t208 選択してください\n+\t\t\t\t\t\t\t\t\t209 (selected) Engine_Speed [rpm]\n+\t\t\t\t\t\t\t\t\t210 Engine_Torque [Nm]\n+\t\t\t\t\t\t\t\t\t211 Coolant_Temp [degC]\n+\t\t\t\t\t\t\t\t\t212 sfc_ne [rpm]\n+\t\t\t\t\t\t\t\t\t213 sfc_te [Nm]\n+\t\t\t\t\t\t\t\t\t214 sfc_g_kwh [g/kWh]\n+\t\t\t\t\t\t215 container\n+\t\t\t\t\t\t\t216 text 走行点のY軸\n+\t\t\t\t\t\t\t217 pop up button (collapsed, settable) Description: 走行点のY軸チャンネル, Value: Engine_Torque [Nm], ID: xy-y-select, Secondary Actions: Expand\n+\t\t\t\t\t\t\t\t218 menu\n+\t\t\t\t\t\t\t\t\t219 選択してください\n+\t\t\t\t\t\t\t\t\t220 Engine_Speed [rpm]\n+\t\t\t\t\t\t\t\t\t221 (selected) Engine_Torque [Nm]\n+\t\t\t\t\t\t\t\t\t222 Coolant_Temp [degC]\n+\t\t\t\t\t\t\t\t\t223 sfc_ne [rpm]\n+\t\t\t\t\t\t\t\t\t224 sfc_te [Nm]\n+\t\t\t\t\t\t\t\t\t225 sfc_g_kwh [g/kWh]\n+\t\t\t\t\t\t226 container xy-map-controls\n+\t\t\t\t\t\t\t227 container\n+\t\t\t\t\t\t\t\t228 text 背景マップのデータ\n+\t\t\t\t\t\t\t\t229 pop up button (collapsed, settable) Description: 背景マップのデータ, Value: 別のマップCSV, ID: xy-map-source, Secondary Actions: Expand\n+\t\t\t\t\t\t\t\t\t230 menu\n+\t\t\t\t\t\t\t\t\t\t231 基準ログのSFC列\n+\t\t\t\t\t\t\t\t\t\t232 (selected) 別のマップCSV\n+\t\t\t\t\t\t\t233 container xy-map-external-fields\n+\t\t\t\t\t\t\t\t234 container\n+\t\t\t\t\t\t\t\t\t235 text マップCSVを選ぶ\n+\t\t\t\t\t\t\t\t\t236 button マップCSVを選ぶ, ID: xy-map-file\n+\t\t\t\t\t\t\t\t237 text 走行ログとは別に読み込みます。UTF-8、5 MiBまで。行列形式は先頭行が回転数、先頭列がトルク。3列形式は回転数・トルク・燃費率の順です。\n+\t\t\t\t\t\t\t\t238 container\n+\t\t\t\t\t\t\t\t\t239 text CSVの形式\n+\t\t\t\t\t\t\t\t\t240 pop up button (collapsed, settable) CSVの形式, Value: 3列（X・Y・燃費率）, ID: xy-map-format, Secondary Actions: Expand\n+\t\t\t\t\t\t\t\t\t\t241 menu\n+\t\t\t\t\t\t\t\t\t\t\t242 自動判別\n+\t\t\t\t\t\t\t\t\t\t\t243 行列（先頭行X・先頭列Y）\n+\t\t\t\t\t\t\t\t\t\t\t244 (selected) 3列（X・Y・燃費率）\n+\t\t\t\t\t\t\t\t245 checkbox (settable, integer) Description: このCSVの単位が X＝rpm、Y＝Nm、燃費率＝g/kWh であることを確認した, Value: 1, ID: xy-map-confirm-units\n+\t\t\t\t\t\t\t\t246 button 背景に適用, ID: xy-map-apply\n+\t\t\t\t\t\t\t\t247 button 背景を解除, ID: xy-map-clear\n+\t\t\t\t\t\t\t\t248 text 練習用_詳細燃費率ﾏｯﾌﾟ.csv を背景に適用しました。\n+\t\t\t\t\t\t\t249 container\n+\t\t\t\t\t\t\t\t250 text 背景の表示\n+\t\t\t\t\t\t\t\t251 pop up button (collapsed, settable) 背景の表示, Value: 塗りつぶし＋等高線, ID: xy-map-style, Secondary Actions: Expand\n+\t\t\t\t\t\t\t\t\t252 menu\n+\t\t\t\t\t\t\t\t\t\t253 塗りつぶし\n+\t\t\t\t\t\t\t\t\t\t254 等高線のみ\n+\t\t\t\t\t\t\t\t\t\t255 (selected) 塗りつぶし＋等高線\n+\t\t\t\t\t\t\t256 container\n+\t\t\t\t\t\t\t\t257 text 燃費率の下限 [g/kWh]\n+\t\t\t\t\t\t\t\t258 stepper (settable) 燃費率の下限 [g/kWh], ID: xy-map-color-min\n+\t\t\t\t\t\t\t259 container\n+\t\t\t\t\t\t\t\t260 text 燃費率の上限 [g/kWh]\n+\t\t\t\t\t\t\t\t261 stepper (settable) 燃費率の上限 [g/kWh], ID: xy-map-color-max\n+\t\t\t\t\t\t\t262 text 色と等高線に共通の範囲です。空欄は元データ全体。例：200〜500 g/kWh。塗りつぶしの範囲外は端の色になり、元の値は保持します。\n+\t\t\t\t\t\t\t263 container\n+\t\t\t\t\t\t\t\t264 text 等高線の間隔 [g/kWh]\n+\t\t\t\t\t\t\t\t265 stepper (settable, integer) 等高線の間隔 [g/kWh], Value: 5, ID: xy-map-contour-step\n+\t\t\t\t\t\t\t266 text 通常10、詳細5、広く見るときは20が目安です。主要線は太線と数値で表示。等高線は有効な格子間の線形補間で、元データの精度を増やしません。欠損セルは埋めません。走行点は回転数とトルクが非負の元サンプルです。\nThe focused UI element is 196 button (expanded) 表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque, ID: xy-settings-summary, Secondary Actions: Collapse"
+  },
+  {
+    "sequence": 39,
+    "command": "map apply unavailable after demo API import; inspect message",
+    "observed": "マップCSVを選ぶ\n\n走行ログとは別に読み込みます。UTF-8、5 MiBまで。行列形式は先頭行が回転数、先頭列がトルク。3列形式は回転数・トルク・燃費率の順です。\n\nCSVの形式\n自動判別\n行列（先頭行X・先頭列Y）\n3列（X・Y・燃費率）\nこのCSVの単位が X＝rpm、Y＝Nm、燃費率＝g/kWh であることを確認した\n背景に適用\n背景を解除\n\n単位確認にチェックを入れると「背景に適用」が押せます。"
+  },
+  {
+    "sequence": 40,
+    "command": "native map chooser rejected file access permission",
+    "observed": {
+      "result": "blocked",
+      "reason": "Chrome extension requires Allow access to file URLs. Setting unchanged; permission question pending."
+    }
+  },
+  {
+    "sequence": 41,
+    "command": "check units; contour step0 blur; DOM",
+    "observed": "XY・燃費率マップ\n大きく表示\n×\n\n左右分割：境界をドラッグして幅を調整できます。境界を選んで左右キーでも調整できます。\n\n表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque\n表示\n散布図\n燃費率マップ\n走行点のX軸\n選択してください\nEngine_Speed [rpm]\nEngine_Torque [Nm]\nCoolant_Temp [degC]\nsfc_ne [rpm]\nsfc_te [Nm]\nsfc_g_kwh [g/kWh]\n走行点のY軸\n選択してください\nEngine_Speed [rpm]\nEngine_Torque [Nm]\nCoolant_Temp [degC]\nsfc_ne [rpm]\nsfc_te [Nm]\nsfc_g_kwh [g/kWh]\n背景マップのデータ\n基準ログのSFC列\n別のマップCSV\nマップCSVを選ぶ\n\n走行ログとは別に読み込みます。UTF-8、5 MiBまで。行列形式は先頭行が回転数、先頭列がトルク。3列形式は回転数・トルク・燃費率の順です。\n\nCSVの形式\n自動判別\n行列（先頭行X・先頭列Y）\n3列（X・Y・燃費率）\nこのCSVの単位が X＝rpm、Y＝Nm、燃費率＝g/kWh であることを確認した\n背景に適用\n背景を解除\n\n練習用_詳細燃費率ﾏｯﾌﾟ.csv の準備ができました。「背景に適用」を押してください。\n\n背景の表示\n塗りつぶし\n等高線のみ\n塗りつぶし＋等高線\n燃費率の下限 [g/kWh]\n燃費率の上限 [g/kWh]\n\n色と等高線に共通の範囲です。空欄は元データ全体。例：200〜500 g/kWh。塗りつぶしの範囲外は端の色になり、元の値は保持します。\n\n等高線の間隔 [g/kWh]\n\n通常10、詳細5、広く見るときは20が目安です。主要線は太線と数値で表示。等高線は有効な格子間の線形補間で、元データの精度を増やしません。欠損セルは埋めません。走行点は回転数とトルクが非負の元サンプルです。\n\n全体 0 – 120 s · 時間合わせ後（動作点・散布図に適用）\n\n拡大操作 OFF\n全体に戻す\nONでホイール・ピンチ拡大、ドラッグ移動\n\n練習用_詳細燃費率ﾏｯﾌﾟ.csv の準備ができました。「背景に適用」を押してください。\n\nデモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点\n\n波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。"
+  },
+  {
+    "sequence": 42,
+    "command": "read contour step validity and status DOM",
+    "observed": {
+      "class": "xy-workspace-controls",
+      "message": "",
+      "status": [
+        {
+          "hidden": false,
+          "id": "xy-map-feedback",
+          "text": "練習用_詳細燃費率ﾏｯﾌﾟ.csv の準備ができました。「背景に適用」を押してください。"
+        },
+        {
+          "hidden": false,
+          "id": "xy-point-status",
+          "text": ""
+        },
+        {
+          "hidden": false,
+          "id": "xy-map-status",
+          "text": "練習用_詳細燃費率ﾏｯﾌﾟ.csv の準備ができました。「背景に適用」を押してください。"
+        },
+        {
+          "hidden": false,
+          "id": "xy-data-count",
+          "text": "デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点"
+        },
+        {
+          "hidden": false,
+          "id": "xy-cursor-status",
+          "text": ""
+        }
+      ],
+      "step": "0",
+      "valid": true
+    }
+  },
+  {
+    "sequence": 43,
+    "command": "click 背景に適用; DOM status",
+    "observed": {
+      "feedback": "",
+      "settingsOpen": false,
+      "status": "練習用_詳細燃費率ﾏｯﾌﾟ.csv を背景に適用しました。",
+      "step": "0"
+    }
+  },
+  {
+    "sequence": 44,
+    "command": "demo final-source 1600x900",
+    "observed": {
+      "items": [
+        {
+          "height": 470.3000183105469,
+          "id": "xy-workspace",
+          "text": "XY・燃費率マップ大きく表示×\n          表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque\n          表示散布図燃費率マップ\n          走行点のX軸選択してください",
+          "width": 644,
+          "x": 956,
+          "y": 315.3999938964844
+        },
+        {
+          "height": 305,
+          "id": "xy-chart",
+          "width": 617.6000366210938,
+          "x": 966.7999877929688,
+          "y": 481.3999938964844
+        },
+        {
+          "height": 16.5,
+          "id": "xy-settings-summary",
+          "text": "表示・軸・背景設定 · 燃費率マップ：Engine_Speed × Engine_Torque",
+          "width": 602,
+          "x": 974.6000366210938,
+          "y": 386.1000061035156
+        }
+      ],
+      "status": "デモを表示しました。波形カーソル、境界の幅調整、マップの拡大操作を試せます。"
+    }
+  },
+  {
+    "sequence": 45,
+    "command": "958 stacked explicit reopen",
+    "observed": {
+      "body": {
+        "height": 391,
+        "scroll": 0
+      },
+      "overflow": false,
+      "rects": [
+        {
+          "id": "xy-workspace",
+          "rect": {
+            "bottom": 740.1000061035156,
+            "height": 390.7000122070313,
+            "left": 625.5750122070312,
+            "right": 958.4000244140624,
+            "top": 349.3999938964844,
+            "width": 332.82501220703125,
+            "x": 625.5750122070312,
+            "y": 349.3999938964844
+          }
+        },
+        {
+          "id": "xy-chart",
+          "rect": {
+            "bottom": 755.4000244140625,
+            "height": 240,
+            "left": 636.375,
+            "right": 942.8000183105468,
+            "top": 515.4000244140625,
+            "width": 306.4250183105469,
+            "x": 636.375,
+            "y": 515.4000244140625
+          }
+        },
+        {
+          "id": "xy-settings-summary",
+          "rect": {
+            "bottom": 436.6000061035156,
+            "height": 16.5,
+            "left": 644.1749877929688,
+            "right": 935,
+            "top": 420.1000061035156,
+            "width": 290.82501220703125,
+            "x": 644.1749877929688,
+            "y": 420.1000061035156
+          }
+        }
+      ]
+    }
+  },
+  {
+    "sequence": 46,
+    "command": "expanded invalid color 500..200 settled",
+    "observed": {
+      "feedback": "練習用_詳細燃費率ﾏｯﾌﾟ.csv を背景に適用しました。",
+      "map": "練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。",
+      "max": "200",
+      "min": "500",
+      "open": true
+    }
+  },
+  {
+    "sequence": 47,
+    "command": "map invalid range confirmed using keyboard change",
+    "observed": {
+      "chartVisible": "block",
+      "settings": true,
+      "statusRect": {
+        "bottom": 737.7999877929688,
+        "height": 17,
+        "left": 275,
+        "right": 942.7999877929688,
+        "top": 720.7999877929688,
+        "width": 667.7999877929688,
+        "x": 275,
+        "y": 720.7999877929688
+      },
+      "text": "燃費率の範囲は、下限より上限が大きくなるよう指定してください。空欄はその端の自動値です。"
+    }
+  },
+  {
+    "sequence": 48,
+    "command": "map invalid range corrected and settings collapsed",
+    "observed": {
+      "chart": {
+        "bottom": 756.2000122070312,
+        "height": 240,
+        "left": 275,
+        "right": 942.7999877929688,
+        "top": 516.2000122070312,
+        "width": 667.7999877929688,
+        "x": 275,
+        "y": 516.2000122070312
+      },
+      "status": "練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。"
+    }
+  },
+  {
+    "sequence": 49,
+    "command": "final zoom actual wheel drag reset",
+    "observed": {
+      "zoomAfter": {
+        "result": {
+          "type": "string",
+          "value": "[{\"start\":8.821839080459768,\"end\":92.15517241379311,\"disabled\":false},{\"start\":6.845238095238095,\"end\":90.17857142857143,\"disabled\":false}]"
+        }
+      },
+      "panAfter": {
+        "result": {
+          "type": "string",
+          "value": "[{\"start\":1.6379310344827571,\"end\":84.9712643678161,\"disabled\":false},{\"start\":16.66666666666666,\"end\":100,\"disabled\":false}]"
+        }
+      },
+      "resetAfter": {
+        "result": {
+          "type": "string",
+          "value": "[{\"start\":0,\"end\":100,\"disabled\":true},{\"start\":0,\"end\":100,\"disabled\":true}]"
+        }
+      }
+    }
+  },
+  {
+    "sequence": 50,
+    "command": "390 narrow map scroll",
+    "observed": {
+      "bodyScroll": 320,
+      "chart": {
+        "bottom": 992.7999877929688,
+        "height": 350,
+        "left": 10,
+        "right": 374.8000183105469,
+        "top": 642.7999877929688,
+        "width": 364.8000183105469,
+        "x": 10,
+        "y": 642.7999877929688
+      },
+      "scrollWidth": 390,
+      "width": 390
+    }
+  },
+  {
+    "sequence": 51,
+    "command": "30 actual cursor moves; read-only map pixel/geometry samples",
+    "observed": [
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); display: none;",
+            "text": ""
+          }
+        ],
+        "cursor": ""
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 282.024px; top: 137.482px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 8.9 s · デモ_燃費率マップ付き走行ログ.csv: 元 8.9 s / 表示 8.9 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 215.981px; top: 186.289px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 53.5 s · デモ_燃費率マップ付き走行ログ.csv: 元 53.5 s / 表示 53.5 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 151.041px; top: 188.476px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 103.1 s · デモ_燃費率マップ付き走行ログ.csv: 元 103.1 s / 表示 103.1 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 246.122px; top: 149.386px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 78.3 s · デモ_燃費率マップ付き走行ログ.csv: 元 78.3 s / 表示 78.3 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 282.024px; top: 137.482px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 8.9 s · デモ_燃費率マップ付き走行ログ.csv: 元 8.9 s / 表示 8.9 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 215.981px; top: 186.289px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 53.5 s · デモ_燃費率マップ付き走行ログ.csv: 元 53.5 s / 表示 53.5 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 246.122px; top: 149.386px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 78.3 s · デモ_燃費率マップ付き走行ログ.csv: 元 78.3 s / 表示 78.3 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 151.041px; top: 188.476px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 103.1 s · デモ_燃費率マップ付き走行ログ.csv: 元 103.1 s / 表示 103.1 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 215.981px; top: 186.289px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 53.5 s · デモ_燃費率マップ付き走行ログ.csv: 元 53.5 s / 表示 53.5 s（最寄りの観測点。補間なし）"
+      },
+      {
+        "canvas": [
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 2359786936
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 3071871124
+          },
+          {
+            "width": 772,
+            "height": 381,
+            "hash": 4216403566
+          }
+        ],
+        "rect": {
+          "x": 966.7999877929688,
+          "y": 481.3999938964844,
+          "width": 617.6000366210938,
+          "height": 305,
+          "top": 481.3999938964844,
+          "right": 1584.4000244140625,
+          "bottom": 786.3999938964844,
+          "left": 966.7999877929688
+        },
+        "marker": [
+          {
+            "style": "background-color: rgb(230, 76, 76); left: 246.122px; top: 149.386px;",
+            "text": ""
+          }
+        ],
+        "cursor": "カーソル 78.3 s · デモ_燃費率マップ付き走行ログ.csv: 元 78.3 s / 表示 78.3 s（最寄りの観測点。補間なし）"
+      }
+    ]
+  },
+  {
+    "sequence": 52,
+    "command": "divider drag,key,reset values",
+    "observed": [
+      "39",
+      "39",
+      "40"
+    ]
+  },
+  {
+    "sequence": 53,
+    "command": "divider keyboard left settled",
+    "observed": "40"
+  },
+  {
+    "sequence": 54,
+    "command": "invalid start expression final",
+    "observed": {
+      "error": [
+        {
+          "id": "event-validation",
+          "text": "開始条件: 式の構文エラー: 式の末尾に数値・チャンネル名・関数が必要です"
+        }
+      ]
+    }
+  },
+  {
+    "sequence": 55,
+    "command": "invalid release final",
+    "observed": {
+      "error": "解除条件: 式の構文エラー: 式の末尾に数値・チャンネル名・関数が必要です"
+    }
+  },
+  {
+    "sequence": 56,
+    "command": "valid event after syntax correction",
+    "observed": {
+      "items": "1. 4.2 s → 7.6 s\n確定 5.2 s / 解除を確認 7.7 s / 観測した幅 3.4 s\n2. 16.5 s → 23 s\n確定 17.5 s / 解除を確認 23.1 s / 観測した幅 6.5 s\n3. 67.6 s → 75.9 s\n確定 68.6 s / 解除を確認 76 s / 観測した幅 8.3 s"
+    }
+  },
+  {
+    "sequence": 57,
+    "command": "clear events preserves selected interval",
+    "observed": {
+      "eventText": "",
+      "scope": "selection",
+      "selection": "選択区間 28.7603 – 65.9504 s\n選択しただけでは解析しません\n拡大\n区間比較\n統計\nメモ\n画像コピー\n×",
+      "selectionDisplay": "flex"
+    }
+  },
+  {
+    "sequence": 58,
+    "command": "clear selection settled",
+    "observed": {
+      "scope": "visible",
+      "selectionClass": "compare-selection hidden",
+      "selectionDisplay": "none"
+    }
+  },
+  {
+    "sequence": 59,
+    "command": "final quality summary",
+    "observed": "時刻品質はファイル全体、値の品質は表示範囲 0 – 120 s · 時間合わせ後の選択チャンネルです。重複は非隣接も含む2回目以降、逆転は隣接点を数えます。元レコード番号は空行を除くレコードの番号です。\n\n時刻サンプル\n1,201\n重複（2回目以降）\n0\n隣接時刻の逆転\n0\n長い間隔（候補）\n0\n除外・非有限時刻\n0\n\n長い間隔は正の隣接間隔の中央値 0.1 s × 10（1 s超）を目安にした候補です。計測欠落と断定しません。\n\n選択チャンネル\t対象点\t有効点\t欠損合計\n変換不能を含む\t変換不能\nファイル全体\t最小\t最大\t値の状態\nEngine_Speed\nrpm\n\t1201\t1201\t0 (0.0%)\t0\t909.23\t3490.73\t変化あり\nEngine_Torque\nNm\n\t1201\t1201\t0 (0.0%)\t0\t24.801\t108.814\t変化あり\n\n一定値は正常な状態保持でも発生します。欠損は0と扱いません。変換不能の原文と時刻の除外明細は先頭1000件まで保持されるため、区間内の内訳を確定できない場合があります。\n\n問題の詳細 \nすべて\n時刻品質（全体）\n欠損・非有限値（対象区間）\n変換不能の保持明細（対象区間）\n0件表示 / 検出 0件（表示上限1000件）\n種類\tチャンネル\t元レコード\t表示時刻 [s]\t詳細・元文字\t移動\n表示できる問題の明細はありません。上の件数と対象範囲も確認してください。"
+  },
+  {
+    "sequence": 60,
+    "command": "raw row204 actual outcome: wave20.1 but XYstale65.9",
+    "observed": {
+      "cursor": "カーソル 65.9 s · デモ_燃費率マップ付き走行ログ.csv: 元 65.9 s / 表示 65.9 s（最寄りの観測点。補間なし）",
+      "info": "元データ\n品質診断\n統計\nファイル\nファイルを選択してください\n1. デモ_燃費率マップ付き走行ログ.csv\n更新\n閉じる\n\n表示範囲 0 – 120 s · 時間合わせ後\n\n元レコード 204、表示時刻 20.1 sを選択しました。\n\n201–300 / 1,201 サンプル\n前\nページ\n/ 13\n次\n\n元レコードは空行を除く1始まりの番号です（物理行番号ではありません）。元時刻は秒換算済み。表示時刻＝元時刻＋時間補正。値は読込済みの原サンプル／計算列の値で、補間しません。\n\n元レコード\t元時刻 [s]\t表示時刻 [s]\tEngine_Speed\nrpm\n\tEngine_Torque\nNm\n",
+      "row": "<tr data-sample-index=\"201\" class=\"inspector-current\" aria-current=\"location\"><td><button type=\"button\" class=\"inspector-row-jump\" data-sample-index=\"201\" aria-label=\"元レコード204、表示時刻20.1秒を波形で確認\">204</button></td><td>20.1</td><td>20.1</td><td>3276.512939453125</td><td>83.572998046875</td></tr>",
+      "scrollY": 0
+    }
+  },
+  {
+    "sequence": 61,
+    "command": "CSV export limit",
+    "observed": {
+      "locatorAttempt": "download-event timeout",
+      "coordinateAttempt": "saved toast1201rows2channels",
+      "file": "not obtained; normal Downloads absent; content verification pending"
+    }
+  },
+  {
+    "sequence": 62,
+    "command": "save purposes UI navigation",
+    "observed": [
+      {
+        "purpose": "session",
+        "text": "保存・再利用\n閉じる\n目的を選ぶ\n画像・数値・レポートを出力\n今回の作業を再開\n次の試験へ比較条件\nチャンネルの組を再利用\n読込・表示設定を再利用\n\n設定JSONで現在の表示・比較条件・時間差・メモ等を保存・読み込みます。元のログ本体は含まれません。元ログは別に保管してください。\n\n設定JSONを書き出す\n設定JSONを読み込む"
+      },
+      {
+        "purpose": "template",
+        "text": "保存・再利用\n閉じる\n目的を選ぶ\n画像・数値・レポートを出力\n今回の作業を再開\n次の試験へ比較条件\nチャンネルの組を再利用\n読込・表示設定を再利用\n\n比較テンプレートで配置・信号・式・対応・許容差を再利用します。適用時は時間差を0へ戻し、現在のメモと表示名は保ちます。適用後に時間合わせと比較をやり直してください。\n\nテンプレート名\n保存\n現在の条件をJSON書き出し\n保存済みテンプレート\n選択してください\n新しいログに適用\n削除\nJSONを読み込んで適用\n\nJSON読込は現在のログへ即時適用します。保存一覧への追加ではありません。JSON書き出しは、選択済みの保存内容ではなく現在の条件です。設定JSONとは別の形式です。"
+      },
+      {
+        "purpose": "favorite",
+        "text": "保存・再利用\n閉じる\n目的を選ぶ\n画像・数値・レポートを出力\n今回の作業を再開\n次の試験へ比較条件\nチャンネルの組を再利用\n読込・表示設定を再利用\n\nお気に入りは列名と順序を保存します。適用すると表示チャンネルを置き換え、各信号を独立した段へ並べ直します。式・時間差・比較メモは置き換えません。\n\n保存済みのチャンネルのお気に入り\nお気に入り…\n現在を保存\n適用\n削除"
+      },
+      {
+        "purpose": "preset",
+        "text": "保存・再利用\n閉じる\n目的を選ぶ\n画像・数値・レポートを出力\n今回の作業を再開\n次の試験へ比較条件\nチャンネルの組を再利用\n読込・表示設定を再利用\n\nプリセットは読込設定・信号・式・配置・軸範囲・比較設定をまとめて適用します。適用すると現在の比較メモをクリアします。必要なメモは先にHTMLレポート等へ保存してください。\n\n保存済みの設定プリセット\nプリセット…\n現在を保存\n適用\n削除"
+      }
+    ]
+  },
+  {
+    "sequence": 63,
+    "command": "light theme UI",
+    "observed": {
+      "background": "rgb(244, 245, 247)",
+      "body": "workspace-has-files workspace-has-chart workspace-sidebar-open",
+      "theme": "light"
+    }
+  },
+  {
+    "sequence": 64,
+    "command": "shortcut modal escape and theme restored",
+    "observed": {
+      "active": "theme-toggle-btn",
+      "shortcuts": [],
+      "theme": null
+    }
+  },
+  {
+    "sequence": 65,
+    "command": "fixed raw row204 synchronizesXY",
+    "observed": {
+      "cursor": "カーソル 20.1 s · デモ_燃費率マップ付き走行ログ.csv: 元 20.1 s / 表示 20.1 s（最寄りの観測点。補間なし）",
+      "marker": "background-color: rgb(230, 76, 76); left: 320.651px; top: 111.161px;",
+      "row": "<tr data-sample-index=\"201\" class=\"inspector-current\" aria-current=\"location\"><td><button type=\"button\" class=\"inspector-row-jump\" data-sample-index=\"201\" aria-label=\"元レコード204、表示時刻20.1秒を波形で確認\">204</button></td><td>20.1</td><td>20.1</td><td>3276.512939453125</td><td>83.572998046875</td></tr>",
+      "scrollY": 0
+    }
+  },
+  {
+    "sequence": 66,
+    "command": "breakpoint984 stacked",
+    "observed": {
+      "body": 713,
+      "classes": "compare-body xy-layout-active xy-layout-stacked",
+      "overflow": false
+    }
+  },
+  {
+    "sequence": 67,
+    "command": "breakpoint985 sidebyside",
+    "observed": {
+      "body": 721,
+      "classes": "compare-body xy-layout-active",
+      "overflow": false
+    }
+  },
+  {
+    "sequence": 68,
+    "command": "contourstep0 actual keyboard entry",
+    "observed": {
+      "status": "練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線の間隔は0より大きい有限値で指定してください。 「塗りつぶし」で元の格子値を確認できます。",
+      "step": "0"
+    }
+  },
+  {
+    "sequence": 69,
+    "command": "map point click returns original sample",
+    "observed": {
+      "cursor": "カーソル 10.3 s · デモ_燃費率マップ付き走行ログ.csv: 元 10.3 s / 表示 10.3 s（最寄りの観測点。補間なし）",
+      "pointStatus": ""
+    }
+  },
+  {
+    "sequence": 70,
+    "command": "final scatter current layout",
+    "observed": {
+      "chart": {
+        "bottom": 723.3999938964844,
+        "height": 305,
+        "left": 966.7999877929688,
+        "right": 1584.4000244140625,
+        "top": 418.3999938964844,
+        "width": 617.6000366210938,
+        "x": 966.7999877929688,
+        "y": 418.3999938964844
+      },
+      "counts": "デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点",
+      "summary": "表示・軸・背景設定 · 散布図：Engine_Speed × Engine_Torque"
+    }
+  },
+  {
+    "sequence": 71,
+    "command": "favorite save browser-dialog limitation",
+    "observed": {
+      "action": "clicked save favorite, prompt appeared, accepted QA_回転数とトルク",
+      "result": "Subsequent prompt accept, state and screenshot commands timed out in browser focus emulation; persistence/application not verified. No app fix inferred."
+    }
+  }
+]

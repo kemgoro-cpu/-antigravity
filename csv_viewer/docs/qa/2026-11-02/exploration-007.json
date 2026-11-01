@@ -1,0 +1,17 @@
+{
+  "observationCommand": "screenshot settled scroll; DOM visible labels",
+  "observed": {
+    "chart": {
+      "height": 370,
+      "width": 613.6000366210938,
+      "x": 968.7999877929688,
+      "y": 320.8000183105469
+    },
+    "viewport": {
+      "h": 900,
+      "w": 1600
+    }
+  },
+  "hypothesis": "Map is reachable but shares scroll area with controls; verify linked cursor responds without layout shift.",
+  "nextCommand": "CDP mouseMove sweep waveform; DOM cursor and pane rectangles"
+}

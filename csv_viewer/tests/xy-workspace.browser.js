@@ -65,6 +65,7 @@ const pointSeries = page => page.evaluate(() => {
 });
 async function choose(page, id, value) {
     if (await page.locator('#' + id).inputValue() === value) { await ready(page); return; }
+    await mapSettings(page);
     await page.locator('#' + id).selectOption(value);
     await settle(page);
     await ready(page);
@@ -371,13 +372,13 @@ async function clickDataPoint(page, seriesIndex = 0, pointIndex = 3) {
 
         const delayed = await open(), dp = delayed.page;
         await setup(dp, false);
-        await holdNextParse(dp); await dp.locator('#xy-z-select').selectOption('Lazy');
+        await mapSettings(dp); await holdNextParse(dp); await dp.locator('#xy-z-select').selectOption('Lazy');
         await dp.waitForFunction(() => typeof window.__xyHeldParse === 'function');
         await dp.locator('#xy-close-btn').click(); await releaseParse(dp);
         assert.equal((await inspect(dp)).visible, false, 'Late data completion must not reopen the hidden panel');
         await openXY(dp);
         assert.equal((await pointSeries(dp))[0].data[0].value[2], 100, 'Reopening reads the latest draft and loaded data');
-        await holdNextParse(dp); await dp.locator('#xy-z-select').selectOption('Temp');
+        await mapSettings(dp); await holdNextParse(dp); await dp.locator('#xy-z-select').selectOption('Temp');
         await dp.waitForFunction(() => typeof window.__xyHeldParse === 'function');
         await dp.locator('[data-cancel-job]').click(); await releaseParse(dp); await ready(dp);
         assert.match(await dp.locator('#xy-data-count').innerText(), /未完了|キャンセル|読み込/);

@@ -1,0 +1,11 @@
+{
+  "observationCommand": "fill Engine_Speed > 3000 duration1; verify values; click 検出; DOM",
+  "observed": {
+    "clearDisabled": false,
+    "results": "1. 4.2 s → 7.6 s\n確定 5.2 s / 解除を確認 7.7 s / 観測した幅 3.4 s\n2. 16.5 s → 23 s\n確定 17.5 s / 解除を確認 23.1 s / 観測した幅 6.5 s\n3. 67.6 s → 75.9 s\n確定 68.6 s / 解除を確認 76 s / 観測した幅 8.3 s",
+    "scope": "selection",
+    "selection": "選択区間 17.9381 – 41.134 s\n選択しただけでは解析しません\n拡大\n区間比較\n統計\nメモ\n画像コピー\n×"
+  },
+  "hypothesis": "Three red event ranges detected independently of blue selection; inspect actionable result labels.",
+  "nextCommand": "inspect event-list buttons; screenshot"
+}

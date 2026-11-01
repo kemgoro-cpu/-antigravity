@@ -1,0 +1,11 @@
+{
+  "observationCommand": "click 背景に適用; DOM status",
+  "observed": {
+    "feedback": "",
+    "settingsOpen": false,
+    "status": "練習用_詳細燃費率ﾏｯﾌﾟ.csv を背景に適用しました。",
+    "step": "0"
+  },
+  "hypothesis": "最終レイアウト修正後、デモでマップ本体がスクロールなしに見えるはず",
+  "nextCommand": "viewport1600x900 → demo → state"
+}

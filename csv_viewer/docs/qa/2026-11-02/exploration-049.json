@@ -1,0 +1,25 @@
+{
+  "observationCommand": "final zoom actual wheel drag reset",
+  "observed": {
+    "zoomAfter": {
+      "result": {
+        "type": "string",
+        "value": "[{\"start\":8.821839080459768,\"end\":92.15517241379311,\"disabled\":false},{\"start\":6.845238095238095,\"end\":90.17857142857143,\"disabled\":false}]"
+      }
+    },
+    "panAfter": {
+      "result": {
+        "type": "string",
+        "value": "[{\"start\":1.6379310344827571,\"end\":84.9712643678161,\"disabled\":false},{\"start\":16.66666666666666,\"end\":100,\"disabled\":false}]"
+      }
+    },
+    "resetAfter": {
+      "result": {
+        "type": "string",
+        "value": "[{\"start\":0,\"end\":100,\"disabled\":true},{\"start\":0,\"end\":100,\"disabled\":true}]"
+      }
+    }
+  },
+  "hypothesis": "幅390でもページ横溢れなく設定・地図へ到達できる",
+  "nextCommand": "returndocked; viewport390; inspect"
+}

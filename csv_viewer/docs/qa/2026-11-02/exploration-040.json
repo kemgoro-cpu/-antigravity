@@ -1,0 +1,9 @@
+{
+  "observationCommand": "native map chooser rejected file access permission",
+  "observed": {
+    "result": "blocked",
+    "reason": "Chrome extension requires Allow access to file URLs. Setting unchanged; permission question pending."
+  },
+  "hypothesis": "File chooser blocked; continue with existing in-memory demo background settings.",
+  "nextCommand": "check units; contour step0 blur; DOM"
+}

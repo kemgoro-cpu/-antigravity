@@ -141,4 +141,74 @@ const originalTimes = [...times], originalValues = [...values];
 detect(times, values, null, { maxSampleGap: .5, mergeGap: 4 });
 assert.deepEqual([...times], originalTimes);
 assert.deepEqual([...values], originalValues);
-console.log('event-utils tests passed (duration, hysteresis, missing/gaps, holdoff, merge, boundaries, full count, immutability)');
+// Regression: QA-002 — incomplete event syntax was reported as missing source data.
+// Found by /qa on 2026-11-02; report: docs/qa/2026-11-02/observations.json.
+// Value: protects=syntax errors stay distinct from unknown samples; fails_when=parser silently accepts missing operands;
+// why_new=event engine cases start with evaluated arrays; seam=none; no_claim=live browser layout (DOM stubs here).
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const source = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+function functionSource(name) {
+    let start = source.indexOf(`function ${name}(`);
+    if (source.slice(start - 6, start) === 'async ') start -= 6;
+    const end = source.indexOf('\n}', start);
+    assert.ok(start >= 0 && end > start, name);
+    return source.slice(start, end + 2);
+}
+const mainFile = { name: 'synthetic-event-validation.csv', timeData: new Float64Array([0, 1, 2, 3]),
+    columns: [{ id: 'speed', name: 'Engine_Speed' }], colData: { speed: new Float32Array([1000, 3100, NaN, Infinity]) } };
+const dom = { eventExpr: { value: '' }, eventSummary: { textContent: '' } };
+const validationState = { events: { intervals: [] }, files: { main: mainFile } };
+let validationMessage = '', releaseExpr = '', evaluated = 0;
+const context = vm.createContext({ console, Float32Array, Float64Array, state: validationState, dom,
+    getMainFile: () => mainFile, getMainFileId: () => 'main', getSubFileIds: () => [],
+    readEventOptions: () => ({ releaseExpr, minDuration: 0 }),
+    clearEvents: () => { validationState.events = { intervals: [] }; validationMessage = ''; dom.eventSummary.textContent = ''; },
+    setEventValidation: text => { validationMessage = text; },
+    eventGeneration: 0, eventBusy: false, eventResultSnapshot: null,
+    eventInputSignature: () => '', captureEventSource: () => ({}), sameEventSource: () => true,
+    loadColumnsForFile: async () => {}, updateEventButtons: () => {}, renderChart: () => {}, saveSettings: () => {},
+    renderEventList: () => { evaluated++; }, CSVEvents: Events,
+});
+vm.runInContext(source.slice(source.indexOf('const CUSTOM_RAM_FUNCTIONS ='), source.indexOf('function tokenizeExpr(')), context);
+for (const name of ['tokenizeExpr', 'parseExprToAST', 'evaluateAST', 'computeCustomExpr', 'extractExprNames', 'extractCrossRefs',
+    'evaluateExprForValidation', 'detectEvents']) vm.runInContext(functionSource(name), context);
+
+for (const expression of ['Engine_Speed >', 'Engine_Speed > 3000 &&', 'Engine_Speed = 3000',
+    'Engine_Speed > > 3000', 'Engine_Speed > 1 < 2', 'Engine_Speed 3000', '()', 'abs()',
+    'max(Engine_Speed,)', 'max(,Engine_Speed)', 'Engine_Speed > 1e', 'Engine_Speed > 1.2.3']) {
+    const validation = context.evaluateExprForValidation(expression, { preview: false });
+    assert.equal(validation.ok, false, `Reject malformed event expression: ${expression}`);
+    assert.equal(validation.cls, 'error');
+}
+for (const expression of ['Engine_Speed > 3000', 'Engine_Speed >= .1e+3 && Engine_Speed <= 4e3',
+    'max(Engine_Speed, 2000) > 2500', '+Engine_Speed > -1', '(Engine_Speed > 3000) || (Engine_Speed < 1000)',
+    '1e999 > 0']) assert.equal(context.evaluateExprForValidation(expression, { preview: false }).ok, true, expression);
+assert.equal(context.evaluateExprForValidation('Engine_Speed >').ok, false, 'Custom RAM input shares strict syntax validation');
+assert.ok(Number.isNaN(context.parseExprToAST('Engine_Speed >').right.value), 'Existing saved formulas retain tolerant runtime parsing');
+assert.match(context.evaluateExprForValidation('Unknown_Channel > 1', { preview: false }).text, /Mainファイルに存在しません/);
+// Arithmetic/data non-finites remain valid syntax and are counted as unknown by events.
+const condition = context.computeCustomExpr('Engine_Speed > 3000', mainFile, { strictFinite: true });
+assert.deepEqual([...condition], [0, 1, NaN, NaN]);
+assert.equal(detect(mainFile.timeData, condition).unknownCount, 2);
+assert.equal(context.evaluateExprForValidation('Engine_Speed / 0 > 1', { preview: false }).ok, true);
+
+(async () => {
+    dom.eventExpr.value = 'Engine_Speed >';
+    await context.detectEvents();
+    assert.match(validationMessage, /開始条件.*構文/);
+    assert.equal(evaluated, 0);
+    assert.equal(dom.eventSummary.textContent, '', 'No misleading missing-data count for invalid syntax');
+    dom.eventExpr.value = 'Engine_Speed > 3000'; releaseExpr = 'Engine_Speed <';
+    await context.detectEvents();
+    assert.match(validationMessage, /解除条件.*構文/);
+    assert.equal(evaluated, 0);
+    releaseExpr = '';
+    await context.detectEvents();
+    assert.equal(validationMessage, '');
+    assert.equal(evaluated, 1, 'A corrected expression can be evaluated immediately');
+    assert.equal(validationState.events.unknownCount, 2, 'Actual missing/non-finite samples keep their meaning');
+    assert.equal(validationState.events.totalCount, 1);
+    console.log('event-utils tests passed (event state machine, syntax validation, recovery, missing-data distinction)');
+})().catch(error => { console.error(error); process.exitCode = 1; });

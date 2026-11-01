@@ -588,7 +588,7 @@ const EXPR_MAX_DEPTH = 200;
  * ファイル間参照の書式: s1:Fuel_Rate, s2:Actual_Speed など
  *   s1 = サブファイル1番目, s2 = 2番目, ...
  */
-function tokenizeExpr(expr) {
+function tokenizeExpr(expr, options = {}) {
     const tokens = [];
     let i = 0;
     while (i < expr.length) {
@@ -603,7 +603,7 @@ function tokenizeExpr(expr) {
         }
         if (ch === '>' || ch === '<') { tokens.push({ type: 'op', value: ch }); i++; continue; }
         // 単独の = ! & | は文法に無い（==等の打ち間違い）。無限ループしないよう
-        // 消費だけして op として積む（どの文法規則にも一致せず無視される）
+        // 消費して op として積む。入力検証の厳密パースで打ち間違いを案内する。
         if ('=!&|'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
         // 演算子と括弧（^をべき乗演算子として追加）
         if ('+-*/()^'.includes(ch)) { tokens.push({ type: 'op', value: ch }); i++; continue; }
@@ -614,6 +614,9 @@ function tokenizeExpr(expr) {
                 // eE の直後の +/- は指数の符号として許可
                 if ((expr[i] === '+' || expr[i] === '-') && num.length > 0 && !/[eE]/.test(num[num.length - 1])) break;
                 num += expr[i++];
+            }
+            if (options.strict && !/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(num)) {
+                throw new Error(`数値「${num}」の書き方を確認してください`);
             }
             tokens.push({ type: 'num', value: parseFloat(num) });
             continue;
@@ -644,8 +647,11 @@ function tokenizeExpr(expr) {
  *   { type: 'unary', op, operand }           -- 単項 +/-
  *   { type: 'call', name, args: [ASTNode] }  -- 関数呼び出し
  */
-function parseExprToAST(expr) {
-    const tokens = tokenizeExpr(expr);
+function parseExprToAST(expr, options = {}) {
+    // New/edited input must form one complete expression. Keep tolerant parsing
+    // for old saved Custom RAM formulas, whose missing results were historically NaN.
+    const strict = options.strict === true;
+    const tokens = tokenizeExpr(expr, options);
     let pos = 0;
     let depth = 0; // 再帰の深さ（EXPR_MAX_DEPTH超過でエラー）
 
@@ -734,7 +740,10 @@ function parseExprToAST(expr) {
 
     function parseFactorInner() {
         const t = peek();
-        if (!t) return { type: 'num', value: NaN };
+        if (!t) {
+            if (strict) throw new Error('式の末尾に数値・チャンネル名・関数が必要です');
+            return { type: 'num', value: NaN };
+        }
 
         // 単項マイナス
         if (t.type === 'op' && t.value === '-') {
@@ -751,6 +760,7 @@ function parseExprToAST(expr) {
             next();
             const node = parseExpr();
             if (peek() && peek().value === ')') next();
+            else if (strict) throw new Error('閉じ括弧「)」が必要です');
             return node;
         }
         // 数値
@@ -778,15 +788,19 @@ function parseExprToAST(expr) {
                     }
                 }
                 if (peek() && peek().value === ')') next();
+                else if (strict) throw new Error('関数の引数を区切る「,」または閉じ括弧「)」が必要です');
                 return { type: 'call', name: t.value, args };
             }
             // RAM名
             return { type: 'name', value: t.value };
         }
+        if (strict) throw new Error(`「${t.value || ','}」の前に数値・チャンネル名・関数が必要です`);
         return { type: 'num', value: NaN };
     }
 
-    return parseExpr();
+    const ast = parseExpr();
+    if (strict && peek()) throw new Error(`「${peek().value || ','}」の位置に演算子がないか、余分な記号があります`);
+    return ast;
 }
 
 /**
@@ -5298,7 +5312,7 @@ function evaluateExprForValidation(expr, options = {}) {
         errors.push('式の構文エラー: ' + e.message);
     }
 
-    // 3. ASTを走査して関数の引数個数をチェック（mavg(X) のような引数不足を検出）
+    // 3. 式全体の構文と関数の引数個数をチェック（末尾の演算子や引数不足を検出）
     if (errors.length === 0) {
         try {
             const checkArity = (node) => {
@@ -5317,7 +5331,7 @@ function evaluateExprForValidation(expr, options = {}) {
                     checkArity(node.operand);
                 }
             };
-            checkArity(parseExprToAST(expr));
+            checkArity(parseExprToAST(expr, { strict: true }));
         } catch (e) {
             errors.push('式の構文エラー: ' + e.message);
         }
@@ -7297,9 +7311,10 @@ async function detectEvents() {
     try { options = readEventOptions(); }
     catch (error) { setEventValidation(error.message, 'error'); return; }
     const expressions = [expr, options.releaseExpr].filter(Boolean);
-    for (const expression of expressions) {
+    for (const [label, expression] of [['開始条件', expr], ['解除条件', options.releaseExpr]]) {
+        if (!expression) continue;
         const validation = evaluateExprForValidation(expression, { preview: false });
-        if (!validation.ok) { setEventValidation(validation.text, 'error'); return; }
+        if (!validation.ok) { setEventValidation(`${label}: ${validation.text}`, 'error'); return; }
     }
     const generation = eventGeneration, input = eventInputSignature(), source = captureEventSource();
     const current = () => generation === eventGeneration && input === eventInputSignature()
@@ -9521,7 +9536,11 @@ dataInspector = CSVDataInspector.init({
         return id ? loadColumnsForFile(id, names) : Promise.resolve();
     },
     esc, save: saveSettings, render: renderChart,
-    focusTime: t => comparisonWorkspace.focusTime(t),
+    focusTime: t => {
+        comparisonWorkspace.focusTime(t);
+        // Table/quality jumps do not emit the waveform's updateAxisPointer event.
+        xyWorkspace?.cursor(t);
+    },
     resize: () => { state.chart?.dispatchAction({ type: 'hideTip' }); state.chart?.resize(); },
 });
 CSVWorkspaceUI({

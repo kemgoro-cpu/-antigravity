@@ -1,0 +1,21 @@
+{
+  "observationCommand": "click row41441.1; read cursor and scroll",
+  "observed": {
+    "chartText": "",
+    "inspector": {
+      "bottom": 785.7000122070312,
+      "height": 280,
+      "left": 305,
+      "right": 1600,
+      "top": 505.7000122070313,
+      "width": 1295,
+      "x": 305,
+      "y": 505.7000122070313
+    },
+    "pageScroll": 0,
+    "scope": "selection",
+    "selected": []
+  },
+  "hypothesis": "Row click kept outer geometry stable; test tab keyboard navigation and quality summary.",
+  "nextCommand": "press ArrowRight on 元データ tab; DOM inspector summary"
+}

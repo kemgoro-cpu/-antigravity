@@ -1,0 +1,11 @@
+{
+  "observationCommand": "read ECharts dataZoom via CDP; screenshot",
+  "observed": {
+    "result": {
+      "type": "string",
+      "value": "{\"zoom\":[{\"start\":7.378472222222221,\"end\":90.71180555555556,\"startValue\":1141,\"endValue\":5558,\"disabled\":false},{\"start\":13.995726495726487,\"end\":97.32905982905983,\"startValue\":33.7,\"endValue\":234.6,\"disabled\":false}],\"size\":[664,440]}"
+    }
+  },
+  "hypothesis": "Wheel zoom changed both axes; verify dragging pans it.",
+  "nextCommand": "drag map600,680 to650,700; DOM; ECharts ranges"
+}

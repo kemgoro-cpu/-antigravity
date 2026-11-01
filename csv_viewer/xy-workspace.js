@@ -18,12 +18,11 @@
         const panel = document.createElement('aside');
         panel.id = 'xy-workspace'; panel.className = 'xy-workspace hidden'; panel.setAttribute('aria-label', 'XYと燃費率マップ');
         panel.innerHTML = `<header class="xy-workspace-header"><h2>XY・燃費率マップ</h2><button id="xy-expand-btn" class="btn-secondary" aria-expanded="false">大きく表示</button><button id="xy-close-btn" class="btn-secondary" aria-label="XY・マップを閉じて比較へ戻る">×</button></header>
-          <div class="xy-workspace-scroll"><div class="xy-workspace-controls">
+          <div class="xy-workspace-scroll"><details id="xy-map-settings" class="xy-workspace-controls"><summary id="xy-settings-summary">表示・軸・背景設定</summary><div class="xy-settings-fields">
           <label>表示<select id="xy-mode"><option value="scatter">散布図</option><option value="map">燃費率マップ</option></select></label>
           <div class="xy-field-pair"><label><span id="xy-x-label">X軸</span><select id="xy-x-select" aria-label="X軸チャンネル"></select></label><label><span id="xy-y-label">Y軸</span><select id="xy-y-select" aria-label="Y軸チャンネル"></select></label></div>
-          <p id="xy-point-status" class="xy-help hidden" role="status" aria-live="polite"></p>
           <label id="xy-color-field">点の色<select id="xy-z-select" aria-label="色に使うチャンネル"></select></label>
-          <div id="xy-map-controls" class="hidden"><details id="xy-map-settings"><summary>背景マップ・表示設定</summary><label>背景マップのデータ<select id="xy-map-source" aria-label="背景マップのデータ"></select></label>
+          <div id="xy-map-controls" class="hidden"><label>背景マップのデータ<select id="xy-map-source" aria-label="背景マップのデータ"></select></label>
           <div id="xy-map-log-fields"><details><summary>背景の列・格子幅</summary><p class="xy-help">背景は選んだログのSFC列全体を格子平均します。走行中の燃料流量から燃費率を計算する機能ではありません。</p>
           <label>背景の回転数 [rpm]<select id="xy-map-x-select"></select></label><label>背景のトルク [Nm]<select id="xy-map-y-select"></select></label><label>背景の燃費率 [g/kWh]<select id="xy-map-z-select"></select></label>
           <div class="xy-field-pair"><label>回転数の格子幅 [rpm]<input id="xy-map-rpm-step" type="number" min="0" step="any" value="400"></label><label>トルクの格子幅 [Nm]<input id="xy-map-torque-step" type="number" min="0" step="any" value="3"></label></div></details></div>
@@ -36,15 +35,19 @@
           <p class="xy-help">色と等高線に共通の範囲です。空欄は元データ全体。例：200〜500 g/kWh。塗りつぶしの範囲外は端の色になり、元の値は保持します。</p>
           <label>等高線の間隔 [g/kWh]<input id="xy-map-contour-step" type="number" min="0" step="any" value="10" aria-describedby="xy-contour-help"></label>
           <p id="xy-contour-help" class="xy-help">通常10、詳細5、広く見るときは20が目安です。主要線は太線と数値で表示。等高線は有効な格子間の線形補間で、元データの精度を増やしません。欠損セルは埋めません。走行点は回転数とトルクが非負の元サンプルです。</p>
-          </details><p id="xy-map-status" class="xy-help" role="status" aria-live="polite"></p></div>
-          </div><div class="xy-workspace-content"><p id="xy-analysis-context" class="analysis-result-context"></p><div id="xy-map-navigation" class="xy-map-navigation hidden"><button id="xy-map-zoom-btn" class="btn-secondary" aria-pressed="false">拡大操作 OFF</button><button id="xy-map-reset-view" class="btn-secondary">全体に戻す</button><span class="xy-help">ONでホイール・ピンチ拡大、ドラッグ移動</span></div><div id="xy-chart-frame" class="xy-chart-frame"><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><div id="xy-cursor-overlay" class="xy-cursor-overlay" aria-hidden="true"></div></div><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
+          </div></div></details>
+          <div class="xy-workspace-content"><p id="xy-point-status" class="xy-help hidden" role="status" aria-live="polite"></p><div id="xy-map-navigation" class="xy-map-navigation hidden"><button id="xy-map-zoom-btn" class="btn-secondary" aria-pressed="false">拡大操作 OFF</button><button id="xy-map-reset-view" class="btn-secondary">全体に戻す</button><span class="xy-help">ONでホイール・ピンチ拡大、ドラッグ移動</span></div><div id="xy-chart-frame" class="xy-chart-frame"><div id="xy-chart" class="xy-workspace-chart" role="img" aria-label="XY・燃費率マップ"></div><div id="xy-cursor-overlay" class="xy-cursor-overlay" aria-hidden="true"></div></div><p id="xy-analysis-context" class="analysis-result-context"></p><p id="xy-map-status" class="xy-help" role="status" aria-live="polite"></p><p id="xy-data-count" class="xy-help" role="status" aria-live="polite"></p>
           <p id="xy-cursor-status" class="xy-help" role="status"></p><p class="xy-help">波形のカーソルに動作点が連動します。点をクリックすると、その元サンプルの時刻へ移動します。背景マップは全体、動作点は上の解析対象に連動します。</p></div></div>`;
         document.querySelector('.compare-body').appendChild(panel);
         const dom = Object.fromEntries(['mode', 'x-label', 'y-label', 'x-select', 'y-select', 'z-select', 'point-status', 'map-source', 'map-file', 'map-format', 'map-confirm-units', 'map-apply', 'map-clear', 'map-feedback', 'map-rpm-step', 'map-torque-step', 'map-color-min', 'map-color-max', 'map-style', 'map-contour-step', 'map-zoom-btn', 'map-reset-view', 'map-x-select', 'map-y-select', 'map-z-select', 'expand-btn', 'close-btn', 'map-status', 'data-count', 'analysis-context', 'cursor-status'].map(key => [key, $('xy-' + key)]));
 
+        function setMapStatus(message, priority = false) {
+            dom['map-status'].textContent = message;
+            dom['map-status'].classList.toggle('xy-status-priority', priority);
+        }
         function showImportFeedback(message, error = false, reveal = false) {
             externalStatus = message;
-            dom['map-status'].textContent = message;
+            setMapStatus(message, error || !externalMap);
             dom['map-feedback'].textContent = message;
             dom['map-feedback'].classList.toggle('xy-feedback-error', error);
             if (reveal) { $('xy-map-settings').open = true; dom['map-feedback'].scrollIntoView({ block: 'nearest' }); }
@@ -117,6 +120,11 @@
             $('xy-map-navigation').classList.toggle('hidden', cfg.mode !== 'map');
             dom['map-style'].value = cfg.mapStyle;
             dom['map-contour-step'].disabled = cfg.mapStyle === 'fill';
+            dom['map-status'].classList.toggle('hidden', cfg.mode !== 'map');
+            const summary = $('xy-settings-summary');
+            summary.textContent = `表示・軸・背景設定 · ${cfg.mode === 'map' ? '燃費率マップ' : '散布図'}：${cfg.x && cfg.y ? cfg.x + ' × ' + cfg.y : 'X軸・Y軸を選択'}`;
+            summary.title = summary.textContent;
+            if (cfg.mode === 'scatter' && (!cfg.x || !cfg.y)) $('xy-map-settings').open = true;
         }
         function sourceSignature() {
             return JSON.stringify(Object.entries(s.files).map(([fid, file]) => [fid, idOf(file), idOf(file.timeData), file.role, file.offset,
@@ -265,9 +273,10 @@
         }
         function showMapStatus(background, range) {
             if (cfg.mode !== 'map') return;
-            if (!background?.map) { dom['map-status'].textContent = background?.reason || '背景を読み込んでいます。'; return; }
+            if (!background?.map) { setMapStatus(background?.reason || '背景を読み込んでいます。', true); return; }
             const map = background.map, stats = map.stats || {};
-            dom['map-status'].textContent = `${background.name} · ${map.format === 'matrix' ? '行列' : map.format === 'long' ? '3列' : '格子集計'} ${map.xs.length} × ${map.ys.length} · 有効 ${stats.eligible ?? '—'}点 / 除外 ${stats.excluded ?? 0}点 · 空白 ${stats.emptyCells ?? 0}格子。背景は時間区間で切り取りません。${range?.manual ? '燃費率 ' + fmt(range.min) + '〜' + fmt(range.max) + ' g/kWh。' + (cfg.mapStyle === 'lines' ? '' : '範囲外 ' + range.clipped + '格子は端色（値を保持）。') : ''}${contourNotice}`;
+            setMapStatus(`${background.name} · ${map.format === 'matrix' ? '行列' : map.format === 'long' ? '3列' : '格子集計'} ${map.xs.length} × ${map.ys.length} · 有効 ${stats.eligible ?? '—'}点 / 除外 ${stats.excluded ?? 0}点 · 空白 ${stats.emptyCells ?? 0}格子。背景は時間区間で切り取りません。${range?.manual ? '燃費率 ' + fmt(range.min) + '〜' + fmt(range.max) + ' g/kWh。' + (cfg.mapStyle === 'lines' ? '' : '範囲外 ' + range.clipped + '格子は端色（値を保持）。') : ''}${contourNotice}`,
+                cfg.mapStyle !== 'fill' && !!contourCache && (!contourCache.value.ok || !contourCache.value.segmentCount));
         }
         function theme() {
             const style = getComputedStyle(document.documentElement);
@@ -289,7 +298,11 @@
             preparedFiles = []; lastResult = null;
             const activeChart = chartInstance(); activeChart.clear();
             const mapMode = cfg.mode === 'map';
-            if (!mapMode && (!main || !mainX || !mainY || !context.range)) { dom['data-count'].textContent = 'ログを開き、X軸・Y軸と解析対象を選択してください。'; return; }
+            if (!mapMode && (!main || !mainX || !mainY || !context.range)) {
+                dom['point-status'].textContent = 'ログを開き、「表示・軸・背景設定」でX軸・Y軸と解析対象を選択してください。';
+                dom['point-status'].classList.remove('hidden'); dom['data-count'].textContent = dom['point-status'].textContent;
+                $('xy-map-settings').open = true; return;
+            }
             let pointReason = '';
             if (mapMode) {
                 if (!main) pointReason = '走行ログがないため、走行点は表示しません。';
@@ -314,7 +327,7 @@
             const color = background?.map ? colorRange(background.map) : null;
             if (color && !color.ok) {
                 busy = false; panel.setAttribute('aria-busy', 'false'); lastSignature = signature();
-                dom['map-status'].textContent = color.reason; dom['data-count'].textContent = '燃費率の範囲を修正すると、マップと動作点を再表示します。'; $('xy-map-settings').open = true; return;
+                setMapStatus(color.reason, true); dom['data-count'].textContent = '燃費率の範囲を修正すると、マップと動作点を再表示します。'; $('xy-map-settings').open = true; return;
             }
             const map = background?.map;
             const xExtent = map ? [Math.max(0, map.xEdges[0]), map.xEdges[map.xEdges.length - 1]] : [Infinity, -Infinity];
@@ -440,7 +453,7 @@
         function open() {
             const active = document.activeElement;
             if (!visible) opener = active?.closest('.compare-tools')?.querySelector('summary') || (active instanceof HTMLElement && active !== document.body ? active : $('xy-panel-toggle'));
-            api.activatePanel('xy'); setVisible(true); dom['close-btn'].focus({ preventScroll: true });
+            api.activatePanel('xy'); setVisible(true); layout?.setState({ reveal: true }); dom['close-btn'].focus({ preventScroll: true });
         }
         function close() {
             api.activatePanel('compare'); setVisible(false);
@@ -449,7 +462,7 @@
         function toggleExpanded() {
             expanded = !expanded; panel.classList.toggle('xy-expanded', expanded);
             dom['expand-btn'].textContent = expanded ? '並べて表示に戻る' : '大きく表示'; dom['expand-btn'].setAttribute('aria-expanded', String(expanded));
-            layout?.setState({ visible, expanded });
+            layout?.setState({ visible, expanded, reveal: true });
             requestChartResize(); api.resize();
         }
         async function readMapFile(file, signal) {

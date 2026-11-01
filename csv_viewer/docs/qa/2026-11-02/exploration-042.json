@@ -1,0 +1,38 @@
+{
+  "observationCommand": "read contour step validity and status DOM",
+  "observed": {
+    "class": "xy-workspace-controls",
+    "message": "",
+    "status": [
+      {
+        "hidden": false,
+        "id": "xy-map-feedback",
+        "text": "練習用_詳細燃費率ﾏｯﾌﾟ.csv の準備ができました。「背景に適用」を押してください。"
+      },
+      {
+        "hidden": false,
+        "id": "xy-point-status",
+        "text": ""
+      },
+      {
+        "hidden": false,
+        "id": "xy-map-status",
+        "text": "練習用_詳細燃費率ﾏｯﾌﾟ.csv の準備ができました。「背景に適用」を押してください。"
+      },
+      {
+        "hidden": false,
+        "id": "xy-data-count",
+        "text": "デモ_燃費率マップ付き走行ログ.csv: 有効 1201点 / 描画 1201点 / 対象内の欠損・無効 0点"
+      },
+      {
+        "hidden": false,
+        "id": "xy-cursor-status",
+        "text": ""
+      }
+    ],
+    "step": "0",
+    "valid": true
+  },
+  "hypothesis": "Units change leaves background pending; apply existing decoded demo file before judging contour input.",
+  "nextCommand": "click 背景に適用; DOM status"
+}

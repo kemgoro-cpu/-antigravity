@@ -1,0 +1,25 @@
+{
+  "observationCommand": "inspect event-list buttons; screenshot",
+  "observed": [
+    {
+      "label": "1. 4.2 s → 7.6 s。確定 5.2 s / 解除を確認 7.7 s / 観測した幅 3.4 s。この区間へ移動",
+      "tag": "BUTTON",
+      "text": "1. 4.2 s → 7.6 s確定 5.2 s / 解除を確認 7.7 s / 観測した幅 3.4 s",
+      "type": "button"
+    },
+    {
+      "label": "2. 16.5 s → 23 s。確定 17.5 s / 解除を確認 23.1 s / 観測した幅 6.5 s。この区間へ移動",
+      "tag": "BUTTON",
+      "text": "2. 16.5 s → 23 s確定 17.5 s / 解除を確認 23.1 s / 観測した幅 6.5 s",
+      "type": "button"
+    },
+    {
+      "label": "3. 67.6 s → 75.9 s。確定 68.6 s / 解除を確認 76 s / 観測した幅 8.3 s。この区間へ移動",
+      "tag": "BUTTON",
+      "text": "3. 67.6 s → 75.9 s確定 68.6 s / 解除を確認 76 s / 観測した幅 8.3 s",
+      "type": "button"
+    }
+  ],
+  "hypothesis": "Event result should navigate without overwriting blue selection.",
+  "nextCommand": "click event3; DOM scope/range"
+}

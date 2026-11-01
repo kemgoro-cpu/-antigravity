@@ -1,0 +1,29 @@
+{
+  "observationCommand": "wait xy-layout-stacked; DOM geometry; screenshot",
+  "observed": {
+    "active": "xy-close-btn",
+    "chart": {
+      "bottom": 1425.5999755859375,
+      "height": 350,
+      "left": 277,
+      "right": 940.7999877929688,
+      "top": 1075.5999755859375,
+      "width": 663.7999877929688,
+      "x": 277,
+      "y": 1075.5999755859375
+    },
+    "pane": {
+      "bottom": 1520.6000366210938,
+      "height": 851.2000122070312,
+      "left": 265,
+      "right": 952.7999877929688,
+      "top": 669.4000244140625,
+      "width": 687.7999877929688,
+      "x": 265,
+      "y": 669.4000244140625
+    },
+    "scroll": 0
+  },
+  "hypothesis": "Use expanded view to isolate map zoom from small-window layout.",
+  "nextCommand": "click 大きく表示; DOM"
+}

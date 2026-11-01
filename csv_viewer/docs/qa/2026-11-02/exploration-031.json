@@ -1,0 +1,11 @@
+{
+  "observationCommand": "click event3; DOM scope/range",
+  "observed": {
+    "end": "76.9",
+    "scope": "selection",
+    "selection": "選択区間 17.9381 – 41.134 s\n選択しただけでは解析しません\n拡大\n区間比較\n統計\nメモ\n画像コピー\n×",
+    "start": "66.6"
+  },
+  "hypothesis": "Event jump preserves blue selection; clear only red results.",
+  "nextCommand": "click 検出結果を解除; DOM"
+}

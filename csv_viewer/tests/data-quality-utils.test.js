@@ -98,4 +98,51 @@ for (const input of [[], null, undefined, '123']) {
     assert.equal(t.count, 0); assert.equal(t.typicalInterval, null); assert.equal(t.issueCount, 0);
     assert.equal(v.sampleCount, 0); assert.equal(v.missingRate, null); assert.equal(v.constant, false);
 }
+
+// Regression: QUALITY-READABILITY — round summary text, never held samples.
+// Found by live Computer Use QA on 2026-11-02; docs/qa/2026-11-02/screenshots/016-quality.jpg.
+// Value: protects=quality readability and exact raw rows; fails_when=summary uses String or raw rows round;
+// why_new=pure quality tests do not render text; seam=none; no_claim=layout (verified in the live app).
+{
+    const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, '../data-inspector.js'), 'utf8');
+    const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const values = Float32Array.from([1496.284, 3276.513]), times = Float64Array.from([18, 18.1]);
+    const before = Buffer.from(values.buffer.slice(0));
+    const file = { timeData: times, sourceRowNumbers: [3, 4], colData: { speed: values } };
+    const column = { id: 'speed', name: 'Engine_Speed', unit: 'rpm' };
+    const range = { range: [0, 120], label: '全体 0–120 s' };
+    const time = Q.analyzeTime(Array.from({ length: 1201 }, (_, i) => i / 10));
+    const nodes = new Map();
+    const context = {
+        snapshot: { file, context: range, columns: [column], indices: [0, 1], offset: 0, unavailable: [], excluded: [] },
+        quality: { time, valueRows: [{ column, result: Q.analyzeValues(times, values), diagnostics: {} }],
+            timeIssues: [], valueIssues: [], invalidIssues: [], valueIssueCount: 0, invalidDetailCount: 0 },
+        content: { innerHTML: '' }, detailFilter: 'all', displayedIssues: [], DETAIL_LIMIT: 1000, PAGE_SIZE: 100,
+        page: 0, cursor: null, esc: escape, scopeNotes: () => '', rawEntries: () => new Map(),
+        dataOf: (f, c) => f.colData[c.id], sourceRow: (f, i) => f.sourceRowNumbers[i],
+        $: id => { if (!nodes.has(id)) nodes.set(id, {}); return nodes.get(id); },
+    };
+    vm.createContext(context);
+    vm.runInContext(source.slice(source.indexOf('const finite ='), source.indexOf('const ids =')), context);
+    vm.runInContext(source.slice(source.indexOf('function renderQuality()'), source.indexOf('function renderStats()')), context);
+    vm.runInContext(source.slice(source.indexOf('function renderData()'), source.indexOf('function analyze(')), context);
+    context.renderQuality();
+    const text = context.content.innerHTML.replace(/<[^>]+>/g, '');
+    assert.match(text, /中央値 0\.1 s × 10（1 s超）/, 'sampling summary must not expose binary arithmetic tails');
+    assert.match(text, /1496\.284/);
+    assert.doesNotMatch(text, /1496\.2840576171875/, 'summary extrema are human-readable');
+    assert.match(context.content.innerHTML, /title="保持値: 1496\.2840576171875"/, 'held extrema remain available');
+    assert.match(context.content.innerHTML, /title="保持値: 0\.10000000000000053"/, 'exact sampling threshold remains available');
+    context.quality.valueRows[0].result = { ...context.quality.valueRows[0].result, min: 0, max: 1.234567891e-12 };
+    context.renderQuality();
+    assert.match(context.content.innerHTML, /title="保持値: 0">0<\/span>/, 'a measured zero is still zero');
+    assert.match(context.content.innerHTML, />1\.234568e-12<\/span>/, 'small nonzero values must not round to zero');
+    context.quality.valueRows[0].result = { ...context.quality.valueRows[0].result, min: null, max: null, validCount: 0 };
+    context.renderQuality();
+    assert.match(context.content.innerHTML, /<td>—<\/td><td>—<\/td>/, 'missing summaries must not become zero');
+    context.renderData();
+    assert.match(context.content.innerHTML, /<td>1496\.2840576171875<\/td>/, 'raw rows retain exact held values');
+    assert.deepEqual(Buffer.from(values.buffer), before, 'formatting must not mutate held samples');
+}
 console.log('data-quality-utils: full-scan duplicates/reversals/gaps, raw rows, non-finite values, range/offset, constant, caps and 250k samples passed');

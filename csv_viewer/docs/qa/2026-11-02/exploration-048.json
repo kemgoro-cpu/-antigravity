@@ -1,0 +1,18 @@
+{
+  "observationCommand": "map invalid range corrected and settings collapsed",
+  "observed": {
+    "chart": {
+      "bottom": 756.2000122070312,
+      "height": 240,
+      "left": 275,
+      "right": 942.7999877929688,
+      "top": 516.2000122070312,
+      "width": 667.7999877929688,
+      "x": 275,
+      "y": 516.2000122070312
+    },
+    "status": "練習用_詳細燃費率ﾏｯﾌﾟ.csv · 3列 53 × 121 · 有効 5743点 / 除外 670点 · 空白 670格子。背景は時間区間で切り取りません。等高線 5 g/kWh刻み・45段階。数字は主要線の燃費率[g/kWh]です。"
+  },
+  "hypothesis": "設定を閉じた拡大画面でズームとリセットが動作する",
+  "nextCommand": "clickzoomON; readbounds; wheeldrag;reset"
+}

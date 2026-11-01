@@ -1,0 +1,10 @@
+{
+  "observationCommand": "shortcut modal escape and theme restored",
+  "observed": {
+    "active": "theme-toggle-btn",
+    "shortcuts": [],
+    "theme": null
+  },
+  "hypothesis": "元データ行204で波形とXYが共に20.1秒へ移る",
+  "nextCommand": "cursor65.9;inspector page3;row204"
+}

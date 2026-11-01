@@ -1,0 +1,107 @@
+{
+  "observationCommand": "read DOM geometry xy-chart ancestor chain",
+  "observed": [
+    {
+      "class": "xy-workspace-chart",
+      "client": 370,
+      "height": 370,
+      "id": "xy-chart",
+      "overflow": "hidden",
+      "scroll": 370,
+      "top": 0,
+      "y": 320.8000183105469
+    },
+    {
+      "class": "xy-chart-frame",
+      "client": 370,
+      "height": 370,
+      "id": "xy-chart-frame",
+      "overflow": "visible",
+      "scroll": 370,
+      "top": 0,
+      "y": 320.8000183105469
+    },
+    {
+      "class": "xy-workspace-content",
+      "client": 534,
+      "height": 533.6000366210938,
+      "id": "",
+      "overflow": "visible",
+      "scroll": 534,
+      "top": 0,
+      "y": 232.1999969482422
+    },
+    {
+      "class": "xy-workspace-scroll",
+      "client": 387,
+      "height": 386.6000061035156,
+      "id": "",
+      "overflow": "auto",
+      "scroll": 787,
+      "top": 400,
+      "y": 399.1000061035156
+    },
+    {
+      "class": "xy-workspace",
+      "client": 470,
+      "height": 470.3000183105469,
+      "id": "xy-workspace",
+      "overflow": "visible",
+      "scroll": 470,
+      "top": 0,
+      "y": 315.3999938964844
+    },
+    {
+      "class": "compare-body xy-layout-active",
+      "client": 470,
+      "height": 470.3000183105469,
+      "id": "",
+      "overflow": "visible",
+      "scroll": 470,
+      "top": 0,
+      "y": 315.3999938964844
+    },
+    {
+      "class": "main-content compare-panel-open",
+      "client": 900,
+      "height": 900,
+      "id": "",
+      "overflow": "hidden",
+      "scroll": 900,
+      "top": 0,
+      "y": 0
+    },
+    {
+      "class": "app-container",
+      "client": 900,
+      "height": 900,
+      "id": "",
+      "overflow": "visible",
+      "scroll": 900,
+      "top": 0,
+      "y": 0
+    },
+    {
+      "class": "workspace-sidebar-open workspace-has-files workspace-has-chart",
+      "client": 900,
+      "height": 900,
+      "id": "",
+      "overflow": "hidden",
+      "scroll": 900,
+      "top": 0,
+      "y": 0
+    },
+    {
+      "class": "",
+      "client": 900,
+      "height": 900,
+      "id": "",
+      "overflow": "visible",
+      "scroll": 900,
+      "top": 0,
+      "y": 0
+    }
+  ],
+  "hypothesis": "DOM confirms scrollTop400; capture settled image to distinguish frame latency from application scrolling.",
+  "nextCommand": "screenshot settled scroll; DOM visible labels"
+}

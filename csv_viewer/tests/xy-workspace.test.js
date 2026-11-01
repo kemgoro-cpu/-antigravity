@@ -163,6 +163,13 @@ function assertBackgroundOnly(h, expectedMap, reason, description) {
 
 async function run() {
     const h = harness(); await h.open();
+    // Regression: QA-001 — reuse one settings entry without burying the initial plot.
+    const settings = h.get('xy-map-settings');
+    for (const id of ['xy-mode', 'xy-x-select', 'xy-y-select', 'xy-z-select', 'xy-map-source']) {
+        assert.ok(settings.contains(h.get(id)), `${id}: chart configuration uses the shared disclosure`);
+    }
+    assert.match(h.get('xy-settings-summary').textContent, /表示・軸・背景設定/);
+    assert.match(h.get('xy-settings-summary').textContent, /Engine_Speed.*Engine_Torque/, 'Collapsed settings still identify the selected axes');
     assert.equal(h.get('xy-map-apply').disabled, true, 'No selected CSV cannot be applied');
     assert.match(h.feedback(), /CSV|ファイル|選|チェック|確認/);
     assert.ok(h.get('xy-map-external-fields').contains(h.get('xy-map-feedback')), 'Feedback belongs to the external import controls, not below all display settings');

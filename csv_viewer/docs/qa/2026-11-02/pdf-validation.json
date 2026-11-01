@@ -1,0 +1,16 @@
+{
+  "pages": 26,
+  "bookmarks": 54,
+  "a4": true,
+  "all_page_numbers": true,
+  "all_revision_dates": true,
+  "machine_local_uri_links": 0,
+  "changed_text_searchable": true,
+  "text_normalization": "Unicode NFKC and whitespace removal",
+  "pdf_sha256": "9a724e62f08d8cf028d43f06cdcf5c2ae5f007bb8b8862906e3f1145820b0e16",
+  "render_dir": "tests\\fixtures\\generated\\qa-manual-20261102",
+  "pixels_changed_since_first_visual_review": [
+    17
+  ],
+  "visual_review": "pass: all26 contact sheet; detailed8,17,18,21,22; shortened caption17 rechecked; other25 pages pixel-identical"
+}

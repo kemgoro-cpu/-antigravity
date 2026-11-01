@@ -1,0 +1,11 @@
+{
+  "observationCommand": "raw row204 actual outcome: wave20.1 but XYstale65.9",
+  "observed": {
+    "cursor": "カーソル 65.9 s · デモ_燃費率マップ付き走行ログ.csv: 元 65.9 s / 表示 65.9 s（最寄りの観測点。補間なし）",
+    "info": "元データ\n品質診断\n統計\nファイル\nファイルを選択してください\n1. デモ_燃費率マップ付き走行ログ.csv\n更新\n閉じる\n\n表示範囲 0 – 120 s · 時間合わせ後\n\n元レコード 204、表示時刻 20.1 sを選択しました。\n\n201–300 / 1,201 サンプル\n前\nページ\n/ 13\n次\n\n元レコードは空行を除く1始まりの番号です（物理行番号ではありません）。元時刻は秒換算済み。表示時刻＝元時刻＋時間補正。値は読込済みの原サンプル／計算列の値で、補間しません。\n\n元レコード\t元時刻 [s]\t表示時刻 [s]\tEngine_Speed\nrpm\n\tEngine_Torque\nNm\n",
+    "row": "<tr data-sample-index=\"201\" class=\"inspector-current\" aria-current=\"location\"><td><button type=\"button\" class=\"inspector-row-jump\" data-sample-index=\"201\" aria-label=\"元レコード204、表示時刻20.1秒を波形で確認\">204</button></td><td>20.1</td><td>20.1</td><td>3276.512939453125</td><td>83.572998046875</td></tr>",
+    "scrollY": 0
+  },
+  "hypothesis": "基準CSVは表示範囲の元データを正しく出力する",
+  "nextCommand": "download exportCSV"
+}

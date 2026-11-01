@@ -1,0 +1,6 @@
+{
+  "observationCommand": "map apply unavailable after demo API import; inspect message",
+  "observed": "マップCSVを選ぶ\n\n走行ログとは別に読み込みます。UTF-8、5 MiBまで。行列形式は先頭行が回転数、先頭列がトルク。3列形式は回転数・トルク・燃費率の順です。\n\nCSVの形式\n自動判別\n行列（先頭行X・先頭列Y）\n3列（X・Y・燃費率）\nこのCSVの単位が X＝rpm、Y＝Nm、燃費率＝g/kWh であることを確認した\n背景に適用\n背景を解除\n\n単位確認にチェックを入れると「背景に適用」が押せます。",
+  "hypothesis": "Unchecked units already shows explanatory status; test native CSV chooser workflow.",
+  "nextCommand": "choose detailed mapCSV; DOM"
+}

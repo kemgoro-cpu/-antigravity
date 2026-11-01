@@ -1,0 +1,11 @@
+{
+  "observationCommand": "drag map600,680 to650,700; DOM; ECharts ranges",
+  "observed": {
+    "result": {
+      "type": "string",
+      "value": "[{\"start\":0.14467592592592438,\"end\":83.47800925925927,\"startValue\":758,\"endValue\":5174},{\"start\":16.66666666666666,\"end\":100,\"startValue\":40.2,\"endValue\":241}]"
+    }
+  },
+  "hypothesis": "Pan works; reset should restore full axes and turn zoom off.",
+  "nextCommand": "click 全体に戻す; DOM; ranges"
+}

@@ -24,9 +24,11 @@
         handle.title = 'ドラッグで幅を調整。左右キーで移動、Home/Endで最小/最大、ダブルクリックで半分に戻す';
         container.insertBefore(handle, panel);
         const hint = document.createElement('p'); hint.className = 'xy-layout-hint';
-        panel.insertBefore(hint, panel.querySelector('.xy-workspace-scroll'));
+        // Navigation guidance belongs after the plot; it must not consume the
+        // limited initial chart height in a docked workspace.
+        (panel.querySelector('.xy-workspace-content') || panel).appendChild(hint);
         let preferredRatio = ratioValue(ratio), visible = false, expanded = false, disposed = false;
-        let frame = null, drag = null, lastSize = '', appliedWidth = null;
+        let frame = null, drag = null, lastSize = '', appliedWidth = null, viewportHeight = null, revealPending = false;
 
         function schedule() {
             if (disposed || frame !== null) return;
@@ -50,6 +52,11 @@
                 appliedWidth = size.mapWidth;
                 panel.style.setProperty('--xy-pane-width', size.mapWidth + 'px');
             }
+            const availableHeight = Math.max(0, Math.round(box.height));
+            if (viewportHeight !== availableHeight) {
+                viewportHeight = availableHeight;
+                panel.style.setProperty('--xy-viewport-height', availableHeight + 'px');
+            }
             const message = expanded ? '「並べて表示に戻る」で、波形とマップを並べます。'
                 : size.stacked ? '表示領域が狭いため上下に並べています。ウィンドウを広げるか左サイドバーを閉じると左右分割になります。'
                 : '左右分割：境界をドラッグして幅を調整できます。境界を選んで左右キーでも調整できます。';
@@ -58,6 +65,10 @@
             // merely the requested ratio. A same-size observer notification does
             // not trigger another pair of chart resizes.
             const wave = container.querySelector('.chart-container'), mapBox = panel.getBoundingClientRect(), waveBox = wave?.getBoundingClientRect();
+            if (revealPending) {
+                revealPending = false;
+                if (visible && size.stacked) container.scrollTop = Math.max(0, (container.scrollTop || 0) + mapBox.top - box.top);
+            }
             const signature = JSON.stringify([visible, expanded, size.stacked,
                 Math.round(mapBox.width), Math.round(mapBox.height), Math.round(waveBox?.width || 0), Math.round(waveBox?.height || 0)]);
             if (signature !== lastSize) { lastSize = signature; onResize?.(); }
@@ -113,6 +124,7 @@
             setState(next) {
                 if (typeof next?.visible === 'boolean') visible = next.visible;
                 if (typeof next?.expanded === 'boolean') expanded = next.expanded;
+                if (next?.reveal) revealPending = true;
                 if ((!visible || expanded) && drag) endDrag(null);
                 schedule();
             },
@@ -123,7 +135,7 @@
                 disposed = true; if (frame !== null) root.cancelAnimationFrame(frame);
                 observer.disconnect(); endDrag(null, false);
                 for (const [name, listener] of Object.entries(listeners)) handle.removeEventListener(name, listener);
-                handle.remove(); hint.remove(); panel.style.removeProperty('--xy-pane-width');
+                handle.remove(); hint.remove(); panel.style.removeProperty('--xy-pane-width'); panel.style.removeProperty('--xy-viewport-height');
                 container.classList.remove('xy-layout-active', 'xy-layout-stacked', 'xy-layout-expanded', 'xy-layout-dragging');
             }
         };
