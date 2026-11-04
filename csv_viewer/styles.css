@@ -267,11 +267,6 @@ body {
     gap: 6px;
 }
 .parse-job-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     color: var(--text-primary);
 }
 .parse-job-detail {
@@ -358,12 +353,21 @@ body {
 
 .file-name-text {
     font-size: 0.79rem;
-    white-space: nowrap;
+}
+.file-name-text, .parse-job-name {
+    display: flex;
+    align-items: center;
+    white-space: pre;
     overflow: hidden;
-    text-overflow: ellipsis;
     flex: 1;
     min-width: 0;
 }
+.file-name-prefix {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.file-name-suffix { flex: none; }
 
 .encoding-badge {
     color: #86efac;

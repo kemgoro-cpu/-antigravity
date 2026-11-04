@@ -2002,6 +2002,19 @@ function finishParseJob(job) {
     }, 0);
 }
 
+const fileNameSegmenter = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter() : null;
+
+// Keep the case identifier and extension together. Only the leading span shrinks;
+// the browser reveals the entire name again as soon as the row has enough room.
+function sidebarNameParts(name) {
+    const chars = fileNameSegmenter
+        ? Array.from(fileNameSegmenter.segment(name), part => part.segment)
+        : Array.from(name);
+    const tailLength = 6 + (/\.(csv|trn)$/i.test(name) ? 4 : 0);
+    const split = Math.max(1, chars.length - tailLength);
+    return `<span class="file-name-prefix">${esc(chars.slice(0, split).join(''))}</span><span class="file-name-suffix">${esc(chars.slice(split).join(''))}</span>`;
+}
+
 function renderParseJobs() {
     devPreview?.refresh();
     if (!dom.parseStatusList) return;
@@ -2012,7 +2025,7 @@ function renderParseJobs() {
         el.className = 'parse-job';
         el.innerHTML = `
             <div class="parse-job-top">
-                <span class="parse-job-name" title="${esc(job.name)}">${esc(job.name)}</span>
+                <span class="parse-job-name" title="${esc(job.name)}">${sidebarNameParts(job.name)}</span>
                 <button class="btn-secondary parse-job-cancel" data-cancel-job="${job.id}" title="読み込みをキャンセル">
                     <i class='bx bx-x' aria-hidden="true"></i>
                 </button>
@@ -3266,7 +3279,7 @@ function renderFileList() {
                 >${badgeText}</button>
                 <input type="color" class="file-color-picker" data-colorid="${fid}"
                     value="${fColor}" aria-label="${esc(f.name)}の表示色" style="display:none;">
-                <span class="file-name-text" title="${esc(f.name)}">${esc(comparisonWorkspace?.label(f) || f.name)}</span>
+                <span class="file-name-text" title="${esc(f.name)}">${sidebarNameParts(state.comparison.labels[f.name] || f.name)}</span>
                 ${encodingLabel ? `<span class="encoding-badge" title="CSV文字コード">${esc(encodingLabel)}</span>` : ''}
                 <button type="button" class="file-action-btn file-color-btn" data-color-button="${fid}" aria-label="${esc(f.name)}の表示色を変更" title="表示色を変更"><i class="bx bx-palette" aria-hidden="true"></i></button>
                 <button type="button" class="file-action-btn debug-file" data-fid="${fid}" aria-label="${esc(f.name)}の読み込み情報" title="読み込み情報"><i class="bx bx-bug" aria-hidden="true"></i></button>
@@ -9254,8 +9267,8 @@ function showPendingFiles(fileInfos) {
         li.innerHTML = `
             <div class="file-item-top">
                 <div class="role-badge ${fi.role === 'main' ? 'role-main' : 'role-sub'}">${fi.role === 'main' ? 'Main' : 'Sub'}</div>
-                <span class="file-name" style="opacity:0.5;" title="${esc(fi.name)}">
-                    <i class='bx bx-error-circle' style="color:#f59e0b;margin-right:4px;"></i>${esc(fi.name)}
+                <span class="file-name-text" style="opacity:0.5;" title="${esc(fi.name)}">
+                    <i class='bx bx-error-circle' aria-hidden="true" style="color:#f59e0b;margin-right:4px;"></i>${sidebarNameParts(fi.name)}
                 </span>
             </div>
             <div style="font-size:11px;color:#f59e0b;padding:2px 8px 4px;">再読み込みしてください（ドラッグ＆ドロップ）</div>
