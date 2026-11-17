@@ -8454,12 +8454,13 @@ function collectSettings() {
  * 現在の設定をlocalStorageに保存する。
  * ファイルデータ本体は保存しない（名前・role・offsetだけ）。
  */
-function saveSettingsNow() {
+function saveSettingsNow(settings = null) {
     // Do not replace the saved complete session with a partially parsed restore.
-    if (_sessionRestoreNames) return;
+    if (_sessionRestoreNames) return false;
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(collectSettings()));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings || collectSettings()));
         _storageWarnShown = false; // 保存に成功したら次回失敗時に再度通知できるようにする
+        return true;
     } catch (e) {
         console.warn('[CSV Viewer] Failed to save settings:', e);
         // 容量超過などで保存できない場合、ユーザーが「保存されているつもり」のまま
@@ -8469,6 +8470,7 @@ function saveSettingsNow() {
             showWarning('設定を保存できませんでした',
                 'ブラウザの保存領域(localStorage)に書き込めません。容量超過の可能性があります。\n' + (e.message || String(e)));
         }
+        return false;
     }
 }
 
@@ -8902,10 +8904,17 @@ function importSettings() {
         const file = input.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
             try {
                 const settings = JSON.parse(reader.result);
-                applySettings(settings);
+                const migrated = CSVSettings.migrateSettings(settings);
+                if (!migrated.ok) throw new Error(migrated.reason === 'newer'
+                    ? 'この設定ファイルは新しいバージョンの形式です。'
+                    : '設定ファイルの形式が正しくありません。');
+                await applySettings(migrated.settings);
+                // With no log open, channel and file settings remain pending. Persist that
+                // complete snapshot instead of collecting only the currently visible UI.
+                if (!saveSettingsNow(_pendingSettings)) return;
                 showExportToast('設定をインポートしました', file.name);
             } catch (e) {
                 alert('設定ファイルの読み込みに失敗しました。\n' + e.message);

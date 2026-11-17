@@ -7,3 +7,6 @@
 
 # Dev Control Tower の登録メタデータ（ローカル管理のため無視）
 .devcontrol/
+
+# Browser test dependencies installed locally when needed
+/csv_viewer/node_modules/
