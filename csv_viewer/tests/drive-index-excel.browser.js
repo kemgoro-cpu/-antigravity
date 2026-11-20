@@ -175,10 +175,12 @@ function assertMetrics(result, reference) {
             await displayColumns(second.page); await configure(second.page);
             const missing = await snapshot(second.page);
             for (const metric of metrics) assert.equal(missing.entry.result.total[metric], null, `${metric} must be unavailable with missing speed`);
-            assert.equal(missing.status, 'empty');
+            assert.equal(missing.status, 'current');
             await openDrive(second.page);
-            assert.equal(await second.page.locator('.di-table:visible').count(), 0, 'incomplete input must not show valid-looking numeric results');
+            assert.equal(await second.page.locator('.di-table:visible').count(), 1, 'the intact second phase must remain visible');
             assert.ok((await second.page.locator('.di-diagnostics').innerText()).trim().length > 10, 'the missing-data reason must remain visible');
+            assert.equal(missing.entry.result.total.fuelL, null);
+            assert.ok(Number.isFinite(missing.entry.result.phases[1].rmsse));
             assert.ok(Number.isNaN(missing.columns[1].values[120]), 'missing waveform samples must remain missing');
             await second.page.screenshot({ path: path.join(output, 'missing-speed.png') });
         } finally { await second.context.close(); }

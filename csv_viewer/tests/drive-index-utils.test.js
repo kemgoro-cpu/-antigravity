@@ -448,3 +448,15 @@ function distKm(speed) {
 }
 
 console.log('drive-index-utils tests passed');
+
+// A logger offset applies to every recorded channel. A command-speed scale
+// and a missing first row must not shift the inferred start.
+{
+    const trace = DriveIndex.getCycleTrace('wltc3b_3');
+    for (const offset of [-5.25, 0, 12.4]) {
+        const time = trace.time.slice(1).map(t => t + offset);
+        const command = trace.speed.slice(1).map(v => v * 1.033);
+        assert.equal(DriveIndex.alignRecordedTarget(time, command, trace.time, trace.speed), offset);
+        assert.equal(DriveIndex.alignRecordedTarget(time, command.map(() => 0), trace.time, trace.speed), null);
+    }
+}

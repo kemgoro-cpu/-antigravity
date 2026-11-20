@@ -346,6 +346,57 @@
         return { offset: bestOff, rmse: bestRmse, start: T0 + bestOff };
     }
 
+    // Match a recorded command to the cycle. Normalization is used only to
+    // identify timing. Metrics always use the original regulatory speeds.
+    function alignRecordedTarget(time, command, traceTime, speed) {
+        function peakOf(t, v) {
+            if (!v || t.length !== v.length || t.length < 2) return NaN;
+            let peak = 0;
+            for (let i = 0; i < t.length; i++) {
+                if (!Number.isFinite(t[i]) || (i && t[i] <= t[i - 1]) || !Number.isFinite(v[i])) return NaN;
+                peak = Math.max(peak, v[i]);
+            }
+            return peak;
+        }
+        const tracePeak = peakOf(traceTime, speed), logPeak = peakOf(time, command);
+        if (!(tracePeak > 0 && logPeak > 0)) return null;
+        // The steepest rise gives a well-localized crossing. Verify every
+        // candidate crossing against the rest of the shape, including stops.
+        let edge = 0, slope = 0;
+        for (let i = 1; i < speed.length; i++) {
+            const rate = (speed[i] - speed[i - 1]) / (traceTime[i] - traceTime[i - 1]);
+            if (rate > slope) { slope = rate; edge = i; }
+        }
+        if (!edge) return null;
+        const anchor = (traceTime[edge] + traceTime[edge - 1]) / 2;
+        const level = (speed[edge] + speed[edge - 1]) / 2 * logPeak / tracePeak;
+        const candidates = [];
+        const stride = Math.max(1, Math.ceil(speed.length / 1500));
+        for (let i = 1; i < time.length; i++) {
+            if (!(command[i - 1] < level && command[i] >= level)) continue;
+            const fraction = (level - command[i - 1]) / (command[i] - command[i - 1]);
+            const offset = time[i - 1] + fraction * (time[i] - time[i - 1]) - anchor;
+            let count = 0, sum = 0, power = 0, error = 0;
+            for (let j = 0; j < speed.length; j += stride) {
+                const t = traceTime[j] + offset;
+                if (t < time[0] || t > time[time.length - 1]) continue;
+                const ref = speed[j] / tracePeak;
+                const d = interp1(time, command, t) / logPeak - ref;
+                sum += ref; power += ref * ref; error += d * d; count++;
+            }
+            const variance = power - sum * sum / count;
+            // Require half a cycle of overlap and a residual under 5% of
+            // the reference standard deviation. Flat matches carry no timing.
+            if (count >= Math.ceil(speed.length / stride) / 2 && variance > 0 && error < 0.0025 * variance) {
+                candidates.push({ offset, score: Math.sqrt(error / variance) });
+            }
+        }
+        candidates.sort((a, b) => a.score - b.score);
+        if (!candidates.length || candidates.slice(1).some(c =>
+            Math.abs(c.offset - candidates[0].offset) > 0.1 && c.score <= candidates[0].score * 2 + 0.001)) return null;
+        return Math.round(candidates[0].offset * 1000) / 1000;
+    }
+
     /** 走行抵抗の入力を数値化。A/B/C/mass が全て有効数値ならオブジェクト、不足ならnull。 */
     function normalizeRoadLoad(rl) {
         if (!rl) return null;
@@ -469,7 +520,12 @@
         }
         const epsilon = 1e-9;
         if (start < time[0] - epsilon || end > time[time.length - 1] + epsilon) {
-            issue('WINDOW_COVERAGE', `${field}: 評価区間を覆う速度データがありません。`);
+            const sec = n => Number(n.toFixed(6));
+            const first = time[0], last = time[time.length - 1];
+            const missing = [];
+            if (start < first - epsilon) missing.push(`先頭 ${sec(Math.min(first, end) - start)} 秒不足`);
+            if (end > last + epsilon) missing.push(`末尾 ${sec(end - Math.max(last, start))} 秒不足`);
+            issue('WINDOW_COVERAGE', `${field}: 評価区間 ${sec(start)}〜${sec(end)} 秒、記録区間 ${sec(first)}〜${sec(last)} 秒（${missing.join('、')}）。`);
         }
         // Include bracketing source points; a missing source sample must not
         // disappear merely because the 10 Hz output grid does not hit it.
@@ -680,14 +736,14 @@
         const rl = normalizeRoadLoad(roadLoad);
 
         function windowMetrics(start, end) {
-            const issues = calculationMethod === 'excel'
+            const issues = calculationMethod === 'excel' || opts.requireCoverage
                 ? [...excelWindowDiagnostics(tTime, target, start, end, '目標速度'),
                     ...excelWindowDiagnostics(aTime, actual, start, end, '実測速度')]
                 : [];
             if (calculationMethod === 'excel' && (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)) {
                 issues.push({ code: 'WINDOW_RANGE', field: '評価区間', message: '開始・終了には有限値を昇順で指定してください。', severity: 'error' });
             }
-            if (issues.some(issue => ['TIME_ORDER', 'SOURCE_LENGTH', 'WINDOW_RANGE'].includes(issue.code))) {
+            if (issues.some(issue => issue.severity !== 'warning')) {
                 return excelMetricsForWindow([], [], [], rl,
                     { distanceKm: null, fuelL: null, fuelKmPerL: null, fuelLper100km: null }, issues);
             }
@@ -730,6 +786,7 @@
         pickTransmissionVariant,
         getCycleTrace,
         alignActualToCycle,
+        alignRecordedTarget,
         detectCycle,
         computeMetrics,
     };

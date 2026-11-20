@@ -4193,7 +4193,7 @@ function syncCycleTraceColumns() {
     for (const entry of results) {
         // align があるのは「モードの法規トレースを目標にした」ファイルだけ。
         // 目標にCSV列を指定している場合は元の列がそのまま使えるので作らない。
-        if (!entry.align) continue;
+        if (entry.align?.start == null) continue;
         const f = state.files[entry.fileId];
         if (!f || !f.timeData || !f.timeData.length) continue;
 
@@ -4300,6 +4300,9 @@ function getDriveIndexResultState() {
     const di = state.driveIndex;
     const result = window.UnitValidation.resultState(di, getDriveIndexInputSignature());
     if (result.status === 'current' && !(di.results || []).some(entry => entry.result && entry.result.total?.diagnostics?.ok !== false)) {
+        if (di.results.some(entry => entry.result?.phases?.some(p => Number.isFinite(p.rmsse)))) {
+            return { status: 'current', reason: '一部区間のみ評価できました。未評価の原因は結果表に表示しています。' };
+        }
         return { status: 'empty', reason: di.validationSummary || '入力データに問題があるため指標を計算できません。' };
     }
     return result;
@@ -4456,10 +4459,15 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             continue;
         }
         if (validation.issues.length) entry.warning = validation.issues.map(i => i.message).join(' ') + ' 燃費は未評価です。';
+        if (!fuelName) entry.warning = '燃料流量チャンネルが未選択のため、燃費は未評価です。';
         if (fuelName && !fCol) entry.warning = '燃料流量の対応チャンネルがないため、燃費は未評価です。';
 
         // 必要列を遅延ロード（目標トレース利用時は目標列ロード不要）
+        const recordedName = useModeTrace && di.autoAlign ? detectDriveChannels(f).target : null;
+        const recorded = f.columns.find(c => c.name === recordedName && c !== aCol && !c.isCustom
+            && window.UnitValidation.checkUnit('speed', c.unit).ok);
         const need = [aCol.name];
+        if (recorded) need.push(recorded.name);
         if (tCol) need.push(tCol.name);
         if (fCol && validation.fuelAllowed) need.push(fCol.name);
         let columnData = f.colData;
@@ -4500,14 +4508,27 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             // サイクル開始/終了を決める: 手動上書き > 自動整合 > データ先頭。
             const man = di.alignByFile[f.name] || {};
             const manStart = parseFloat(man.start), manEnd = parseFloat(man.end);
-            let start, autoStart = null, alignRmse = null;
+            let start = traceT0, source = '法規時刻（補正なし）';
             if (isFinite(manStart)) {
-                start = manStart;                                   // 手動入力の開始時刻
-            } else if (di.autoAlign) {
-                const al = window.DriveIndex.alignActualToCycle(f.timeData, actual, modeTrace.time, modeTrace.speed);
-                start = al.start; autoStart = al.start; alignRmse = al.rmse; // 車速波形で自動整合
-            } else {
-                start = f.timeData[0];                              // 整合なし: データ先頭＝サイクル開始
+                start = manStart;
+                source = '手動指定';
+            } else if (di.autoAlign && recorded) {
+                const offset = window.DriveIndex.alignRecordedTarget(f.timeData, columnData[recorded.id], modeTrace.time, modeTrace.speed);
+                if (offset != null) {
+                    start = traceT0 + offset;
+                    source = `記録目標 ${recorded.name} で時刻補正（記録時刻 − ${offset} 秒＝法規時刻）`;
+                } else if (f.timeData[0] === traceT0 && f.timeData[f.timeData.length - 1] === traceT0 + cycleDur) {
+                    source = '波形で補正量を特定できないため、法規区間と両端が一致する記録時刻を使用';
+                } else {
+                    entry.reason = '記録目標と法規車速の波形から開始時刻を一意に特定できません。記録上の試験開始時刻を入力してください。';
+                }
+            } else if (di.autoAlign && f.timeData[0] !== traceT0) {
+                entry.reason = '時刻合わせに使える目標車速列（km/h）がありません。記録上の試験開始時刻を入力してください。';
+            }
+            if (entry.reason) {
+                entry.align = { source: '開始時刻未確定', start: null, end: null };
+                results.push(entry);
+                continue;
             }
             // 終了時刻は開始より後でなければならない（逆転入力は無視して既定=start+cycleDurに戻す）。
             const manEndInvalid = isFinite(manEnd) && manEnd <= start;
@@ -4517,12 +4538,12 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             const targetTimeM = modeTrace.time.map(t => start + (t - traceT0) * scale);
             const phasesM = phases.map(p => ({ name: p.name, start: start + p.start * scale, end: start + p.end * scale }));
             metricsOpts = {
-                targetTime: targetTimeM, target: modeTrace.speed,
+                requireCoverage: true, targetTime: targetTimeM, target: modeTrace.speed,
                 actualTime: f.timeData, actual, fuelTime: f.timeData, fuelRate: fuel,
                 phases: phasesM, roadLoad, calculationMethod,
             };
             alignInfo = {
-                start, end, auto: !isFinite(manStart) && di.autoAlign, autoStart, rmse: alignRmse,
+                start, end, source, autoStart: !isFinite(manStart) ? start : null,
                 manEndInvalid,                          // 終了時刻の入力が無視されたか（開始以前だった）
                 scaled: cycleDur > 0 && Math.abs(scale - 1) > 0.02, // フェーズ境界を比例配分で補正したか
             };
@@ -4536,6 +4557,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         }
 
         entry.result = window.DriveIndex.computeMetrics(metricsOpts);
+        if (!entry.result) entry.reason = '時刻と車速が対応するデータが2点以上必要です。';
         if (entry.result?.total?.diagnostics?.ok === false) {
             entry.reason = entry.result.total.diagnostics.issues.map(issue => issue.message).join(' ');
         }
@@ -4555,7 +4577,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
     di.resultSignature = inputSignature;
     di.validationSummary = results.filter(r => !r.result || r.result.total?.diagnostics?.ok === false).map(r => r.reason).filter(Boolean).join(' ');
     // メインの結果をボタン表示用に保持（後方互換）
-    const mainEntry = results.find(r => r.role === 'main' && r.result && r.result.total?.diagnostics?.ok !== false);
+    const mainEntry = results.find(r => r.role === 'main' && r.result && (r.result.total?.diagnostics?.ok !== false || r.result.phases.some(p => Number.isFinite(p.rmsse))));
     di.lastResult = mainEntry ? {
         ...mainEntry.result,
         effectiveId:  mainEntry.effectiveId,
@@ -4691,14 +4713,7 @@ function buildDriveIndexAllTables(results, roadLoadByFile, alignByFile) {
             const a = entry.align;
             const phStart = a.autoStart != null ? `自動 ${diFmtNum(a.autoStart, 1)}` : '0';
             const phEnd   = `自動 ${a.end != null ? diFmtNum(a.end, 1) : ''}`;
-            // rmseが無限大（実測データがサイクルより大幅に短く、重なりが乏しい）の場合は
-            // 数値をそのまま出さず、信頼度が低い旨を文章で伝える。
-            const rmseNote = (a.rmse == null) ? ''
-                : !isFinite(a.rmse) ? '（実測データがサイクルより大幅に短く、整合の信頼度が低い可能性があります）'
-                : `（一致度RMSE ${diFmtNum(a.rmse, 1)} km/h）`;
-            let note = a.auto
-                ? `自動整合: ${diFmtNum(a.start, 1)}〜${diFmtNum(a.end, 1)}秒を使用` + rmseNote
-                : `手動: ${diFmtNum(a.start, 1)}〜${diFmtNum(a.end, 1)}秒を使用`;
+            let note = a.start == null ? a.source : `${a.source}：記録上の評価区間 ${a.start}〜${Number(a.end.toFixed(6))} 秒`;
             if (a.manEndInvalid) note += '（終了時刻が開始以前だったため入力を無視しました）';
             if (a.scaled) note += '（フェーズ境界を比例配分で補正）';
             alignInputs = `<div class="di-align di-file-align" data-file="${esc(entry.fullName)}">
@@ -4794,7 +4809,7 @@ function showDriveIndexModal() {
             <label>目標車速<select class="di-ch-target">${targetOpts(di.channels.target)}</select></label>
             <label>実測車速<select class="di-ch-actual">${speedOpts(di.channels.actual)}</select></label>
             <label>燃料流量<select class="di-ch-fuel">${fuelOpts(di.channels.fuel)}</select></label>
-            <label class="di-align-toggle"><input type="checkbox" class="di-auto-align" ${di.autoAlign ? 'checked' : ''}>前後の余分データを自動整合</label>
+            <label class="di-align-toggle"><input type="checkbox" class="di-auto-align" ${di.autoAlign ? 'checked' : ''}>記録目標と法規車速で時刻を自動補正</label>
         </div>
         <p class="di-note di-method-help"></p>
         <p class="di-note">必要単位: 目標・実測車速は km/h、燃料流量は L/h、時間は秒基準です。s / ms の明示された時間は既存の読み込み補正を使用します。</p>
