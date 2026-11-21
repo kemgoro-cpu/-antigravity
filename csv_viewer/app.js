@@ -4556,7 +4556,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
             };
         }
 
-        entry.result = window.DriveIndex.computeMetrics(metricsOpts);
+        entry.result = window.DriveIndex.computeMetrics({ ...metricsOpts, allowTrnStartGap: isTrnFile(f.name) });
         if (!entry.result) entry.reason = '時刻と車速が対応するデータが2点以上必要です。';
         if (entry.result?.total?.diagnostics?.ok === false) {
             entry.reason = entry.result.total.diagnostics.issues.map(issue => issue.message).join(' ');

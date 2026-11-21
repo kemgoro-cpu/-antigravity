@@ -230,4 +230,19 @@ function assertUnavailable(result, expectedCode) {
     for (const metric of ['rmsse', 'iwr', 'ascr', 'dr', 'er', 'eer']) assert.equal(result[metric], null);
 }
 
+// A TRN beginning on the first tick uses the same samples as a manual trim.
+{
+    const input = { targetTime: [0, 0.1, 0.2, 0.3], target: [0, 2, 4, 6],
+        actualTime: [0.1, 0.2, 0.3], actual: [1, 3, 5], roadLoad,
+        phases: [{ name: 'Low', start: 0, end: 0.3 }], allowTrnStartGap: true };
+    const result = DriveIndex.computeMetrics(input);
+    const manual = DriveIndex.computeMetrics({ ...input, targetTime: input.actualTime, target: [2, 4, 6] }).total;
+    for (const window of [result.total, result.phases[0]]) {
+        assert.equal(window.start, 0.1);
+        assert.ok(window.diagnostics.issues.some(issue => issue.code === 'TRN_START_TRIMMED'));
+        for (const metric of metrics) assert.equal(window[metric], manual[metric]);
+    }
+    assertUnavailable(DriveIndex.computeMetrics({ ...input, actualTime: [0.2, 0.25, 0.3] }), 'WINDOW_COVERAGE');
+}
+
 console.log('drive-index-excel tests passed (independent arithmetic, filtering, edges, threshold, phases, immutable sources, sampling, diagnostics, raw fuel)');

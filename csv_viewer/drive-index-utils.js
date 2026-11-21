@@ -764,13 +764,24 @@
             return excelMetricsForWindow(exactTime, targetValues, actualValues, rl, raw, issues);
         }
 
-        // 全体窓は法規サイクル（目標トレース）の範囲。旧API（共通時間軸）では time と一致。
-        const t0 = tTime[0], t1 = tTime[tTime.length - 1];
-        const total = windowMetrics(t0, t1);
+        // TRN output can start on the first 10 Hz tick after cycle start.
+        function evaluateWindow(start, end) {
+            const first = aTime[0];
+            const trimStart = opts.allowTrnStartGap && first > start && first < end
+                && first - start <= DRIVE_INDEX_SAMPLE_DT + 1e-9;
+            const effectiveStart = trimStart ? first : start;
+            const metrics = windowMetrics(effectiveStart, end);
+            if (trimStart && metrics) {
+                metrics.diagnostics ??= { ok: true, issues: [] };
+                metrics.diagnostics.issues.push({ code: 'TRN_START_TRIMMED', field: '評価区間', severity: 'warning',
+                    message: `TRNの記録開始に合わせ、${effectiveStart}〜${end} 秒を評価区間に使用しました。` });
+            }
+            return { start: effectiveStart, end, ...metrics };
+        }
+
+        const total = evaluateWindow(tTime[0], tTime[tTime.length - 1]);
         const phaseResults = (phases || []).map(p => ({
-            name: p.name,
-            start: p.start, end: p.end,
-            ...(windowMetrics(p.start, p.end) || {}),
+            name: p.name, ...evaluateWindow(p.start, p.end),
         }));
         return { total, phases: phaseResults, hasRoadLoad: !!rl, calculationMethod };
     }
