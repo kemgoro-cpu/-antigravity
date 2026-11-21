@@ -4174,7 +4174,7 @@ function refineTransmissionVariant(modeId, mTime, mActual) {
  *
  * Custom RAM と違って「式」ではなく判別結果から導かれる派生データなので、
  * state.customRAMs には登録せず、毎回すべて作り直す（＝状態が判別結果ひとつに従う）。
- * これによりモード変更・目標をCSV列へ切替・判別失敗のいずれでも古い線が残らない。
+ * これによりモード変更・判別失敗のいずれでも古い線が残らない。
  *
  * 実測時間軸への写像は computeDriveIndex が既に求めた align（start/end）を使うため、
  * 手動整合・自動整合・区間スケール補正がそのまま反映される。
@@ -4203,9 +4203,8 @@ function syncCycleTraceColumns() {
     const after = new Set();
     const results = (state.driveIndex && state.driveIndex.results) || [];
     for (const entry of results) {
-        // align があるのは「モードの法規トレースを目標にした」ファイルだけ。
-        // 目標にCSV列を指定している場合は元の列がそのまま使えるので作らない。
-        if (entry.align?.start == null) continue;
+        const align = entry.traceAlignment || entry.align;
+        if (align?.start == null) continue;
         const f = state.files[entry.fileId];
         if (!f || !f.timeData || !f.timeData.length) continue;
 
@@ -4219,8 +4218,8 @@ function syncCycleTraceColumns() {
         // トレース時間 → 実測時間へ写像（computeDriveIndex の targetTimeM と同じ式）
         const traceT0  = tr.time[0];
         const cycleDur = tr.time[tr.time.length - 1] - traceT0;
-        const scale    = cycleDur > 0 ? (entry.align.end - entry.align.start) / cycleDur : 1;
-        const tM = tr.time.map(t => entry.align.start + (t - traceT0) * scale);
+        const scale    = cycleDur > 0 ? (align.end - align.start) / cycleDur : 1;
+        const tM = tr.time.map(t => align.start + (t - traceT0) * scale);
 
         // ファイル自身の時間軸へリサンプル。サイクル窓の外はNaN＝線を引かない
         const td  = f.timeData;
@@ -4267,7 +4266,8 @@ function customRAMsUseCycleTrace() {
 async function applyCycleTraceColumns() {
     if (!window.DriveIndex) return;
     const changed = syncCycleTraceColumns();
-    if (!changed) return;
+    // Even when the names stay the same, alignment or file coverage may have changed.
+    if (!changed && !Object.values(state.files).some(f => f.columns.some(c => c.isCycleTrace))) return;
 
     // '@MDC' を参照する Custom RAM は、列が生える前に計算されていると全NaNのままになる。
     // （ファイル読込時は Custom RAM 生成 → computeDriveIndex の順で走るため）
@@ -4424,7 +4424,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
 
     // 目標の供給源: CSV列名があればその列、なければ選択モードの法規トレース。
     const useModeTrace = !targetName;
-    const modeTrace = useModeTrace ? window.DriveIndex.getCycleTrace(effectiveId, state.customModes) : null;
+    const modeTrace = window.DriveIndex.getCycleTrace(effectiveId, state.customModes);
 
     // 実測車速が無い、またはモードトレース指定なのにモード未選択（トレース取得不可）なら計算しない。
     if (!actualName || (useModeTrace && !modeTrace)) {
@@ -4476,7 +4476,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         if (fuelName && !fCol) entry.warning = '燃料流量の対応チャンネルがないため、燃費は未評価です。';
 
         // 必要列を遅延ロード（目標トレース利用時は目標列ロード不要）
-        const recordedName = useModeTrace && di.autoAlign ? detectDriveChannels(f).target : null;
+        const recordedName = modeTrace && di.autoAlign ? detectDriveChannels(f).target : null;
         const recorded = f.columns.find(c => c.name === recordedName && c !== aCol && !c.isCustom
             && window.UnitValidation.checkUnit('speed', c.unit).ok);
         const need = [aCol.name];
@@ -4517,7 +4517,7 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         const roadLoad = di.roadLoadByFile[f.name] || null; // 走行抵抗はファイル別（任意）
 
         let metricsOpts, alignInfo = null;
-        if (useModeTrace) {
+        if (modeTrace) {
             // サイクル開始/終了を決める: 手動上書き > 自動整合 > データ先頭。
             const man = di.alignByFile[f.name] || {};
             const manStart = parseFloat(man.start), manEnd = parseFloat(man.end);
@@ -4533,19 +4533,28 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
                 } else if (f.timeData[0] === traceT0 && f.timeData[f.timeData.length - 1] === traceT0 + cycleDur) {
                     source = '波形で補正量を特定できないため、法規区間と両端が一致する記録時刻を使用';
                 } else {
-                    entry.reason = '記録目標と法規車速の波形から開始時刻を一意に特定できません。記録上の試験開始時刻を入力してください。';
+                    start = null;
+                    if (useModeTrace) entry.reason = '記録目標と法規車速の波形から開始時刻を一意に特定できません。記録上の試験開始時刻を入力してください。';
                 }
             } else if (di.autoAlign && f.timeData[0] !== traceT0) {
-                entry.reason = '時刻合わせに使える目標車速列（km/h）がありません。記録上の試験開始時刻を入力してください。';
+                start = null;
+                if (useModeTrace) entry.reason = '時刻合わせに使える目標車速列（km/h）がありません。記録上の試験開始時刻を入力してください。';
             }
-            if (entry.reason) {
+            if (useModeTrace && entry.reason) {
                 entry.align = { source: '開始時刻未確定', start: null, end: null };
                 results.push(entry);
                 continue;
             }
             // 終了時刻は開始より後でなければならない（逆転入力は無視して既定=start+cycleDurに戻す）。
-            const manEndInvalid = isFinite(manEnd) && manEnd <= start;
-            const end   = (isFinite(manEnd) && !manEndInvalid) ? manEnd : (start + cycleDur);
+            if (start != null) {
+                const manEndInvalid = isFinite(manEnd) && manEnd <= start;
+                const end = isFinite(manEnd) && !manEndInvalid ? manEnd : start + cycleDur;
+                alignInfo = { start, end, source, autoStart: !isFinite(manStart) ? start : null,
+                    manEndInvalid, scaled: cycleDur > 0 && Math.abs((end - start) / cycleDur - 1) > 0.02 };
+            }
+        }
+        if (useModeTrace) {
+            const { start, end } = alignInfo;
             const scale = cycleDur > 0 ? (end - start) / cycleDur : 1;
             // 目標トレース・フェーズ境界を実測の時間軸へ写像（前後の余分データは窓外なので無視される）
             const targetTimeM = modeTrace.time.map(t => start + (t - traceT0) * scale);
@@ -4554,11 +4563,6 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
                 requireCoverage: true, targetTime: targetTimeM, target: modeTrace.speed,
                 actualTime: f.timeData, actual, fuelTime: f.timeData, fuelRate: fuel,
                 phases: phasesM, roadLoad, calculationMethod,
-            };
-            alignInfo = {
-                start, end, source, autoStart: !isFinite(manStart) ? start : null,
-                manEndInvalid,                          // 終了時刻の入力が無視されたか（開始以前だった）
-                scaled: cycleDur > 0 && Math.abs(scale - 1) > 0.02, // フェーズ境界を比例配分で補正したか
             };
         } else {
             // CSV列を目標にする従来モード（同一ファイル・同一時間軸。整合なし）
@@ -4579,7 +4583,8 @@ async function computeDriveIndex({ autoDetect = true } = {}) {
         entry.detectedName = detName;
         entry.detectedId   = effectiveId;
         entry.targetSource = useModeTrace ? 'mode' : 'channel';
-        entry.align        = alignInfo;
+        entry.align        = useModeTrace ? alignInfo : null;
+        entry.traceAlignment = alignInfo;
         entry.channels     = { target: useModeTrace ? null : tCol.name, actual: aCol.name, fuel: fCol ? fCol.name : null };
         results.push(entry);
     }
@@ -6265,7 +6270,10 @@ function getActiveGroups() {
         const signals = [...new Set([...group.series.filter(line => line.shared).map(line => line.channelName),
             ...group.mergedNames])];
         for (const line of group.series) {
-            const index = state.monoColorMode ? signals.indexOf(line.channelName) : fileOrder.indexOf(line.fileId);
+            const fileIndex = fileOrder.indexOf(line.fileId);
+            const fileTag = fileIndex === 0 ? 'M' : `s${fileIndex}`;
+            line.hoverTag = line.shared ? '共通' : state.comparison.view === 'diff' ? `M−${fileTag}` : fileTag;
+            const index = state.monoColorMode ? signals.indexOf(line.channelName) : fileIndex;
             line.lineType = CSVChartOptions.waveLineType(index);
             if (state.monoColorMode) line.color = line.shared ? T.dim : state.fileColors[line.fileId] || line.color;
         }
@@ -6899,7 +6907,7 @@ function updatePerGridLabels() {
             const yAxisIndex = state.yAxisIndexByGroup?.get(grp.id)?.get(line.axisId);
             if (yAxisIndex === undefined) continue;
             const val = CSVCompare.pointAt(line.data, xVal, state.bitChannels.has(line.channelName));
-            if (Number.isFinite(val)) entries.push({ color: line.color, lineType: line.lineType, valStr: fmtVal(val), fileName: line.label, val, yAxisIndex });
+            if (Number.isFinite(val)) entries.push({ color: line.color, tag: line.hoverTag, channel: line.channelName, valStr: fmtVal(val), val, yAxisIndex });
         }
 
         if (!entries.length) return;
@@ -6913,7 +6921,7 @@ function updatePerGridLabels() {
         const xPx = state.chart.convertToPixel({ xAxisIndex: gi }, xVal);
         if (!yCount || xPx == null || isNaN(xPx)) return;
 
-        gridLabels.push({ xPx, yPx: yPxSum / yCount, entries });
+        gridLabels.push({ xPx, yPx: yPxSum / yCount, entries, seriesCount: grp.series.length, showNames: grp.mergedNames.length > 1 });
     });
 
     // Ensure we have enough label elements
@@ -6936,18 +6944,22 @@ function updatePerGridLabels() {
             el.style.left = (lb.xPx + 12) + 'px';
             el.style.top  = (lb.yPx - 10) + 'px';
 
-            if (lb.entries.length === 1) {
+            if (lb.seriesCount === 1 && !lb.showNames) {
                 const e = lb.entries[0];
                 el.style.color = e.color;
                 el.textContent = e.valStr;
             } else {
-                // Multiple files: show each value vertically
-                el.innerHTML = lb.entries.map(e =>
-                    `<div style="display:flex;align-items:center;gap:5px;line-height:1.5">`
-                    + `<svg width="27" height="8" aria-hidden="true"><line x2="27" y1="4" y2="4" stroke="${esc(e.color)}" stroke-width="2" stroke-dasharray="${Array.isArray(e.lineType) ? e.lineType.join(' ') : 'none'}"/></svg>`
-                    + `<span style="color:${esc(e.color)}">${esc(e.fileName)}　${esc(e.valStr)}</span>`
-                    + `</div>`
-                ).join('');
+                const byChannel = new Map();
+                for (const entry of lb.entries) {
+                    if (!byChannel.has(entry.channel)) byChannel.set(entry.channel, []);
+                    byChannel.get(entry.channel).push(entry);
+                }
+                el.style.color = T.text;
+                el.innerHTML = Array.from(byChannel, ([name, values]) => {
+                    const heading = lb.showNames ? `<span>${esc(name)}</span>` : '';
+                    const cells = values.map(e => `<span style="color:${esc(e.color)}">${esc(e.tag)} ${esc(e.valStr)}</span>`);
+                    return `<div style="display:flex;align-items:center;gap:10px;line-height:1.5">${heading}${cells.join('')}</div>`;
+                }).join('');
             }
         } else {
             el.style.display = 'none';
@@ -9342,6 +9354,10 @@ async function applyPendingSettings() {
     }
     if (timeScaleChanged && state.customRAMs.length) await recomputeCustomRAMs();
 
+    // Restore generated cycle channels before filtering saved selections and chart groups.
+    if (s.selectedNames?.some(name => name.startsWith('@') && !mainFile.columns.some(c => c.name === name))) {
+        await computeDriveIndex();
+    }
     // 選択チャンネルを復元
     state.selectedNames = new Set();
     if (s.selectedNames && s.selectedNames.length) {
