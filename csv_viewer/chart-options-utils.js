@@ -13,6 +13,11 @@
     // ── チューニング用定数（挙動を調整するときはここを変える） ──────────
     // renderChart系の定数はこのファイルが単一情報源。app.jsからは
     // CSVChartOptions.CONSTANTS 経由で参照する（値は旧app.js定義のまま）
+    const wavePatterns = ['solid', [6, 4], [2, 3], [8, 3, 2, 3], [8, 3, 2, 3, 2, 3]];
+    function waveLineType(index) {
+        return wavePatterns[index] || [10 + 2 * index, 4];
+    }
+
     const CONSTANTS = {
         // Bitチャンネルのグリッド高さの重み（通常グリッド = 1.0 に対する比率）
         BIT_WEIGHT: 0.33,
@@ -362,6 +367,7 @@
         return {
             id:         s.id,
             name:       s.label,
+            z:          s.shared ? 1 : Array.isArray(s.lineType) ? 3 : 2,
             type:       'line',
             xAxisIndex: p.xAxisIndex,
             yAxisIndex: p.yAxisIndex,
@@ -372,7 +378,7 @@
             progressive: CONSTANTS.SERIES_PROGRESSIVE,
             progressiveThreshold: CONSTANTS.SERIES_PROGRESSIVE_THRESHOLD,
             clip:       true,
-            lineStyle:  { width: p.lineWidth, color: s.color, type: s.dash ? [6, 4] : 'solid' },
+            lineStyle:  { width: p.lineWidth, color: s.color, type: s.lineType ?? (s.dash ? [6, 4] : 'solid') },
             itemStyle:  { color: s.color },
             emphasis:   { disabled: true },
             ...(markArea ? { markArea } : {}),
@@ -449,6 +455,7 @@
         formatXAxisValue,
         formatYAxisValue,
         buildXAxisOption,
+        waveLineType,
         buildYAxisOption,
         buildMarkArea,
         buildMarkLine,

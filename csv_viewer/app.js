@@ -4184,8 +4184,12 @@ function refineTransmissionVariant(modeId, mTime, mActual) {
 function syncCycleTraceColumns() {
     // 変化検出用に、現在のサイクル列名を先に控える
     const before = new Set();
+    const cycleColors = new Map();
     for (const f of Object.values(state.files)) {
-        for (const c of f.columns) if (c.isCycleTrace) before.add(c.name);
+        for (const c of f.columns) if (c.isCycleTrace) {
+            before.add(c.name);
+            cycleColors.set(c.id, c.color);
+        }
     }
 
     // いったん全ファイルからサイクル列を撤去する（作り直す前提）
@@ -4232,8 +4236,9 @@ function syncCycleTraceColumns() {
         const colId = 'cycle_' + entry.fileId;
         f.columns.unshift({
             id: colId, name, unit: 'km/h', idx: -1,
-            color: SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length],
+            color: cycleColors.get(colId) || SERIES_COLORS[state.colorCtr++ % SERIES_COLORS.length],
             isCustom: true, isCycleTrace: true, isCrossFile: false,
+            cycleId: entry.effectiveId, cycleStart: tFirst, cycleEnd: tLast,
         });
         f.colData[colId] = out;
         state.bitChannels.delete(name);   // 目標車速はBitチャンネルではない
@@ -6142,6 +6147,20 @@ function getActiveGroups() {
     const groups = new Map();
     const order  = [];
 
+    const fileOrder = [getMainFileId(), ...getSubFileIds()];
+    const fileLabels = new Map(fileOrder.map((id, i) => {
+        const file = state.files[id];
+        const label = comparisonWorkspace?.label(file) || file.shortName;
+        return [id, `${i ? 's' + i : 'M'} · ${label}`];
+    }));
+    // Generated cycle columns may use different sample rates. Compare the source
+    // cycle, its displayed alignment and its visible coverage, independently of sampling.
+    function cycleKey(col, time, offset) {
+        if (!col.isCycleTrace || !col.cycleId) return null;
+        return JSON.stringify([col.cycleId, col.cycleStart + offset, col.cycleEnd + offset,
+            Math.max(time[0], col.cycleStart) + offset, Math.min(time[time.length - 1], col.cycleEnd) + offset]);
+    }
+
     for (const chartGroup of state.chartGroups) {
         const channelNames = chartGroup.channels.map(ch => ch.name).filter(name => state.selectedNames.has(name));
         if (!channelNames.length) continue;
@@ -6156,6 +6175,7 @@ function getActiveGroups() {
         };
         groups.set(chartGroup.id, grp);
 
+        const usedColors = new Set();
         // 各チャンネルについてメイン＋サブのシリーズを構築
         for (const chName of channelNames) {
             const col = mainFile.columns.find(c => c.name === chName);
@@ -6170,18 +6190,18 @@ function getActiveGroups() {
             const mPts = new Array(mtd.length);
             for (let i = 0; i < mtd.length; i++) mPts[i] = [mtd[i], Number.isFinite(mvd[i]) ? mvd[i] : null];
 
-            // 単色モード時はファイルの色を使う、通常時はチャンネル個別の色
-            const mainFileId = getMainFileId();
-            const mainColor = state.monoColorMode
-                ? (state.fileColors[mainFileId] || col.color)
-                : col.color;
+            const mainFileId = fileOrder[0];
+            const signalColor = usedColors.has(col.color)
+                ? SERIES_COLORS.find(color => !usedColors.has(color)) || col.color : col.color;
+            usedColors.add(signalColor);
 
             grp.series.push({
                 id:       col.id,
-                label:    `${chName} [${comparisonWorkspace?.label(mainFile) || mainFile.shortName}]`,
+                label:    `${chName} [${fileLabels.get(mainFileId)}]`,
                 fileId: mainFileId,
                 isCrossFile: !!col.isCrossFile,
-                color:    mainColor,
+                color:    signalColor,
+                cycleKey: cycleKey(col, mtd, 0),
                 dash:     false,
                 data:     mPts,
                 channelName: chName,
@@ -6208,17 +6228,14 @@ function getActiveGroups() {
                 const sPts   = new Array(std.length);
                 for (let i = 0; i < std.length; i++) sPts[i] = [std[i] + offset, Number.isFinite(svd[i]) ? svd[i] : null];
 
-                const subColor = state.monoColorMode
-                    ? (state.fileColors[subId] || sc.color)
-                    : sc.color;
-
                 grp.series.push({
                     id:    sc.id,
                     label: sc.name === chName
-                        ? `${chName} [${comparisonWorkspace?.label(sf) || sf.shortName}]`
-                        : `${chName} ← ${sc.name} [${comparisonWorkspace?.label(sf) || sf.shortName}]`,
+                        ? `${chName} [${fileLabels.get(subId)}]`
+                        : `${chName} ← ${sc.name} [${fileLabels.get(subId)}]`,
                     fileId: subId,
-                    color: subColor,
+                    color: signalColor,
+                    cycleKey: cycleKey(sc, std, offset),
                     dash:  true,
                     data:  sPts,
                     channelName: chName,
@@ -6228,7 +6245,32 @@ function getActiveGroups() {
         }
     }
 
-    return comparisonWorkspace ? comparisonWorkspace.transformGroups({ groups, order }) : { groups, order };
+    const active = comparisonWorkspace ? comparisonWorkspace.transformGroups({ groups, order }) : { groups, order };
+    for (const group of active.groups.values()) {
+        const common = new Map();
+        if (state.comparison.view === 'overlay') {
+            group.series = group.series.filter(line => {
+                if (!line.cycleKey) return true;
+                const key = JSON.stringify([line.channelName, line.cycleKey]);
+                const first = common.get(key);
+                if (first) {
+                    first.shared = true;
+                    first.label = `${line.channelName} [共通基準]`;
+                    return false;
+                }
+                common.set(key, line);
+                return true;
+            });
+        }
+        const signals = [...new Set([...group.series.filter(line => line.shared).map(line => line.channelName),
+            ...group.mergedNames])];
+        for (const line of group.series) {
+            const index = state.monoColorMode ? signals.indexOf(line.channelName) : fileOrder.indexOf(line.fileId);
+            line.lineType = CSVChartOptions.waveLineType(index);
+            if (state.monoColorMode) line.color = line.shared ? T.dim : state.fileColors[line.fileId] || line.color;
+        }
+    }
+    return active;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -6857,7 +6899,7 @@ function updatePerGridLabels() {
             const yAxisIndex = state.yAxisIndexByGroup?.get(grp.id)?.get(line.axisId);
             if (yAxisIndex === undefined) continue;
             const val = CSVCompare.pointAt(line.data, xVal, state.bitChannels.has(line.channelName));
-            if (Number.isFinite(val)) entries.push({ color: line.color, valStr: fmtVal(val), fileName: line.label, val, yAxisIndex });
+            if (Number.isFinite(val)) entries.push({ color: line.color, lineType: line.lineType, valStr: fmtVal(val), fileName: line.label, val, yAxisIndex });
         }
 
         if (!entries.length) return;
@@ -6902,8 +6944,8 @@ function updatePerGridLabels() {
                 // Multiple files: show each value vertically
                 el.innerHTML = lb.entries.map(e =>
                     `<div style="display:flex;align-items:center;gap:5px;line-height:1.5">`
-                    + `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};flex-shrink:0"></span>`
-                    + `<span style="color:${e.color}">${esc(e.valStr)}</span>`
+                    + `<svg width="27" height="8" aria-hidden="true"><line x2="27" y1="4" y2="4" stroke="${esc(e.color)}" stroke-width="2" stroke-dasharray="${Array.isArray(e.lineType) ? e.lineType.join(' ') : 'none'}"/></svg>`
+                    + `<span style="color:${esc(e.color)}">${esc(e.fileName)}　${esc(e.valStr)}</span>`
                     + `</div>`
                 ).join('');
             }

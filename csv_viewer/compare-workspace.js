@@ -595,7 +595,7 @@
                         for (const fid of api.subIds()) {
                             const f = s.files[fid], b = signal(f, name); if (!b || !C.sameUnit(a.col.unit, b.col.unit)) continue;
                             const diff = C.compare(a, b, effectiveOffset(f), null, s.bitChannels.has(name), null, true);
-                            series.push({ ...base, id: `compare-diff-${base.id}-${fid}`, label: `${name} Δ [${label(api.main())} − ${label(f)}]`, data: diff.points, fileId: fid, color: s.fileColors[fid] || b.col.color });
+                            series.push({ ...base, id: `compare-diff-${base.id}-${fid}`, label: `${name} Δ [${label(api.main())} − ${label(f)}]`, data: diff.points, fileId: fid });
                         }
                     }
                     order.push(id); groups.set(id, { ...group, series });
