@@ -1455,6 +1455,15 @@ const dom = {
 // Chart initialisation
 // ─────────────────────────────────────────────────────────────
 
+let resizeAxisTitles = null;
+function resizeMainChart() {
+    if (!state.chart) return;
+    const oldWidth = state.chart.getWidth(), oldHeight = state.chart.getHeight();
+    state.chart.dispatchAction({ type: 'hideTip' });
+    state.chart.resize();
+    if (oldWidth !== state.chart.getWidth() || oldHeight !== state.chart.getHeight()) resizeAxisTitles?.();
+}
+
 function initChart() {
     state.chart = echarts.init(dom.chartEl, 'v5', {
         backgroundColor: 'transparent',
@@ -1468,8 +1477,7 @@ function initChart() {
         if (_resizeRafId !== null) return;
         _resizeRafId = requestAnimationFrame(() => {
             _resizeRafId = null;
-            state.chart.dispatchAction({ type: 'hideTip' });
-            state.chart.resize();
+            resizeMainChart();
         });
     });
     state.chart.on('brushEnd', onBrushEnd);
@@ -6257,6 +6265,7 @@ function renderChart() {
     const n = order.length;
 
     if (n === 0) {
+        resizeAxisTitles = null;
         state.chart.clear();
         state.gridRegions = [];
         removeArrangeOverlay();
@@ -6567,8 +6576,45 @@ function renderChart() {
         return `<span style="font-family:'Roboto Mono',monospace;font-size:${F.tooltip}px;color:var(--accent-soft);font-weight:600">t = ${tStr} s</span>`;
     };
 
+    const family = state.chart.getModel()?.get(['textStyle', 'fontFamily']) || 'sans-serif';
+    const titleFont = `500 ${F.name}px ${family}`;
+    const titles = yAxes.map((axis, index) => {
+        axis.id = `wave-y-axis-${index}`;
+        axis.nameTextStyle.fontFamily = family;
+        return { id: axis.id, name: axis.name, gridIndex: axis.gridIndex,
+            width: echarts.format.getTextRect(axis.name, titleFont).width };
+    });
+    function layoutAxisTitles() {
+        const height = state.chart.getHeight(), width = state.chart.getWidth();
+        const inside = grids.map(() => []);
+        const axisNames = titles.map(title => {
+            const gridHeight = parseFloat(grids[title.gridIndex].height) * height / 100;
+            if (title.width <= gridHeight - 8) return { id: title.id, name: title.name,
+                nameTruncate: { maxWidth: CSVLayout.truncateMaxWidth(gridHeight) } };
+            inside[title.gridIndex].push(title.name);
+            return { id: title.id, name: '' };
+        });
+        const elements = grids.map((grid, i) => {
+            const text = inside[i].join('   |   ');
+            const availableWidth = Math.max(1, width - grid.left - grid.right - 14);
+            const wrap = echarts.format.getTextRect(text, titleFont).width > availableWidth;
+            return {
+                id: `axis-titles-${i}`, type: 'text', silent: true, invisible: !text, z: 9,
+                left: grid.left + 4, top: parseFloat(grid.top) * height / 100 + 2,
+                style: { text, font: titleFont, fill: T.text, backgroundColor: T.tooltipBg,
+                    padding: [1, 3], width: wrap ? availableWidth : null, overflow: 'breakAll',
+                    height: wrap ? Math.max(F.name, parseFloat(grid.height) * height / 100 - 6) : null,
+                    lineOverflow: 'truncate' },
+            };
+        });
+        return { yAxis: axisNames, graphic: { elements } };
+    }
+    const titleLayout = layoutAxisTitles();
+    yAxes.forEach((axis, i) => { axis.name = titleLayout.yAxis[i].name; });
+    resizeAxisTitles = () => state.chart.setOption(layoutAxisTitles());
     state.chart.setOption({
         ...baseOption,
+        graphic: titleLayout.graphic,
         grid:     grids,
         xAxis:    xAxes,
         yAxis:    yAxes,
@@ -7892,7 +7938,7 @@ function exitArrangeMode(redraw = true) {
     const resizeSidebar = width => {
         sidebar.style.width = Math.max(200, Math.min(window.innerWidth * 0.6, width)) + 'px';
         syncWidth();
-        if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); }
+        resizeMainChart();
     };
     handle.addEventListener('keydown', e => {
         if (e.isComposing || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
@@ -9507,7 +9553,7 @@ comparisonWorkspace = CSVWorkspace({
     resetZoom, report: exportReportHTML, image: getChartImageDataURL, copy: copyChartToClipboard,
     warning: showWarning, success: showExportToast, hint: text => { dom.hintEl.textContent = text; },
     textColor: () => T.text || cssVar('--text-primary'),
-    resize: () => { if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); } },
+    resize: resizeMainChart,
     modal: html => createModal(html, { modalClass: 'compare-dialog' }),
     startBrush: enterBoxZoom,
     exitBrush: exitBoxZoom,
@@ -9578,11 +9624,11 @@ dataInspector = CSVDataInspector.init({
         // Table/quality jumps do not emit the waveform's updateAxisPointer event.
         xyWorkspace?.cursor(t);
     },
-    resize: () => { state.chart?.dispatchAction({ type: 'hideTip' }); state.chart?.resize(); },
+    resize: resizeMainChart,
 });
 CSVWorkspaceUI({
     state, main: getMainFile, loadFiles: handleFiles,
-    resize: () => { if (state.chart) { state.chart.dispatchAction({ type: 'hideTip' }); state.chart.resize(); } },
+    resize: resizeMainChart,
 });
 
 xyWorkspace = CSVXYWorkspace({
@@ -9594,7 +9640,7 @@ xyWorkspace = CSVXYWorkspace({
     fileColor: id => state.fileColors[id] || '#16b8a6',
     activatePanel: kind => comparisonWorkspace.setPanel(kind),
     save: saveSettings, warning: showWarning,
-    resize: () => { state.chart?.dispatchAction({ type: 'hideTip' }); state.chart?.resize(); },
+    resize: resizeMainChart,
     focusPoint: point => {
         const file = state.files[point.fileId];
         if (!file || !Number.isInteger(point.index) || file.timeData[point.index] !== point.time) return;

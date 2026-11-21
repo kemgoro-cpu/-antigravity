@@ -35,7 +35,7 @@ async function inspectorCursorRegression() {
         assert.ok(start >= 0 && end > start);
         const inspector = fs.readFileSync(path.resolve(__dirname, '../data-inspector.js'), 'utf8');
         const context = vm.createContext({ CSVDataInspector: { init: api => api }, state: h.state,
-            getMainFile: () => h.file, getAnalysisContext: () => ({ range: [10, 12] }),
+            resizeMainChart: () => {}, getMainFile: () => h.file, getAnalysisContext: () => ({ range: [10, 12] }),
             resolveColumnForFile: () => {}, esc: value => String(value), saveSettings: () => {}, renderChart: () => {},
             comparisonWorkspace: { focusTime: time => focused.push(time) }, xyWorkspace: h.workspace,
             snapshot: { file: h.file, fileId: 'main', offset: 10, indices: [0, 1, 2] }, cursor: null, page: 0, PAGE_SIZE: 100,
